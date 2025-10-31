@@ -49,7 +49,7 @@ bool UPangeaTamingComponent::HasRequiredItem(AActor* Instigator) const
 	if (!SpeciesConfig || !SpeciesConfig->RequiredTamingItem) return true;
 
 	const UACFInventoryComponent* Inventory = Instigator->FindComponentByClass<UACFInventoryComponent>();
-	return Inventory && Inventory->HasAnyItemOfType(SpeciesConfig->RequiredTamingItem);
+	return Inventory && Inventory->HasAnyItemOfType(SpeciesConfig->RequiredTamingItem) && Inventory->GetTotalCountOfItemsByClass(SpeciesConfig->RequiredTamingItem) >= SpeciesConfig->RequiredItemCount;
 }
 
 void UPangeaTamingComponent::InitializeWild()
