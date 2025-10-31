@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Engine/DataAsset.h"
+#include "Items/ACFItem.h"
 #include "TameSpeciesConfig.generated.h"
 
 class UGameplayAbility;
@@ -94,7 +95,7 @@ public:
 
 	// Tame requirements
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Requirements")
-	TObjectPtr<UACFItem> RequiredTamingItem;
+	TSubclassOf<UACFItem> RequiredTamingItem;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Requirements")
 	int32 RequiredItemCount = 1;
