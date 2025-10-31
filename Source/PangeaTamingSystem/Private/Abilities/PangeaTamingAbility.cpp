@@ -21,18 +21,48 @@ void UPangeaTamingAbility::OnActionEnded_Implementation()
 {
 	Super::OnActionEnded_Implementation();
 
-	if (UPangeaTamingComponent* TamingComp = TargetActor ? TargetActor->FindComponentByClass<UPangeaTamingComponent>() : nullptr)
+	if (!TargetActor)
 	{
-		TamingComp->OnTameResolved(true, ETamedRole::None);
+		UE_LOG(LogTemp, Warning, TEXT("[TamingAbility] OnActionEnded: No valid target to tame."));
+		return;
 	}
+
+	UPangeaTamingComponent* TamingComp = TargetActor->FindComponentByClass<UPangeaTamingComponent>();
+	if (!TamingComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TamingAbility] OnActionEnded: No TamingComponent on %s"),
+			*GetNameSafe(TargetActor));
+		return;
+	}
+
+	// Wait for minigame result instead of instantly resolving
+	ActiveTameTask = UAbilityTask_WaitForTameResult::WaitForTameResult(this);
+	ActiveTameTask->OnTameResult.AddDynamic(this, &UPangeaTamingAbility::HandleTameResult);
+	ActiveTameTask->ReadyForActivation();
+
+	TamingComp->BeginTameMinigame(this, ActiveTameTask);
 }
 
-void UPangeaTamingAbility::OnGameplayEventReceived_Implementation(const FGameplayTag EventTag)
+void UPangeaTamingAbility::HandleTameResult(bool bSuccess)
 {
-	Super::OnGameplayEventReceived_Implementation(EventTag);
+	if (!TargetActor)
+		return;
 
-	if (EventTag.MatchesTagExact(FGameplayTag::RequestGameplayTag("Tame.Event.Target")))
+	UPangeaTamingComponent* TamingComp = TargetActor->FindComponentByClass<UPangeaTamingComponent>();
+	if (!TamingComp)
+		return;
+
+	if (bSuccess)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DATA GOT"));
+		TamingComp->OnTameResolved(true, TamingComp->GetTamedRole());
+		UE_LOG(LogTemp, Log, TEXT("[TamingAbility] Taming succeeded for %s"), *GetNameSafe(TargetActor));
 	}
+	else
+	{
+		TamingComp->HandleTameFailed(TEXT("Minigame failed"));
+		UE_LOG(LogTemp, Log, TEXT("[TamingAbility] Taming failed for %s"), *GetNameSafe(TargetActor));
+	}
+
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bSuccess);
+	ActiveTameTask = nullptr;
 }

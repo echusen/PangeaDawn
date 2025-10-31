@@ -46,7 +46,8 @@
 				"AscentCombatFramework",
 				"CoreUObject",
 				"UMG",
-				"ActionsSystem"
+				"ActionsSystem",
+				"GameplayAbilities"
 			]
 		}
 	],

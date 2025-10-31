@@ -8,6 +8,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AIController.h"
 #include "Components/ACFTeamComponent.h"
+#include "GameplayTasks/AbilityTask_WaitForTameResult.h"
 
 UPangeaTamingComponent::UPangeaTamingComponent()
 {
@@ -82,14 +83,14 @@ void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 
 	if (!HasRequiredItem(Instigator))
 	{
-		HandleTameFailed(TEXT("Missing required item."));
+		//HandleTameFailed(TEXT("Missing required item."));
 		OnTameResolved(false, ETamedRole::None);
 		return;
 	}
 
 	if (!HasRequiredStats(Instigator))
 	{
-		HandleTameFailed(TEXT("Insufficient stats."));
+		//HandleTameFailed(TEXT("Insufficient stats."));
 		OnTameResolved(false, ETamedRole::None);
 		return;
 	}
@@ -230,6 +231,42 @@ void UPangeaTamingComponent::SetTamedRole(ETamedRole NewRole)
 		ClearRoleTags();
 		break;
 	}
+}
+
+void UPangeaTamingComponent::BeginTameMinigame(UGameplayAbility* OwningAbility, UAbilityTask_WaitForTameResult* WaitTask)
+{
+	if (!OwningAbility || !WaitTask)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] BeginTameMinigame called with invalid parameters."));
+		return;
+	}
+
+	CachedTameTask = WaitTask;
+	AActor* Instigator = OwningAbility->GetAvatarActorFromActorInfo();
+
+	float Duration = SpeciesConfig ? SpeciesConfig->TameDuration : 5.f;
+
+	UE_LOG(LogTemp, Log, TEXT("[TamingComponent] Opening minigame for %s (target: %s)"),
+		*GetNameSafe(Instigator),
+		*GetNameSafe(GetOwner()));
+
+	// Open the Blueprint minigame UI.
+	OpenTamingMinigame(Instigator, GetOwner(), Duration);
+}
+
+void UPangeaTamingComponent::OnMinigameResult(bool bSuccess)
+{
+	if (!CachedTameTask)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] OnMinigameResult called but no cached task exists!"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[TamingComponent] Minigame completed (%s) — notifying task."),
+		bSuccess ? TEXT("SUCCESS") : TEXT("FAILURE"));
+
+	CachedTameTask->NotifyTameResult(bSuccess);
+	CachedTameTask = nullptr;
 }
 
 void UPangeaTamingComponent::ClearStateTags()

@@ -9,6 +9,7 @@
 #include "TamingTypes.h"
 #include "PangeaTamingComponent.generated.h"
 
+class UAbilityTask_WaitForTameResult;
 class APDDinosaurBase;
 class UTameSpeciesConfig;
 class UGameplayAbility;
@@ -20,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameRoleSelected, ETamedRole, Role)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameFailedDelegate, const FString&, Reason);
 
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
+UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class PANGEATAMINGSYSTEM_API UPangeaTamingComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -76,6 +77,18 @@ public:
 	/** Explicit role set post-success if you need to switch later */
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void SetTamedRole(ETamedRole NewRole);
+
+	/** Called by ability when the Tame montage ends to start the minigame. */
+	UFUNCTION(BlueprintCallable, Category="Taming|Minigame")
+	void BeginTameMinigame(UGameplayAbility* OwningAbility, UAbilityTask_WaitForTameResult* WaitTask);
+
+	/** Implement in Blueprint to open the taming minigame UI. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Taming|Minigame")
+	void OpenTamingMinigame(AActor* Instigator, AActor* Target, float Duration);
+
+	/** Called by Blueprint minigame when finished (success or fail). */
+	UFUNCTION(BlueprintCallable, Category="Taming|Minigame")
+	void OnMinigameResult(bool bSuccess);
 	
 	// Events
 	UPROPERTY(BlueprintAssignable)
@@ -123,4 +136,7 @@ private:
 		Tags.AddTag(GameplayTagToRemove);
 		UAbilitySystemBlueprintLibrary::RemoveLooseGameplayTags(Actor, Tags);
 	}
+
+	UPROPERTY()
+	TObjectPtr<UAbilityTask_WaitForTameResult> CachedTameTask;
 };
