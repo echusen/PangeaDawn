@@ -48,7 +48,6 @@ void UARSStatisticsComponent::RemoveAttributeSetModifier(const FActiveGameplayEf
 }
 
 
-
 bool UARSStatisticsComponent::CheckCosts(const TArray<FStatisticValue>& Costs) const
 {
 	ensure(false);

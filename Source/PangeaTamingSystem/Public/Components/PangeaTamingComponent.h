@@ -28,7 +28,7 @@ public:
 
 	// --- Species data ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
-	UTameSpeciesConfig* SpeciesConfig = nullptr;
+	UTameSpeciesConfig* TameSpeciesConfig = nullptr;
 
 	// --- Runtime state ---
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State")
@@ -49,6 +49,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void OnTameResolved(bool bSuccess, ETamedRole DesiredRole);
+
+	UFUNCTION(BlueprintCallable, Category="Taming")
+	void HandleTameStateChanged(ETameState NewState);
 
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void SetTamedRole(ETamedRole NewRole);

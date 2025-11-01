@@ -8,7 +8,11 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AIController.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/ACFCompanionGroupAIComponent.h"
+#include "Components/ACFInteractionComponent.h"
 #include "Components/ACFTeamComponent.h"
+#include "Game/ACFFunctionLibrary.h"
+#include "Game/ACFPlayerController.h"
 #include "UI/TamingWidget.h"
 
 UPangeaTamingComponent::UPangeaTamingComponent()
@@ -19,6 +23,9 @@ UPangeaTamingComponent::UPangeaTamingComponent()
 void UPangeaTamingComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	//bind event
+	OnTameStateChanged.AddDynamic(this, &UPangeaTamingComponent::HandleTameStateChanged);
 }
 
 // ------------------------------------------------------------
@@ -27,13 +34,13 @@ void UPangeaTamingComponent::BeginPlay()
 
 bool UPangeaTamingComponent::HasRequiredStats(AActor* Instigator) const
 {
-	if (!SpeciesConfig || SpeciesConfig->StatRequirements.IsEmpty())
+	if (!TameSpeciesConfig || TameSpeciesConfig->StatRequirements.IsEmpty())
 		return true;
 
 	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Instigator);
 	if (!ASC) return false;
 
-	for (const FTameStatRequirement& Req : SpeciesConfig->StatRequirements)
+	for (const FTameStatRequirement& Req : TameSpeciesConfig->StatRequirements)
 	{
 		if (!Req.Attribute.IsValid()) continue;
 
@@ -50,12 +57,12 @@ bool UPangeaTamingComponent::HasRequiredStats(AActor* Instigator) const
 
 bool UPangeaTamingComponent::HasRequiredItem(AActor* Instigator) const
 {
-	if (!SpeciesConfig || !SpeciesConfig->RequiredTamingItem)
+	if (!TameSpeciesConfig || !TameSpeciesConfig->RequiredTamingItem)
 		return true;
 
 	const UACFInventoryComponent* Inventory = Instigator->FindComponentByClass<UACFInventoryComponent>();
-	return Inventory && Inventory->HasAnyItemOfType(SpeciesConfig->RequiredTamingItem) &&
-	       Inventory->GetTotalCountOfItemsByClass(SpeciesConfig->RequiredTamingItem) >= SpeciesConfig->RequiredItemCount;
+	return Inventory && Inventory->HasAnyItemOfType(TameSpeciesConfig->RequiredTamingItem) &&
+	       Inventory->GetTotalCountOfItemsByClass(TameSpeciesConfig->RequiredTamingItem) >= TameSpeciesConfig->RequiredItemCount;
 }
 
 bool UPangeaTamingComponent::CheckTamePrerequisites(AActor* Instigator) const
@@ -69,21 +76,21 @@ bool UPangeaTamingComponent::CheckTamePrerequisites(AActor* Instigator) const
 
 void UPangeaTamingComponent::InitializeWild()
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	ClearStateTags();
 	TameState = ETameState::Wild;
 	ApplyStateTags();
-	ChangeTeam(SpeciesConfig->WildTeamTag);
+	ChangeTeam(TameSpeciesConfig->WildTeamTag);
 	OnTameStateChanged.Broadcast(TameState);
 }
 
 void UPangeaTamingComponent::InitializeHostile()
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	ClearStateTags();
 	TameState = ETameState::Hostile;
 	ApplyStateTags();
-	ChangeTeam(SpeciesConfig->HostileTeamTag);
+	ChangeTeam(TameSpeciesConfig->HostileTeamTag);
 	OnTameStateChanged.Broadcast(TameState);
 }
 
@@ -93,7 +100,7 @@ void UPangeaTamingComponent::InitializeHostile()
 
 void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	CachedInstigator = Instigator;
 
 	if (!CheckTamePrerequisites(Instigator))
@@ -104,8 +111,8 @@ void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 
 	if (AACFCharacter* Character = Cast<AACFCharacter>(Instigator))
 	{
-		if (SpeciesConfig->TameAbilityTag.IsValid())
-			Character->TriggerAction(SpeciesConfig->TameAbilityTag, EActionPriority::EHigh, false);
+		if (TameSpeciesConfig->TameAbilityTag.IsValid())
+			Character->TriggerAction(TameSpeciesConfig->TameAbilityTag, EActionPriority::EHigh, false);
 	}
 }
 
@@ -115,7 +122,7 @@ void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 
 void UPangeaTamingComponent::OnTameResolved(bool bSuccess, ETamedRole DesiredRole)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 
 	ClearTameTags();
 
@@ -130,13 +137,13 @@ void UPangeaTamingComponent::OnTameResolved(bool bSuccess, ETamedRole DesiredRol
 
 void UPangeaTamingComponent::TransitionToTamedState(ETamedRole DesiredRole)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 
 	// --- Update tame state ---
 	ClearStateTags();
 	TameState = ETameState::Tamed;
 	ApplyStateTags();
-	ChangeTeam(SpeciesConfig->TamedTeamTag);
+	ChangeTeam(TameSpeciesConfig->TamedTeamTag);
 
 	// --- Determine and apply final role ---
 	ETamedRole FinalRole = DetermineFinalRole(DesiredRole);
@@ -147,6 +154,9 @@ void UPangeaTamingComponent::TransitionToTamedState(ETamedRole DesiredRole)
 	ApplyTameSuccessEffects();
 	ConsumeTameItems();
 
+	// --- Broadcast event ---
+	OnTameStateChanged.Broadcast(TameState);
+
 	UE_LOG(LogTemp, Log, TEXT("[TamingComponent] %s transitioned to Tamed (Role: %s)"),
 		*GetNameSafe(GetOwner()),
 		FinalRole == ETamedRole::Mount ? TEXT("Mount") :
@@ -155,18 +165,30 @@ void UPangeaTamingComponent::TransitionToTamedState(ETamedRole DesiredRole)
 
 void UPangeaTamingComponent::TransitionToFailedState(AActor* Instigator)
 {
-	if (!SpeciesConfig || !Instigator) return;
+	if (!TameSpeciesConfig || !Instigator) return;
 
-	AddTagToActor(Instigator, SpeciesConfig->FailTag);
+	AddTagToActor(Instigator, TameSpeciesConfig->FailTag);
 	StartTameCooldown(Instigator);
 
-	if (SpeciesConfig->RunawayActionTag.IsValid())
+	if (TameSpeciesConfig->RunawayActionTag.IsValid())
 	{
 		if (AACFCharacter* Dino = Cast<AACFCharacter>(GetOwner()))
-			Dino->TriggerAction(SpeciesConfig->RunawayActionTag, EActionPriority::EHigh, false);
+			Dino->TriggerAction(TameSpeciesConfig->RunawayActionTag, EActionPriority::EHigh, false);
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] %s: Tame failed."), *GetNameSafe(GetOwner()));
+}
+
+void UPangeaTamingComponent::HandleTameStateChanged(ETameState NewState)
+{
+	UACFFunctionLibrary::GetLocalACFPlayerCharacter(GetOwner())->GetComponentByClass<UACFInteractionComponent>()->UnregisterInteractable(GetOwner());
+
+	if (TamedRole == ETamedRole::Companion)
+	{
+		UACFFunctionLibrary::GetLocalACFPlayerController(GetWorld())->GetComponentByClass<UACFCompanionGroupAIComponent>()->AddExistingCharacterToGroup(Cast<AACFCharacter>(GetOwner()));
+	}
+	
+	UACFFunctionLibrary::GetLocalACFPlayerCharacter(GetOwner())->GetComponentByClass<UACFInteractionComponent>()->RegisterInteractable(GetOwner());
 }
 
 // ------------------------------------------------------------
@@ -175,10 +197,10 @@ void UPangeaTamingComponent::TransitionToFailedState(AActor* Instigator)
 
 void UPangeaTamingComponent::StartTameCooldown(AActor* Instigator)
 {
-	if (!SpeciesConfig || !Instigator) return;
+	if (!TameSpeciesConfig || !Instigator) return;
 
-	const float Cooldown = FMath::Max(0.1f, SpeciesConfig->RetryTameCooldown);
-	const FGameplayTag FailTag = SpeciesConfig->FailTag;
+	const float Cooldown = FMath::Max(0.1f, TameSpeciesConfig->RetryTameCooldown);
+	const FGameplayTag FailTag = TameSpeciesConfig->FailTag;
 
 	GetWorld()->GetTimerManager().SetTimerForNextTick([this, Instigator, FailTag, Cooldown]()
 	{
@@ -235,7 +257,7 @@ void UPangeaTamingComponent::StartMinigame(AActor* Instigator, AActor* Target, f
 
 void UPangeaTamingComponent::OnMinigameResult(bool bSuccess)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 
 	if (ActiveMinigameWidget)
 	{
@@ -261,7 +283,7 @@ void UPangeaTamingComponent::OnMinigameResult(bool bSuccess)
 
 void UPangeaTamingComponent::SetTamedRole(ETamedRole NewRole)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 
 	TamedRole = NewRole;
 	ApplyRoleTag(NewRole);
@@ -277,13 +299,13 @@ void UPangeaTamingComponent::SetTamedRole(ETamedRole NewRole)
 				Old->UnPossess();
 				Old->Destroy();
 			}
-			if (SpeciesConfig->TamedMountAIController)
-				SwitchAIController(SpeciesConfig->TamedMountAIController);
+			if (TameSpeciesConfig->TamedMountAIController)
+				SwitchAIController(TameSpeciesConfig->TamedMountAIController);
 			break;
 
 		case ETamedRole::Companion:
-			if (SpeciesConfig->TamedCompanionAIController)
-				SwitchAIController(SpeciesConfig->TamedCompanionAIController);
+			if (TameSpeciesConfig->TamedCompanionAIController)
+				SwitchAIController(TameSpeciesConfig->TamedCompanionAIController);
 			break;
 
 		default:
@@ -298,16 +320,16 @@ ETamedRole UPangeaTamingComponent::DetermineFinalRole(ETamedRole DesiredRole) co
 	if (DesiredRole != ETamedRole::None)
 		return DesiredRole;
 
-	if (!SpeciesConfig)
+	if (!TameSpeciesConfig)
 		return ETamedRole::None;
 
-	if (SpeciesConfig->bCanBeMount && !SpeciesConfig->bCanBeCompanion)
+	if (TameSpeciesConfig->bCanBeMount && !TameSpeciesConfig->bCanBeCompanion)
 		return ETamedRole::Mount;
 
-	if (!SpeciesConfig->bCanBeMount && SpeciesConfig->bCanBeCompanion)
+	if (!TameSpeciesConfig->bCanBeMount && TameSpeciesConfig->bCanBeCompanion)
 		return ETamedRole::Companion;
 
-	if (SpeciesConfig->bCanBeMount && SpeciesConfig->bCanBeCompanion)
+	if (TameSpeciesConfig->bCanBeMount && TameSpeciesConfig->bCanBeCompanion)
 		return ETamedRole::Mount; // default fallback
 
 	return ETamedRole::None;
@@ -319,47 +341,47 @@ ETamedRole UPangeaTamingComponent::DetermineFinalRole(ETamedRole DesiredRole) co
 
 void UPangeaTamingComponent::ClearStateTags()
 {
-	if (!SpeciesConfig) return;
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->WildStateTag);
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->HostileStateTag);
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->TamedStateTag);
+	if (!TameSpeciesConfig) return;
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->WildStateTag);
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->HostileStateTag);
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->TamedStateTag);
 }
 
 void UPangeaTamingComponent::ClearRoleTags()
 {
-	if (!SpeciesConfig) return;
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->MountRoleTag);
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->CompanionRoleTag);
+	if (!TameSpeciesConfig) return;
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->MountRoleTag);
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->CompanionRoleTag);
 }
 
 void UPangeaTamingComponent::ClearTameTags()
 {
-	if (!SpeciesConfig) return;
-	RemoveTagFromActor(CachedInstigator.Get(), SpeciesConfig->InProgressTag);
-	RemoveTagFromActor(GetOwner(), SpeciesConfig->InProgressTag);
+	if (!TameSpeciesConfig) return;
+	RemoveTagFromActor(CachedInstigator.Get(), TameSpeciesConfig->InProgressTag);
+	RemoveTagFromActor(GetOwner(), TameSpeciesConfig->InProgressTag);
 }
 
 void UPangeaTamingComponent::ApplyStateTags()
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	switch (TameState)
 	{
-	case ETameState::Wild: AddTagToActor(GetOwner(), SpeciesConfig->WildStateTag); break;
-	case ETameState::Hostile: AddTagToActor(GetOwner(), SpeciesConfig->HostileStateTag); break;
-	case ETameState::Tamed: AddTagToActor(GetOwner(), SpeciesConfig->TamedStateTag); break;
+	case ETameState::Wild: AddTagToActor(GetOwner(), TameSpeciesConfig->WildStateTag); break;
+	case ETameState::Hostile: AddTagToActor(GetOwner(), TameSpeciesConfig->HostileStateTag); break;
+	case ETameState::Tamed: AddTagToActor(GetOwner(), TameSpeciesConfig->TamedStateTag); break;
 	default: break;
 	}
 }
 
 void UPangeaTamingComponent::ApplyRoleTag(ETamedRole Role)
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	ClearRoleTags();
 
 	if (Role == ETamedRole::Mount)
-		AddTagToActor(GetOwner(), SpeciesConfig->MountRoleTag);
+		AddTagToActor(GetOwner(), TameSpeciesConfig->MountRoleTag);
 	else if (Role == ETamedRole::Companion)
-		AddTagToActor(GetOwner(), SpeciesConfig->CompanionRoleTag);
+		AddTagToActor(GetOwner(), TameSpeciesConfig->CompanionRoleTag);
 }
 
 // ------------------------------------------------------------
@@ -370,7 +392,7 @@ void UPangeaTamingComponent::ApplyTameSuccessEffects() const
 {
 	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
 	{
-		for (const TSubclassOf<UGameplayEffect>& GEClass : SpeciesConfig->EffectsOnTameSuccess)
+		for (const TSubclassOf<UGameplayEffect>& GEClass : TameSpeciesConfig->EffectsOnTameSuccess)
 			if (GEClass)
 				ASC->ApplyGameplayEffectToSelf(GEClass->GetDefaultObject<UGameplayEffect>(), 1.f, ASC->MakeEffectContext());
 	}
@@ -378,13 +400,13 @@ void UPangeaTamingComponent::ApplyTameSuccessEffects() const
 
 void UPangeaTamingComponent::ConsumeTameItems() const
 {
-	if (!SpeciesConfig || !CachedInstigator.IsValid()) return;
+	if (!TameSpeciesConfig || !CachedInstigator.IsValid()) return;
 
 	if (UACFInventoryComponent* Inv = CachedInstigator->FindComponentByClass<UACFInventoryComponent>())
 	{
 		FInventoryItem Item;
-		Item.ItemClass = SpeciesConfig->RequiredTamingItem;
-		Inv->RemoveItem(Item, SpeciesConfig->RequiredItemCount);
+		Item.ItemClass = TameSpeciesConfig->RequiredTamingItem;
+		Inv->RemoveItem(Item, TameSpeciesConfig->RequiredItemCount);
 	}
 }
 
@@ -403,10 +425,10 @@ void UPangeaTamingComponent::ChangeTeam(const FGameplayTag& TeamTag) const
 
 void UPangeaTamingComponent::GrantTamedAbilities() const
 {
-	if (!SpeciesConfig) return;
+	if (!TameSpeciesConfig) return;
 	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
 	{
-		for (const TSubclassOf<UGameplayAbility>& Ability : SpeciesConfig->AbilitiesGrantedWhenTamed)
+		for (const TSubclassOf<UGameplayAbility>& Ability : TameSpeciesConfig->AbilitiesGrantedWhenTamed)
 			if (Ability)
 				ASC->GiveAbility(FGameplayAbilitySpec(Ability, 1, INDEX_NONE));
 	}

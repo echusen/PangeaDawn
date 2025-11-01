@@ -7,9 +7,9 @@
 #include "Actors/ACFCharacter.h"
 #include "Components/ACFQuadrupedMovementComponent.h"
 #include "ACFVaultComponent.h"
-#include "Components/ACFInteractionComponent.h"
 #include "Components/PangeaTamingComponent.h"
 #include "DataAssets/TameSpeciesConfig.h"
+
 
 
 APDDinosaurBase::APDDinosaurBase(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
@@ -36,7 +36,9 @@ void APDDinosaurBase::Tick(float DeltaTime)
 
 bool APDDinosaurBase::CanBeInteracted_Implementation(class APawn* Pawn)
 {
-	return !MountComponent->IsMounted();
+	// Can be interacted with if not mounted and if can be a mount or companion 
+	return !MountComponent->IsMounted() && TamingComponent && TamingComponent->TameSpeciesConfig &&
+		(TamingComponent->TameSpeciesConfig->bCanBeMount || TamingComponent->TameSpeciesConfig->bCanBeCompanion);
 }
 
 void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
@@ -73,6 +75,29 @@ void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FStri
 	}
 }
 
+FText APDDinosaurBase::GetInteractableName_Implementation()
+{
+	// return Tame if not tamed and once tamed return mount/pet based on role
+	if (TamingComponent && TamingComponent->TameState == ETameState::Wild)
+	{
+		return FText::FromString("Tame");
+	}
+
+	if (TamingComponent && TamingComponent->TameState == ETameState::Tamed)
+	{
+		if (TamingComponent->TamedRole == ETamedRole::Mount)
+		{
+			return FText::FromString("Mount");
+		}
+
+		if (TamingComponent->TamedRole == ETamedRole::Companion)
+		{
+			return FText::FromString("Pet");
+		}
+	}
+	
+	return FText::FromString("Interact");
+}
 #pragma endregion
 
 #pragma region Private Movement Functions

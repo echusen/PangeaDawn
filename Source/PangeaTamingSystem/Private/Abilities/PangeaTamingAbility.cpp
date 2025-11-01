@@ -46,5 +46,5 @@ void UPangeaTamingAbility::OnActionEnded_Implementation()
 	}
 
 	TamingComp->StartMinigame(GetAvatarActorFromActorInfo(), TargetActor,
-	TamingComp->SpeciesConfig ? TamingComp->SpeciesConfig->TameDuration : 5.f);
+	TamingComp->TameSpeciesConfig ? TamingComp->TameSpeciesConfig->TameDuration : 5.f);
 }

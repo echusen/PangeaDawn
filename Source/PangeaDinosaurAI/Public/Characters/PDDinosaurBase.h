@@ -4,8 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "ALSSavableInterface.h"
+#include "TamingTypes.h"
 #include "Actors/ACFCharacter.h"
 #include "PDDinosaurBase.generated.h"
+
 
 class UPangeaBreedableComponent;
 class UPangeaTamingComponent;
@@ -34,6 +36,7 @@ public:
 	// Interfaces
 	virtual bool CanBeInteracted_Implementation(class APawn* Pawn) override;
 	virtual void OnInteractedByPawn_Implementation(class APawn* Pawn, const FString& interactionType = "") override;
+	virtual FText GetInteractableName_Implementation() override;
 
 protected:
 	// Actor Components
