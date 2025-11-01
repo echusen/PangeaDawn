@@ -10,7 +10,6 @@
 #include "PangeaTamingComponent.generated.h"
 
 class UTamingWidget;
-class APDDinosaurBase;
 class UTameSpeciesConfig;
 class UGameplayAbility;
 class UGameplayEffect;
@@ -19,15 +18,12 @@ class AAIController;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameStateChanged, ETameState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameRoleSelected, ETamedRole, Role);
 
-
-
-UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
+UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PANGEATAMINGSYSTEM_API UPangeaTamingComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:	
-	// Sets default values for this component's properties
+public:
 	UPangeaTamingComponent();
 
 	// --- Species data ---
@@ -55,9 +51,6 @@ public:
 	void OnTameResolved(bool bSuccess, ETamedRole DesiredRole);
 
 	UFUNCTION(BlueprintCallable, Category="Taming")
-	void HandleTameFailed(const FString& Reason, AActor* Instigator);
-
-	UFUNCTION(BlueprintCallable, Category="Taming")
 	void SetTamedRole(ETamedRole NewRole);
 
 	// --- Minigame ---
@@ -80,22 +73,41 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FTameRoleSelected OnTameRoleSelected;
 
+	UPROPERTY()
+	TWeakObjectPtr<AActor> CachedInstigator;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
+	// --- Checks ---
 	bool HasRequiredStats(AActor* Instigator) const;
 	bool HasRequiredItem(AActor* Instigator) const;
+	bool CheckTamePrerequisites(AActor* Instigator) const;
 
+	// --- Transitions ---
+	void TransitionToTamedState(ETamedRole DesiredRole);
+	void TransitionToFailedState(AActor* Instigator);
+	void StartTameCooldown(AActor* Instigator);
+
+	// --- Effects & Items ---
+	void ApplyTameSuccessEffects() const;
+	void ConsumeTameItems() const;
+
+	// --- Tags & State ---
 	void ClearStateTags();
 	void ClearRoleTags();
+	void ClearTameTags();
 	void ApplyStateTags();
 	void ApplyRoleTag(ETamedRole Role);
+
+	// --- Utility ---
 	void ChangeTeam(const FGameplayTag& TeamTag) const;
 	void GrantTamedAbilities() const;
 	void SwitchAIController(TSubclassOf<AAIController> NewControllerClass) const;
+	ETamedRole DetermineFinalRole(ETamedRole DesiredRole) const;
 
-	// Tag helpers
+	// --- Tag helpers ---
 	inline void AddTagToActor(AActor* Actor, const FGameplayTag& Tag)
 	{
 		if (!Actor || !Tag.IsValid()) return;
@@ -109,7 +121,4 @@ private:
 		FGameplayTagContainer Tags; Tags.AddTag(Tag);
 		UAbilitySystemBlueprintLibrary::RemoveLooseGameplayTags(Actor, Tags);
 	}
-
-	UPROPERTY()
-	TWeakObjectPtr<AActor> CachedInstigator;
 };
