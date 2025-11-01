@@ -9,7 +9,7 @@
 #include "TamingTypes.h"
 #include "PangeaTamingComponent.generated.h"
 
-class UAbilityTask_WaitForTameResult;
+class UTamingWidget;
 class APDDinosaurBase;
 class UTameSpeciesConfig;
 class UGameplayAbility;
@@ -18,7 +18,7 @@ class AAIController;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameStateChanged, ETameState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameRoleSelected, ETamedRole, Role);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTameFailedDelegate, const FString&, Reason);
+
 
 
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -30,113 +30,86 @@ public:
 	// Sets default values for this component's properties
 	UPangeaTamingComponent();
 
-	// Species data
+	// --- Species data ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
 	UTameSpeciesConfig* SpeciesConfig = nullptr;
-	
-	// Runtime state
+
+	// --- Runtime state ---
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State")
 	ETameState TameState = ETameState::Wild;
-	
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State")
 	ETamedRole TamedRole = ETamedRole::None;
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Taming")
-	FORCEINLINE ETameState GetTameState() const { return TameState; }
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Taming")
-	FORCEINLINE ETamedRole GetTamedRole() const { return TamedRole; }
-
-	UFUNCTION(BlueprintCallable, Category="Taming")
-	void SetTameState(ETameState NewState) { TameState = NewState; }
-
-
-	// API
+	// --- Core API ---
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void InitializeWild();
-	
+
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void InitializeHostile();
-	
+
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void StartTameAttempt(AActor* Instigator);
-	
-	UFUNCTION(BlueprintCallable, Category="Taming")
-	void AbortTameAttempt();
-	
-	/** External callback from ACFU action or ability */
+
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void OnTameResolved(bool bSuccess, ETamedRole DesiredRole);
 
-	UPROPERTY(BlueprintAssignable, Category="Taming")
-	FTameFailedDelegate OnTameFailed;
-
 	UFUNCTION(BlueprintCallable, Category="Taming")
-	void HandleTameFailed(const FString& Reason);
-	
-	/** Explicit role set post-success if you need to switch later */
+	void HandleTameFailed(const FString& Reason, AActor* Instigator);
+
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void SetTamedRole(ETamedRole NewRole);
 
-	/** Called by ability when the Tame montage ends to start the minigame. */
+	// --- Minigame ---
+	UPROPERTY(EditDefaultsOnly, Category="Taming|UI")
+	TSubclassOf<UTamingWidget> MinigameWidgetClass;
+
+	UPROPERTY()
+	TObjectPtr<UUserWidget> ActiveMinigameWidget;
+
 	UFUNCTION(BlueprintCallable, Category="Taming|Minigame")
-	void BeginTameMinigame(UGameplayAbility* OwningAbility, UAbilityTask_WaitForTameResult* WaitTask);
+	void StartMinigame(AActor* Instigator, AActor* Target, float Duration);
 
-	/** Implement in Blueprint to open the taming minigame UI. */
-	UFUNCTION(BlueprintImplementableEvent, Category="Taming|Minigame")
-	void OpenTamingMinigame(AActor* Instigator, AActor* Target, float Duration);
-
-	/** Called by Blueprint minigame when finished (success or fail). */
 	UFUNCTION(BlueprintCallable, Category="Taming|Minigame")
 	void OnMinigameResult(bool bSuccess);
-	
-	// Events
+
+	// --- Events ---
 	UPROPERTY(BlueprintAssignable)
 	FTameStateChanged OnTameStateChanged;
-	
+
 	UPROPERTY(BlueprintAssignable)
 	FTameRoleSelected OnTameRoleSelected;
-
 
 protected:
 	virtual void BeginPlay() override;
 
-
 private:
-
 	bool HasRequiredStats(AActor* Instigator) const;
 	bool HasRequiredItem(AActor* Instigator) const;
-	
+
 	void ClearStateTags();
 	void ClearRoleTags();
-	
 	void ApplyStateTags();
 	void ApplyRoleTag(ETamedRole Role);
-	
 	void ChangeTeam(const FGameplayTag& TeamTag) const;
-
 	void GrantTamedAbilities() const;
-	
 	void SwitchAIController(TSubclassOf<AAIController> NewControllerClass) const;
 
-	inline void AddTagToActor(AActor* Actor, const FGameplayTag& GameplayTagToAdd)
+	// Tag helpers
+	inline void AddTagToActor(AActor* Actor, const FGameplayTag& Tag)
 	{
-		if (!Actor || !GameplayTagToAdd.IsValid()) return;
-		
-		FGameplayTagContainer Tags;
-		Tags.AddTag(GameplayTagToAdd);
+		if (!Actor || !Tag.IsValid()) return;
+		FGameplayTagContainer Tags; Tags.AddTag(Tag);
 		UAbilitySystemBlueprintLibrary::AddLooseGameplayTags(Actor, Tags);
 	}
 
-	inline void RemoveTagFromActor(AActor* Actor, const FGameplayTag& GameplayTagToRemove)
+	inline void RemoveTagFromActor(AActor* Actor, const FGameplayTag& Tag)
 	{
-		if (!Actor || !GameplayTagToRemove.IsValid()) return;
-		
-		FGameplayTagContainer Tags;
-		Tags.AddTag(GameplayTagToRemove);
+		if (!Actor || !Tag.IsValid()) return;
+		FGameplayTagContainer Tags; Tags.AddTag(Tag);
 		UAbilitySystemBlueprintLibrary::RemoveLooseGameplayTags(Actor, Tags);
 	}
 
 	UPROPERTY()
-	TObjectPtr<UAbilityTask_WaitForTameResult> CachedTameTask;
+	TWeakObjectPtr<AActor> CachedInstigator;
 };

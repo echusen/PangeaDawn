@@ -43,14 +43,14 @@ void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FStri
 {
 	AACFCharacter* ACFCharacter = Cast<AACFCharacter>(Pawn);
 
-	if (!TamingComponent || TamingComponent->GetTameState() != ETameState::Tamed)
+	if (!TamingComponent || TamingComponent->TameState != ETameState::Tamed)
 	{
 		// Not tamed yet → maybe start a taming attempt instead
 		TamingComponent->StartTameAttempt(Pawn);
 		return;
 	}
 
-	if (TamingComponent->GetTamedRole() == ETamedRole::Mount)
+	if (TamingComponent->TamedRole == ETamedRole::Mount)
 	{
 		//request gameplay tag
 		FGameplayTag MountTag = FGameplayTag::RequestGameplayTag("Actions.Mount");
@@ -67,7 +67,7 @@ void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FStri
 			ACFCharacter->TriggerAction(MountTag, EActionPriority::EHigh, false);
 		}
 	}
-	else if (TamingComponent->GetTamedRole() == ETamedRole::Companion)
+	else if (TamingComponent->TamedRole == ETamedRole::Companion)
 	{
 		UE_LOG(LogEngine, Display, TEXT("You Pet Dino!"));
 	}

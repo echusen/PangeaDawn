@@ -30,8 +30,4 @@ struct FTameOutcome
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bSuccess = false;
-
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float Progress = 0.f; // 0..1 optional for UI
 };

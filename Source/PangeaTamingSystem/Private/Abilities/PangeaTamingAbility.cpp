@@ -17,6 +17,16 @@ void UPangeaTamingAbility::PreActivate(const FGameplayAbilitySpecHandle Handle,
 	TargetActor = ActorInfo->AvatarActor->GetComponentByClass<UACFInteractionComponent>()->GetCurrentBestInteractableActor();
 }
 
+void UPangeaTamingAbility::OnActionStarted_Implementation()
+{
+	Super::OnActionStarted_Implementation();
+
+	FGameplayTagContainer TagsToAdd;
+	TagsToAdd.AddTag(FGameplayTag::RequestGameplayTag("Tame.Attempt.InProgress"));
+	
+	UAbilitySystemBlueprintLibrary::AddLooseGameplayTags(GetAvatarActorFromActorInfo(), TagsToAdd);
+}
+
 void UPangeaTamingAbility::OnActionEnded_Implementation()
 {
 	Super::OnActionEnded_Implementation();
@@ -35,34 +45,6 @@ void UPangeaTamingAbility::OnActionEnded_Implementation()
 		return;
 	}
 
-	// Wait for minigame result instead of instantly resolving
-	ActiveTameTask = UAbilityTask_WaitForTameResult::WaitForTameResult(this);
-	ActiveTameTask->OnTameResult.AddDynamic(this, &UPangeaTamingAbility::HandleTameResult);
-	ActiveTameTask->ReadyForActivation();
-
-	TamingComp->BeginTameMinigame(this, ActiveTameTask);
-}
-
-void UPangeaTamingAbility::HandleTameResult(bool bSuccess)
-{
-	if (!TargetActor)
-		return;
-
-	UPangeaTamingComponent* TamingComp = TargetActor->FindComponentByClass<UPangeaTamingComponent>();
-	if (!TamingComp)
-		return;
-
-	if (bSuccess)
-	{
-		TamingComp->OnTameResolved(true, TamingComp->GetTamedRole());
-		UE_LOG(LogTemp, Log, TEXT("[TamingAbility] Taming succeeded for %s"), *GetNameSafe(TargetActor));
-	}
-	else
-	{
-		TamingComp->HandleTameFailed(TEXT("Minigame failed"));
-		UE_LOG(LogTemp, Log, TEXT("[TamingAbility] Taming failed for %s"), *GetNameSafe(TargetActor));
-	}
-
-	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bSuccess);
-	ActiveTameTask = nullptr;
+	TamingComp->StartMinigame(GetAvatarActorFromActorInfo(), TargetActor,
+	TamingComp->SpeciesConfig ? TamingComp->SpeciesConfig->TameDuration : 5.f);
 }

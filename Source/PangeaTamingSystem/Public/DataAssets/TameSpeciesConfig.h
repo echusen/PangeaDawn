@@ -108,6 +108,9 @@ public:
 	float TameDuration = 5.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	float RetryTameCooldown = 5.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
 	bool bRunAwayOnFail = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
