@@ -50,6 +50,11 @@
 				"ActionsSystem",
 				"GameplayAbilities"
 			]
+		},
+		{
+			"Name": "PangeaBaseUpgradeSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
@@ -89,6 +94,11 @@
 			"SupportedTargetPlatforms": [
 				"Win64"
 			]
+		},
+		{
+			"Name": "SteamIntegrationKit",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/122c9894af2649c8a9c2a25452562547"
 		}
 	]
 }
