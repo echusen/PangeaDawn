@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/FacilityManagerComponent.h"
 #include "Components/UpgradeSystemComponent.h"
+#include "UI/VillageUpgradeMenuWidget.h"
 
 
 // Sets default values
@@ -49,16 +50,57 @@ void AVillageBase::OnLocalInteractedByPawn_Implementation(class APawn* Pawn, con
 	if (!UpgradeSystem)
 		return;
 	
-	if (UpgradeSystem->CanUpgradeToNextLevel(Pawn))
-	{
-		// Trigger upgrade logic
-		const int32 NewLevel = UpgradeSystem->CurrentLevel + 1;
-
-		UpgradeSystem->OnLevelIncreased(NewLevel, Pawn);
-
-		UE_LOG(LogTemp, Log, TEXT("VillageBase: Player %s triggered upgrade to level %d"),
-			*GetNameSafe(Pawn), NewLevel);
-	}
+	OpenUpgradeMenu(Pawn);
 }
 
+bool AVillageBase::UpgradeBase(APawn* InstigatorPawn) const
+{
+	if (!UpgradeSystem)
+		return false;
+
+	if (!UpgradeSystem->CanUpgradeToNextLevel(InstigatorPawn))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PerformUpgrade: Upgrade failed — requirements not met."));
+		return false;
+	}
+
+	const int32 NewLevel = UpgradeSystem->CurrentLevel + 1;
+
+	UpgradeSystem->OnLevelIncreased(NewLevel, InstigatorPawn);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("VillageBase: %s upgraded village to level %d"),
+		*GetNameSafe(InstigatorPawn),
+		NewLevel);
+
+	return true;
+}
+
+void AVillageBase::OpenUpgradeMenu(APawn* InteractingPawn)
+{
+	if (!UpgradeMenuClass)
+		return;
+
+	APlayerController* PC = Cast<APlayerController>(
+		InteractingPawn ? InteractingPawn->GetController() : nullptr
+	);
+	if (!PC)
+		return;
+
+	UVillageUpgradeMenuWidget* Menu = CreateWidget<UVillageUpgradeMenuWidget>(PC, UpgradeMenuClass);
+	if (!Menu)
+		return;
+
+	// Pass village & pawn to widget
+	Menu->InitializeFromVillage(this, InteractingPawn);
+
+	// Add UI
+	Menu->AddToViewport();
+
+	// Input setup
+	PC->bShowMouseCursor = true;
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(Menu->TakeWidget());
+	PC->SetInputMode(InputMode);
+}
 

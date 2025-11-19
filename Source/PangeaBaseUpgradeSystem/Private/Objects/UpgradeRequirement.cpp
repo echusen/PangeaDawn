@@ -12,3 +12,8 @@ FText UUpgradeRequirement::GetFailureMessage() const
 {
 	return FText::GetEmpty();
 }
+
+FText UUpgradeRequirement::GetRequirementDescription_Implementation() const
+{
+	return FText::FromString(TEXT("Requirement"));
+}

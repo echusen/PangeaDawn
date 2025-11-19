@@ -23,4 +23,8 @@ public:
 	/** Optional failure message that can be displayed in UI. */
 	UFUNCTION(BlueprintCallable, Category="Upgrade")
 	virtual FText GetFailureMessage() const;
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Upgrade")
+	FText GetRequirementDescription() const;
+	virtual FText GetRequirementDescription_Implementation() const;
 };

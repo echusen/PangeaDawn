@@ -34,3 +34,27 @@ FText UReq_HasItems::GetFailureMessage() const
 	// Simple message - designers can make better ones in a blueprint subclass.
 	return FText::FromString(TEXT("Required items are missing."));
 }
+
+FText UReq_HasItems::GetRequirementDescription_Implementation() const
+{
+	if (RequiredItems.Num() == 0)
+	{
+		return FText::FromString("Missing Required Items");
+	}
+
+	const auto& Item = RequiredItems[0];
+
+	if (!Item.ItemClass)
+	{
+		return FText::FromString("Invalid Item Requirement");
+	}
+
+	const UACFItem* DefaultItem = Item.ItemClass->GetDefaultObject<UACFItem>();
+	const FText ItemName = DefaultItem ? DefaultItem->GetItemName() : FText::FromString("Unknown Item");
+
+	return FText::Format(
+		FText::FromString("{0} x{1}"),
+		ItemName,
+		FText::AsNumber(Item.Count)
+	);
+}

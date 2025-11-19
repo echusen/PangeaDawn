@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayTagContainer.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/ACFInteractableInterface.h"
 #include "VillageBase.generated.h"
@@ -59,4 +58,16 @@ public:
 
 	/** Interaction allowed? */
 	virtual bool CanBeInteracted_Implementation(class APawn* Pawn) override {return true;};
+	
+	bool UpgradeBase(APawn* InstigatorPawn) const;
+	
+	//UI Integration
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Upgrade|UI")
+	TSubclassOf<class UVillageUpgradeMenuWidget> UpgradeMenuClass;
+
+	UFUNCTION(BlueprintCallable, Category="Upgrade|UI")
+	void OpenUpgradeMenu(APawn* InteractingPawn);
+
+	UUpgradeSystemComponent* GetUpgradeSystem() const { return UpgradeSystem; }
+
 };

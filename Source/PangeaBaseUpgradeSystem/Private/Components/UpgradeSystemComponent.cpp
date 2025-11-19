@@ -3,6 +3,7 @@
 
 #include "Components/UpgradeSystemComponent.h"
 
+#include "Actions/UA_EnableFacility.h"
 #include "DataAssets/UpgradeMilestoneData.h"
 #include "DataAssets/VillageDefinitionData.h"
 #include "Objects/UpgradeAction.h"
@@ -204,4 +205,84 @@ void UUpgradeSystemComponent::ExecuteMilestonesForLevel(int32 Level, UObject* Pl
 		}
 	}
 }
+
+//UI Helpers
+bool UUpgradeSystemComponent::GetNextLevelDefinition(FUpgradeLevelDefinition& OutLevel) const
+{
+	if (!VillageDefinition)
+		return false;
+
+	const int32 TargetLevel = CurrentLevel + 1;
+
+	for (const FUpgradeLevelDefinition& L : VillageDefinition->Levels)
+	{
+		if (L.Level == TargetLevel)
+		{
+			OutLevel = L;
+			return true;
+		}
+	}
+	return false;
+}
+
+void UUpgradeSystemComponent::GetMilestonesForLevel(int32 Level, TArray<FUpgradeMilestoneDefinition>& OutMilestones) const
+{
+	OutMilestones.Empty();
+	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(Level);
+	if (LevelDef)
+	{
+		OutMilestones = LevelDef->Milestones;
+	}
+}
+
+void UUpgradeSystemComponent::GetUnmetRequirementsForNextLevel(UObject* PlayerContext, TArray<UUpgradeRequirement*>& OutRequirements) const
+{
+	OutRequirements.Empty();
+
+	if (!VillageDefinition)
+		return;
+
+	const int32 TargetLevel = CurrentLevel + 1;
+	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(TargetLevel);
+	if (!LevelDef)
+		return;
+
+	for (const FUpgradeMilestoneDefinition& M : LevelDef->Milestones)
+	{
+		for (UUpgradeRequirement* Req : M.Requirements)
+		{
+			if (Req && !Req->IsRequirementMet(PlayerContext))
+			{
+				OutRequirements.Add(Req);
+			}
+		}
+	}
+}
+
+void UUpgradeSystemComponent::GetFacilitiesUnlockedAtLevel(int32 Level, TArray<FGameplayTag>& OutFacilities) const
+{
+	OutFacilities.Empty();
+
+	if (!VillageDefinition)
+		return;
+
+	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(Level);
+	if (!LevelDef)
+		return;
+
+	for (const FUpgradeMilestoneDefinition& M : LevelDef->Milestones)
+	{
+		for (UUpgradeAction* Action : M.Actions)
+		{
+			if (UUA_EnableFacility* Enable = Cast<UUA_EnableFacility>(Action))
+			{
+				if (Enable->FacilityTag.IsValid())
+				{
+					OutFacilities.AddUnique(Enable->FacilityTag);
+				}
+			}
+		}
+	}
+}
+
 

@@ -32,4 +32,6 @@ public:
 
 	virtual bool IsRequirementMet_Implementation(UObject* ContextObject) const override;
 	virtual FText GetFailureMessage() const override;
+	
+	virtual FText GetRequirementDescription_Implementation() const override;
 };

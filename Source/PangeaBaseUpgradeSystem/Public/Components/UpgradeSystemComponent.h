@@ -64,6 +64,20 @@ public:
 	/** Mark a milestone as completed (used internally, but exposed for debugging if needed) */
 	UFUNCTION(BlueprintCallable, Category="Upgrade")
 	void MarkMilestoneCompleted(FGameplayTag MilestoneTag);
+	
+	//UI Helpers
+	UFUNCTION(BlueprintCallable, Category="Upgrade|UI")
+    bool GetNextLevelDefinition(FUpgradeLevelDefinition& OutLevel) const;
+    
+    UFUNCTION(BlueprintCallable, Category="Upgrade|UI")
+    void GetMilestonesForLevel(int32 Level, TArray<FUpgradeMilestoneDefinition>& OutMilestones) const;
+    
+    UFUNCTION(BlueprintCallable, Category="Upgrade|UI")
+    void GetUnmetRequirementsForNextLevel(UObject* PlayerContext, TArray<UUpgradeRequirement*>& OutRequirements) const;
+    
+    UFUNCTION(BlueprintCallable, Category="Upgrade|UI")
+    void GetFacilitiesUnlockedAtLevel(int32 Level, TArray<FGameplayTag>& OutFacilities) const;
+
 
 private:
 

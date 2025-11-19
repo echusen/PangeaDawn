@@ -21,6 +21,9 @@ class PANGEABASEUPGRADESYSTEM_API UUA_EnableFacility : public UUpgradeAction
 	GENERATED_BODY()
 
 public:
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Facility")
+	FText FacilityDisplayName;
 
 	/* Which facility to affect */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Facility")

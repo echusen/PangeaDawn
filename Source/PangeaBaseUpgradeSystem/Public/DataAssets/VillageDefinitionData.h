@@ -15,6 +15,9 @@ USTRUCT(BlueprintType)
 struct FFacilityGroupReference
 {
 	GENERATED_BODY();
+	
+	UPROPERTY(EditAnywhere)
+	FText FacilityGroupName;
 
 	UPROPERTY(EditAnywhere)
 	FGameplayTag FacilityTag;

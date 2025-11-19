@@ -9,7 +9,7 @@ public class PangeaBaseUpgradeSystem : ModuleRules
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
-                "Core", "GameplayTags", "AscentCoreInterfaces",
+                "Core", "GameplayTags", "AscentCoreInterfaces", "UMG"
             }
         );
 
