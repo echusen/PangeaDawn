@@ -35,10 +35,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Village")
 	UBoxComponent* InteractionVolume;
 
-	/** Root for markers placed as children */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Village")
-	USceneComponent* FacilityMarkersRoot;
-
 	/** Handles the milestone → requirement → action logic */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Village")
 	UUpgradeSystemComponent* UpgradeSystem;

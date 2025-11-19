@@ -32,7 +32,7 @@ bool UReq_FacilityUnlocked::IsRequirementMet_Implementation(UObject* ContextObje
 	}
 
 	// Search the facilities
-	for (const FFacilityEntry& Entry : FacilityComp->Facilities)
+	for (const FFacilityEntry& Entry : FacilityComp->GetAllFacilities())
 	{
 		if (Entry.FacilityTag == RequiredFacilityTag)
 		{

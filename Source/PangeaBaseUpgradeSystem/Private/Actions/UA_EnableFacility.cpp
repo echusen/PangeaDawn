@@ -7,38 +7,29 @@
 
 void UUA_EnableFacility::Execute_Implementation(UObject* ContextObject)
 {
-	AActor* Owner = Cast<AActor>(ContextObject);
-	if (!Owner)
+	AActor* OwnerActor = Cast<AActor>(ContextObject);
+	if (!OwnerActor)
 		return;
 
-	UFacilityManagerComponent* Manager = Owner->FindComponentByClass<UFacilityManagerComponent>();
+	UFacilityManagerComponent* Manager = OwnerActor->FindComponentByClass<UFacilityManagerComponent>();
 	if (!Manager)
 		return;
 
-	// Enable facility (handles existing actors)
-	if (EnableMode == EFacilityEnableMode::RevealExisting || EnableMode == EFacilityEnableMode::Both)
+	switch (Mode)
 	{
+	case EFacilityEnableMode::EnableOnly:
 		Manager->EnableFacility(FacilityTag);
-	}
+		break;
 
-	// Spawn new NPCs
-	if (EnableMode == EFacilityEnableMode::SpawnNew || EnableMode == EFacilityEnableMode::Both)
-	{
-		AActor* Marker = Manager->GetFacilityMarker(FacilityTag);
-		if (Marker)
-		{
-			for (TSubclassOf<APawn> NPCClass : NPCsToSpawn)
-			{
-				FActorSpawnParameters SpawnParams;
-				SpawnParams.Owner = Owner;
-                
-				Owner->GetWorld()->SpawnActor<APawn>(
-					NPCClass,
-					Marker->GetActorLocation(),
-					Marker->GetActorRotation(),
-					SpawnParams
-				);
-			}
-		}
+	case EFacilityEnableMode::DisableOnly:
+		Manager->DisableFacility(FacilityTag);
+		break;
+
+	case EFacilityEnableMode::Toggle:
+		if (Manager->IsFacilityEnabled(FacilityTag))
+			Manager->DisableFacility(FacilityTag);
+		else
+			Manager->EnableFacility(FacilityTag);
+		break;
 	}
 }

@@ -3,7 +3,6 @@
 
 #include "Actors/VillageBase.h"
 
-#include "Actors/FacilityMarker.h"
 #include "Components/BoxComponent.h"
 #include "Components/FacilityManagerComponent.h"
 #include "Components/UpgradeSystemComponent.h"
@@ -28,10 +27,6 @@ AVillageBase::AVillageBase()
 	InteractionVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionVolume"));
 	InteractionVolume->SetupAttachment(RootComponent);
 	InteractionVolume->SetBoxExtent(FVector(150,150,150));
-
-	// Facility markers container
-	FacilityMarkersRoot = CreateDefaultSubobject<USceneComponent>(TEXT("FacilityMarkersRoot"));
-	FacilityMarkersRoot->SetupAttachment(RootComponent);
 
 	// Logic Components
 	UpgradeSystem = CreateDefaultSubobject<UUpgradeSystemComponent>(TEXT("UpgradeSystem"));

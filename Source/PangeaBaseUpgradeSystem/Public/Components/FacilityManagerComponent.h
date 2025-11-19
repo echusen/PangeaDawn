@@ -1,29 +1,26 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
-
+﻿#pragma once
 #include "CoreMinimal.h"
-#include "GameplayTagContainer.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "FacilityManagerComponent.generated.h"
 
-class AFacilityMarker;
 
-USTRUCT(BlueprintType)
+class AFacilityGroup;
+
+USTRUCT()
 struct FFacilityEntry
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY()
 	FGameplayTag FacilityTag;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY()
+	TWeakObjectPtr<AFacilityGroup> Group;
+
+	UPROPERTY()
 	bool bUnlocked = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TSoftObjectPtr<AActor> FacilityActor;
 };
-
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PANGEABASEUPGRADESYSTEM_API UFacilityManagerComponent : public UActorComponent
@@ -31,40 +28,26 @@ class PANGEABASEUPGRADESYSTEM_API UFacilityManagerComponent : public UActorCompo
 	GENERATED_BODY()
 
 public:
+	UFacilityManagerComponent();
+
 	virtual void BeginPlay() override;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Facilities")
-	TArray<FFacilityEntry> Facilities;
 
-	/** Unlock by gameplay tag */
-	UFUNCTION(BlueprintCallable, Category="Facilities")
-	void EnableFacility(FGameplayTag FacilityTag);
+	/* Enable/disable a facility by tag */
+	void EnableFacility(const FGameplayTag& FacilityTag);
+	void DisableFacility(const FGameplayTag& FacilityTag);
 
-	UFUNCTION(BlueprintCallable, Category="Facilities")
-	void DisableFacility(FGameplayTag FacilityTag);
-	FGameplayTagContainer GetActorGameplayTags(AActor* Actor);
+	/* Check state */
+	bool IsFacilityEnabled(const FGameplayTag& FacilityTag) const;
+	
+	//Get all facilities
+	const TArray<FFacilityEntry>& GetAllFacilities() const { return Facilities; }
 
-	/** Find facility entry using gameplay tag */
-	bool GetFacility(FGameplayTag FacilityTag, FFacilityEntry*& OutEntry);
-	
-	UFUNCTION(BlueprintCallable, Category = "Facility")
-	void DiscoverFacilityMarkersInWorld();
+protected:
 
-	UFUNCTION(BlueprintCallable, Category = "Facility")
-	AActor* GetFacilityMarker(FGameplayTag FacilityTag) const;
-	
-	void RegisterFacilityMarker(AFacilityMarker* Marker);
-	
-	UFUNCTION(BlueprintCallable, Category = "Facility")
-	bool IsFacilityEnabled(FGameplayTag FacilityTag) const;
-	
-	UFUNCTION(BlueprintCallable, Category = "Facility")
-	void RefreshNPCStates();
-	
-private:
-	// Store discovered markers
+	/* Locate all FacilityGroups under this actor */
+	void DiscoverFacilityGroups();
+
+	/* Storage */
 	UPROPERTY()
-	TMap<FGameplayTag, AActor*> FacilityMarkers;
-	
-	TMap<FGameplayTag, TArray<TWeakObjectPtr<AActor>>> FacilityNPCs;
+	TArray<FFacilityEntry> Facilities;
 };
