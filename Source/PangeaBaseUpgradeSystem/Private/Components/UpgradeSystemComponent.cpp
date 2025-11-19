@@ -3,142 +3,205 @@
 
 #include "Components/UpgradeSystemComponent.h"
 
-#include "DataAssets/UpgradeLevelTable.h"
 #include "DataAssets/UpgradeMilestoneData.h"
+#include "DataAssets/VillageDefinitionData.h"
 #include "Objects/UpgradeAction.h"
 #include "Objects/UpgradeRequirement.h"
 
 
 UUpgradeSystemComponent::UUpgradeSystemComponent()
 {
-    PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UUpgradeSystemComponent::BeginPlay()
 {
-    Super::BeginPlay();
+	Super::BeginPlay();
+
+	// Optional: you could re-run milestones here based on saved state
 }
+
+/* -------------------------------------------------------------
+ *  Public API
+ * ------------------------------------------------------------- */
 
 void UUpgradeSystemComponent::OnLevelIncreased(int32 NewLevel, UObject* PlayerContext)
 {
-    if (NewLevel <= CurrentLevel)
-    {
-        UE_LOG(LogTemp, Verbose, TEXT("OnLevelIncreased called with %d <= CurrentLevel %d"), NewLevel, CurrentLevel);
-        return;
-    }
+	if (!VillageDefinition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UpgradeSystem: OnLevelIncreased called but VillageDefinition is null on %s"),
+		       *GetOwner()->GetName());
+		return;
+	}
 
-    CurrentLevel = NewLevel;
-    ExecuteMilestonesForLevel(NewLevel, PlayerContext);
-}
+	if (NewLevel <= CurrentLevel)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: Ignoring level increase to %d (current %d)"),
+		       NewLevel, CurrentLevel);
+		return;
+	}
 
-bool UUpgradeSystemComponent::IsMilestoneCompleted(FGameplayTag MilestoneTag) const
-{
-    return CompletedMilestones.HasTag(MilestoneTag);
-}
+	CurrentLevel = NewLevel;
 
-void UUpgradeSystemComponent::MarkMilestoneCompleted(FGameplayTag MilestoneTag)
-{
-    CompletedMilestones.AddTag(MilestoneTag);
+	UE_LOG(LogTemp, Log, TEXT("UpgradeSystem: Level increased to %d for %s"),
+	       CurrentLevel, *GetOwner()->GetName());
+
+	ExecuteMilestonesForLevel(CurrentLevel, PlayerContext);
 }
 
 bool UUpgradeSystemComponent::CanUpgradeToNextLevel(UObject* PlayerContext) const
 {
-    if (!LevelTable)
-    {
-        UE_LOG(LogTemp, Error, TEXT("UpgradeSystem: No LevelTable assigned!"));
-        return false;
-    }
+	if (!VillageDefinition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UpgradeSystem: CanUpgradeToNextLevel called but VillageDefinition is null"));
+		return false;
+	}
 
-    int32 TargetLevel = CurrentLevel + 1;
-    TArray<UUpgradeMilestoneData*> Milestones;
-    LevelTable->GetMilestonesForLevel(TargetLevel, Milestones);
+	const int32 TargetLevel = CurrentLevel + 1;
+	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(TargetLevel);
+	if (!LevelDef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem: No level definition found for level %d"), TargetLevel);
+		// You can treat this as "nothing more to upgrade" or "blocked" – here we treat as blocked.
+		return false;
+	}
 
-    if (Milestones.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem: No milestones found for level %d"), TargetLevel);
-        return true;
-    }
+	// No milestones = nothing to gate, so allow upgrade.
+	if (LevelDef->Milestones.Num() == 0)
+	{
+		return true;
+	}
 
-    // Check if ALL milestones have their requirements met
-    for (UUpgradeMilestoneData* Milestone : Milestones)
-    {
-        if (!Milestone)
-            continue;
+	for (const FUpgradeMilestoneDefinition& Milestone : LevelDef->Milestones)
+	{
+		for (UUpgradeRequirement* Requirement : Milestone.Requirements)
+		{
+			if (!Requirement)
+				continue;
 
-        for (UUpgradeRequirement* Requirement : Milestone->Requirements)
-        {
-            if (Requirement && !Requirement->IsRequirementMet(PlayerContext))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem: Requirement '%s' not met for level %d"),
-                    *Requirement->GetName(), TargetLevel);
-                return false;
-            }
-        }
-    }
+			if (!Requirement->IsRequirementMet(PlayerContext))
+			{
+				UE_LOG(LogTemp, Verbose,
+					TEXT("UpgradeSystem: Requirement '%s' not met for milestone '%s' (level %d)"),
+					*Requirement->GetName(),
+					*Milestone.MilestoneTag.ToString(),
+					TargetLevel);
+				return false;
+			}
+		}
+	}
 
-    return true;
+	return true;
+}
+
+bool UUpgradeSystemComponent::IsMilestoneCompleted(FGameplayTag MilestoneTag) const
+{
+	return CompletedMilestones.HasTag(MilestoneTag);
+}
+
+void UUpgradeSystemComponent::MarkMilestoneCompleted(FGameplayTag MilestoneTag)
+{
+	if (!CompletedMilestones.HasTag(MilestoneTag))
+	{
+		CompletedMilestones.AddTag(MilestoneTag);
+	}
+}
+
+/* -------------------------------------------------------------
+ *  Private helpers
+ * ------------------------------------------------------------- */
+
+const FUpgradeLevelDefinition* UUpgradeSystemComponent::FindLevelDefinition(int32 Level) const
+{
+	if (!VillageDefinition)
+		return nullptr;
+
+	for (const FUpgradeLevelDefinition& Def : VillageDefinition->Levels)
+	{
+		if (Def.Level == Level)
+		{
+			return &Def;
+		}
+	}
+	return nullptr;
 }
 
 void UUpgradeSystemComponent::ExecuteMilestonesForLevel(int32 Level, UObject* PlayerContext)
 {
-    if (!LevelTable)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("UpgradeSystemComponent: No LevelTable assigned."));
-        return;
-    }
+	if (!VillageDefinition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UpgradeSystem: ExecuteMilestonesForLevel called but VillageDefinition is null"));
+		return;
+	}
 
-    TArray<UUpgradeMilestoneData*> Milestones;
-    LevelTable->GetMilestonesForLevel(Level, Milestones);
+	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(Level);
+	if (!LevelDef)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem: ExecuteMilestonesForLevel - no definition for level %d"), Level);
+		return;
+	}
 
-    // ADD THIS:
-    UE_LOG(LogTemp, Warning, TEXT("Found %d milestones for level %d"), Milestones.Num(), Level);
+	if (LevelDef->Milestones.Num() == 0)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: No milestones defined for level %d"), Level);
+		return;
+	}
 
-    for (UUpgradeMilestoneData* Milestone : Milestones)
-    {
-        if (!Milestone)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Milestone is null!")); // ADD THIS
-            continue;
-        }
+	for (const FUpgradeMilestoneDefinition& MilestoneDef : LevelDef->Milestones)
+	{
+		if (MilestoneDef.MilestoneTag.IsValid() && IsMilestoneCompleted(MilestoneDef.MilestoneTag))
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: Milestone %s already completed, skipping"),
+			       *MilestoneDef.MilestoneTag.ToString());
+			continue;
+		}
 
-        // ADD THIS:
-        UE_LOG(LogTemp, Warning, TEXT("Processing milestone: %s"), *Milestone->MilestoneTag.ToString());
-        UE_LOG(LogTemp, Warning, TEXT("Requirements: %d, Actions: %d"), Milestone->Requirements.Num(), Milestone->Actions.Num());
+		// Check requirements
+		bool bAllRequirementsMet = true;
+		for (UUpgradeRequirement* Requirement : MilestoneDef.Requirements)
+		{
+			if (!Requirement)
+				continue;
 
-        bool bAllRequirementsMet = true;
-        for (UUpgradeRequirement* Req : Milestone->Requirements)
-        {
-            if (!Req) continue;
+			if (!Requirement->IsRequirementMet(PlayerContext))
+			{
+				bAllRequirementsMet = false;
+				UE_LOG(LogTemp, Log,
+					TEXT("UpgradeSystem: Milestone %s failed requirement: %s"),
+					*MilestoneDef.MilestoneTag.ToString(),
+					*GetNameSafe(Requirement));
+				break;
+			}
+		}
 
-            if (!Req->IsRequirementMet(PlayerContext))
-            {
-                bAllRequirementsMet = false;
-                UE_LOG(LogTemp, Log, TEXT("Milestone %s failed requirement: %s"), *Milestone->MilestoneTag.ToString(), *GetNameSafe(Req));
-                break;
-            }
-        }
+		if (!bAllRequirementsMet)
+		{
+			UE_LOG(LogTemp, Verbose,
+				TEXT("UpgradeSystem: Milestone %s skipped due to unmet requirements"),
+				*MilestoneDef.MilestoneTag.ToString());
+			continue;
+		}
 
-        if (!bAllRequirementsMet)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Milestone %s skipped due to unmet requirements"), *Milestone->MilestoneTag.ToString()); // ADD THIS
-            continue;
-        }
+		// Execute actions
+		UE_LOG(LogTemp, Log, TEXT("UpgradeSystem: Executing %d actions for milestone %s (level %d)"),
+		       MilestoneDef.Actions.Num(),
+		       *MilestoneDef.MilestoneTag.ToString(),
+		       Level);
 
-        // ADD THIS:
-        UE_LOG(LogTemp, Warning, TEXT("Executing %d actions for milestone %s"), Milestone->Actions.Num(), *Milestone->MilestoneTag.ToString());
+		for (UUpgradeAction* Action : MilestoneDef.Actions)
+		{
+			if (!Action)
+				continue;
 
-        for (UUpgradeAction* Action : Milestone->Actions)  // Changed from ActionClasses
-        {
-            if (!Action)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Action is null"));
-                continue;
-            }
+			UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: Executing action %s"), *GetNameSafe(Action));
+			// We pass the village actor (owner) as context for actions.
+			Action->Execute(GetOwner());
+		}
 
-            UE_LOG(LogTemp, Warning, TEXT("Executing action: %s"), *GetNameSafe(Action));
-            Action->Execute(GetOwner());  // No need to NewObject - already instanced
-        }
-        MarkMilestoneCompleted(Milestone->MilestoneTag);
-    }
+		if (MilestoneDef.MilestoneTag.IsValid())
+		{
+			MarkMilestoneCompleted(MilestoneDef.MilestoneTag);
+		}
+	}
 }
 

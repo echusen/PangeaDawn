@@ -8,8 +8,18 @@
 #include "UpgradeSystemComponent.generated.h"
 
 
-class UUpgradeLevelTable;
+class UVillageDefinitionData;
+struct FUpgradeLevelDefinition;
+struct FUpgradeMilestoneDefinition;
+class UUpgradeRequirement;
+class UUpgradeAction;
 
+/**
+ * Component that drives village/base upgrades using UVillageDefinitionData.
+ * - Reads all level + milestone data from VillageDefinition
+ * - Evaluates requirements
+ * - Executes actions when a level increases
+ */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PANGEABASEUPGRADESYSTEM_API UUpgradeSystemComponent : public UActorComponent
 {
@@ -18,32 +28,48 @@ class PANGEABASEUPGRADESYSTEM_API UUpgradeSystemComponent : public UActorCompone
 public:
 	UUpgradeSystemComponent();
 
-	/** Level table data asset */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Upgrade")
-	UUpgradeLevelTable* LevelTable;
-
-	/** Current level (local cached) - in practice this may be driven by GAS attributes */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
-	int32 CurrentLevel = 1;
-
-	/** Call to trigger evaluation for a new level (e.g., called when GAS attribute changes) */
-	UFUNCTION(BlueprintCallable, Category="Upgrade")
-	void OnLevelIncreased(int32 NewLevel, UObject* PlayerContext);
-	
-	/** All milestone tags that this base has completed */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
-	FGameplayTagContainer CompletedMilestones;
-	
-	bool IsMilestoneCompleted(FGameplayTag MilestoneTag) const;
-
-	void MarkMilestoneCompleted(FGameplayTag MilestoneTag);
-	
-	UFUNCTION(BlueprintCallable, Category="Upgrade")
-	bool CanUpgradeToNextLevel(UObject* PlayerContext) const;
-
 protected:
 	virtual void BeginPlay() override;
 
+public:
+
+	/** Master data asset that defines all levels, milestones, and facilities for this village */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Upgrade")
+	UVillageDefinitionData* VillageDefinition = nullptr;
+
+	/** Current village/base level (0 = uninitialized / none) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
+	int32 CurrentLevel = 0;
+
+	/** Milestones we have successfully executed */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
+	FGameplayTagContainer CompletedMilestones;
+
+	/**
+	 * Called by your leveling system when the village/base level increases.
+	 * PlayerContext is typically the player pawn, controller, or anything
+	 * that requirements need to inspect (inventory, quest manager, etc.).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	void OnLevelIncreased(int32 NewLevel, UObject* PlayerContext);
+
+	/** Returns true if all requirements for CurrentLevel+1 are satisfied */
+	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	bool CanUpgradeToNextLevel(UObject* PlayerContext) const;
+
+	/** Check if a milestone has already been executed */
+	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	bool IsMilestoneCompleted(FGameplayTag MilestoneTag) const;
+
+	/** Mark a milestone as completed (used internally, but exposed for debugging if needed) */
+	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	void MarkMilestoneCompleted(FGameplayTag MilestoneTag);
+
 private:
+
+	/** Helper: find level definition for an absolute level number */
+	const FUpgradeLevelDefinition* FindLevelDefinition(int32 Level) const;
+
+	/** Helper: execute all milestones belonging to a level (if requirements are met) */
 	void ExecuteMilestonesForLevel(int32 Level, UObject* PlayerContext);
 };
