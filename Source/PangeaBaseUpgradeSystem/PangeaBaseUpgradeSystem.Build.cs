@@ -27,7 +27,8 @@ public class PangeaBaseUpgradeSystem : ModuleRules
                 "InventorySystem",
                 "AscentQuestSystem",
                 "AscentMapsSystem",
-                "AscentSaveSystem"
+                "AscentSaveSystem",
+                "AdvancedRPGSystem"
             }
         );
     }
