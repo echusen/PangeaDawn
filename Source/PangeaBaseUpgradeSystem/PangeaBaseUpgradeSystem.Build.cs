@@ -9,7 +9,7 @@ public class PangeaBaseUpgradeSystem : ModuleRules
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
-                "Core", "GameplayTags", "AscentCoreInterfaces", "UMG"
+                "Core", "GameplayTags", "AscentCoreInterfaces", "UMG",
             }
         );
 
@@ -26,7 +26,8 @@ public class PangeaBaseUpgradeSystem : ModuleRules
                 "AscentCombatFramework",
                 "InventorySystem",
                 "AscentQuestSystem",
-                "AscentMapsSystem"
+                "AscentMapsSystem",
+                "AscentSaveSystem"
             }
         );
     }

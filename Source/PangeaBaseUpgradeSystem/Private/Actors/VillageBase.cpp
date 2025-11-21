@@ -41,8 +41,24 @@ AVillageBase::AVillageBase()
 void AVillageBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	
+}
+
+TArray<UActorComponent*> AVillageBase::GetComponentsToSave_Implementation() const
+{
+	TArray<UActorComponent*> ComponentsToSave;
+
+	ComponentsToSave.Add(UpgradeSystem);
+	ComponentsToSave.Add(FacilityManager);
+
+	return ComponentsToSave;
+}
+
+void AVillageBase::OnLoaded_Implementation()
+{
+	if (UpgradeSystem)
+	{
+		UpgradeSystem->LoadCompletedMilestones(this);
+	}
 }
 
 void AVillageBase::OnLocalInteractedByPawn_Implementation(class APawn* Pawn, const FString& interactionType)

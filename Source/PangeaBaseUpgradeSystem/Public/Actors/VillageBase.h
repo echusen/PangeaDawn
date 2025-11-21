@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ALSSavableInterface.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/ACFInteractableInterface.h"
 #include "VillageBase.generated.h"
@@ -12,7 +13,7 @@ class UFacilityManagerComponent;
 class UBoxComponent;
 
 UCLASS()
-class PANGEABASEUPGRADESYSTEM_API AVillageBase : public AActor, public IACFInteractableInterface
+class PANGEABASEUPGRADESYSTEM_API AVillageBase : public AActor, public IACFInteractableInterface, public IALSSavableInterface
 {
 	GENERATED_BODY()
 
@@ -23,6 +24,9 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual TArray<UActorComponent*> GetComponentsToSave_Implementation() const override;
+	virtual void OnLoaded_Implementation() override;
+	
 
 public:
 

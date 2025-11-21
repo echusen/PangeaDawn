@@ -27,6 +27,10 @@ class PANGEABASEUPGRADESYSTEM_API UUpgradeSystemComponent : public UActorCompone
 
 public:
 	UUpgradeSystemComponent();
+	
+	//Save
+	UFUNCTION(BlueprintCallable)
+	void LoadCompletedMilestones(UObject* PlayerContext);
 
 protected:
 	virtual void BeginPlay() override;
@@ -38,11 +42,11 @@ public:
 	UVillageDefinitionData* VillageDefinition = nullptr;
 
 	/** Current village/base level (0 = uninitialized / none) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade", SaveGame)
 	int32 CurrentLevel = 0;
 
 	/** Milestones we have successfully executed */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Upgrade", SaveGame)
 	FGameplayTagContainer CompletedMilestones;
 
 	/**

@@ -18,8 +18,48 @@ UUpgradeSystemComponent::UUpgradeSystemComponent()
 void UUpgradeSystemComponent::BeginPlay()
 {
 	Super::BeginPlay();
+}
 
-	// Optional: you could re-run milestones here based on saved state
+void UUpgradeSystemComponent::LoadCompletedMilestones(UObject* PlayerContext)
+{
+	if (!VillageDefinition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[REPLAY] VillageDefinition is NULL"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Error, TEXT("[REPLAY] Starting milestone replay..."));
+	UE_LOG(LogTemp, Error, TEXT("[REPLAY] CompletedMilestones: %s"),
+		*CompletedMilestones.ToStringSimple());
+
+	for (const FUpgradeLevelDefinition& LevelDef : VillageDefinition->Levels)
+	{
+		for (const FUpgradeMilestoneDefinition& Milestone : LevelDef.Milestones)
+		{
+			if (!Milestone.MilestoneTag.IsValid())
+				continue;
+
+			if (!CompletedMilestones.HasTag(Milestone.MilestoneTag))
+				continue;
+
+			UE_LOG(LogTemp, Error, TEXT("[REPLAY] Replaying milestone: %s"),
+				*Milestone.MilestoneTag.ToString());
+
+			for (UUpgradeAction* Action : Milestone.Actions)
+			{
+				if (!Action)
+					continue;
+
+				UE_LOG(LogTemp, Error, TEXT("[REPLAY] Re-executing action: %s"),
+					*GetNameSafe(Action));
+
+				// Replay the action
+				Action->Execute(GetOwner());
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Error, TEXT("[REPLAY] Milestone replay finished."));
 }
 
 /* -------------------------------------------------------------
@@ -105,6 +145,14 @@ void UUpgradeSystemComponent::MarkMilestoneCompleted(FGameplayTag MilestoneTag)
 	if (!CompletedMilestones.HasTag(MilestoneTag))
 	{
 		CompletedMilestones.AddTag(MilestoneTag);
+
+		UE_LOG(LogTemp, Error, TEXT("[UPGRADE] MarkMilestoneCompleted: %s ADDED"),
+			*MilestoneTag.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] MarkMilestoneCompleted: %s already existed"),
+			*MilestoneTag.ToString());
 	}
 }
 
@@ -130,80 +178,92 @@ const FUpgradeLevelDefinition* UUpgradeSystemComponent::FindLevelDefinition(int3
 void UUpgradeSystemComponent::ExecuteMilestonesForLevel(int32 Level, UObject* PlayerContext)
 {
 	if (!VillageDefinition)
-	{
-		UE_LOG(LogTemp, Error, TEXT("UpgradeSystem: ExecuteMilestonesForLevel called but VillageDefinition is null"));
-		return;
-	}
+    {
+        UE_LOG(LogTemp, Error, TEXT("[UPGRADE] ExecuteMilestonesForLevel: VillageDefinition is NULL"));
+        return;
+    }
 
-	const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(Level);
-	if (!LevelDef)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem: ExecuteMilestonesForLevel - no definition for level %d"), Level);
-		return;
-	}
+    UE_LOG(LogTemp, Error, TEXT("[UPGRADE] ExecuteMilestonesForLevel: Level %d"), Level);
 
-	if (LevelDef->Milestones.Num() == 0)
-	{
-		UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: No milestones defined for level %d"), Level);
-		return;
-	}
+    const FUpgradeLevelDefinition* LevelDef = FindLevelDefinition(Level);
+    if (!LevelDef)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[UPGRADE] No LevelDefinition found for level %d"), Level);
+        return;
+    }
 
-	for (const FUpgradeMilestoneDefinition& MilestoneDef : LevelDef->Milestones)
-	{
-		if (MilestoneDef.MilestoneTag.IsValid() && IsMilestoneCompleted(MilestoneDef.MilestoneTag))
-		{
-			UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: Milestone %s already completed, skipping"),
-			       *MilestoneDef.MilestoneTag.ToString());
-			continue;
-		}
+    if (LevelDef->Milestones.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] Level %d has NO milestones"), Level);
+        return;
+    }
 
-		// Check requirements
-		bool bAllRequirementsMet = true;
-		for (UUpgradeRequirement* Requirement : MilestoneDef.Requirements)
-		{
-			if (!Requirement)
-				continue;
+    for (const FUpgradeMilestoneDefinition& MilestoneDef : LevelDef->Milestones)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] Checking milestone: %s"),
+            *MilestoneDef.MilestoneTag.ToString());
 
-			if (!Requirement->IsRequirementMet(PlayerContext))
-			{
-				bAllRequirementsMet = false;
-				UE_LOG(LogTemp, Log,
-					TEXT("UpgradeSystem: Milestone %s failed requirement: %s"),
-					*MilestoneDef.MilestoneTag.ToString(),
-					*GetNameSafe(Requirement));
-				break;
-			}
-		}
+        // If already completed, skip
+        if (MilestoneDef.MilestoneTag.IsValid() && IsMilestoneCompleted(MilestoneDef.MilestoneTag))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] Milestone %s already completed, skipping"),
+                *MilestoneDef.MilestoneTag.ToString());
+            continue;
+        }
 
-		if (!bAllRequirementsMet)
-		{
-			UE_LOG(LogTemp, Verbose,
-				TEXT("UpgradeSystem: Milestone %s skipped due to unmet requirements"),
-				*MilestoneDef.MilestoneTag.ToString());
-			continue;
-		}
+        // Requirement check
+        bool bAllRequirementsMet = true;
 
-		// Execute actions
-		UE_LOG(LogTemp, Log, TEXT("UpgradeSystem: Executing %d actions for milestone %s (level %d)"),
-		       MilestoneDef.Actions.Num(),
-		       *MilestoneDef.MilestoneTag.ToString(),
-		       Level);
+        for (UUpgradeRequirement* Requirement : MilestoneDef.Requirements)
+        {
+            if (!Requirement)
+                continue;
 
-		for (UUpgradeAction* Action : MilestoneDef.Actions)
-		{
-			if (!Action)
-				continue;
+            bool bMet = Requirement->IsRequirementMet(PlayerContext);
 
-			UE_LOG(LogTemp, Verbose, TEXT("UpgradeSystem: Executing action %s"), *GetNameSafe(Action));
-			// We pass the village actor (owner) as context for actions.
-			Action->Execute(GetOwner());
-		}
+            UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] Requirement %s -> %s"),
+                *GetNameSafe(Requirement),
+                bMet ? TEXT("MET") : TEXT("NOT MET"));
 
-		if (MilestoneDef.MilestoneTag.IsValid())
-		{
-			MarkMilestoneCompleted(MilestoneDef.MilestoneTag);
-		}
-	}
+            if (!bMet)
+            {
+                bAllRequirementsMet = false;
+                break;
+            }
+        }
+
+        if (!bAllRequirementsMet)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[UPGRADE] Milestone %s requirements NOT met => SKIPPED"),
+                *MilestoneDef.MilestoneTag.ToString());
+            continue;
+        }
+
+        // Execute milestone actions
+        UE_LOG(LogTemp, Error, TEXT("[UPGRADE] Executing %d actions for milestone %s"),
+            MilestoneDef.Actions.Num(),
+            *MilestoneDef.MilestoneTag.ToString());
+
+        for (UUpgradeAction* Action : MilestoneDef.Actions)
+        {
+            if (!Action)
+                continue;
+
+            UE_LOG(LogTemp, Error, TEXT("[UPGRADE] ACTION EXECUTED: %s"),
+                *GetNameSafe(Action));
+
+            // Execute with village as the context
+            Action->Execute(GetOwner());
+        }
+
+        // Mark milestone complete
+        if (MilestoneDef.MilestoneTag.IsValid())
+        {
+            MarkMilestoneCompleted(MilestoneDef.MilestoneTag);
+            UE_LOG(LogTemp, Error, TEXT("[UPGRADE] Milestone COMPLETED: %s"),
+                *MilestoneDef.MilestoneTag.ToString());
+        }
+    }
 }
 
 //UI Helpers
