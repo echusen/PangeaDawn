@@ -7,6 +7,8 @@
 #include "Actors/ACFCharacter.h"
 #include "Components/ACFQuadrupedMovementComponent.h"
 #include "ACFVaultComponent.h"
+#include "ALSLoadAndSaveComponent.h"
+#include "Components/ACFTeamComponent.h"
 #include "Components/PangeaTamingComponent.h"
 #include "DataAssets/TameSpeciesConfig.h"
 
@@ -18,6 +20,7 @@ APDDinosaurBase::APDDinosaurBase(const FObjectInitializer& ObjectInitializer) : 
 	MountComponent = CreateDefaultSubobject<UACFMountComponent>(TEXT("ACF Mount Component"));
 	VaultComponent = CreateDefaultSubobject<UACFVaultComponent>(TEXT("ACF Vault Component"));
 	TamingComponent = CreateDefaultSubobject<UPangeaTamingComponent>(TEXT("Pangea Taming Component"));
+	ALSLoadAndSaveComponent = CreateDefaultSubobject<UALSLoadAndSaveComponent>(TEXT("ALS Load And Save Component"));
 }
 
 void APDDinosaurBase::BeginPlay()
@@ -32,6 +35,21 @@ void APDDinosaurBase::Tick(float DeltaTime)
 	ChangeVelocityState();
 }
 
+#pragma region Save System
+
+TArray<UActorComponent*> APDDinosaurBase::GetComponentsToSave_Implementation() const
+{
+	TArray<UActorComponent*> ComponentsToSave;
+
+	ComponentsToSave.Add(BreedableComponent);
+	ComponentsToSave.Add(TamingComponent);
+	ComponentsToSave.Add(TeamComponent);
+
+	return ComponentsToSave;
+}
+
+#pragma endregion
+
 #pragma region ACF Interaction Interface
 
 bool APDDinosaurBase::CanBeInteracted_Implementation(class APawn* Pawn)
@@ -45,7 +63,7 @@ void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FStri
 {
 	AACFCharacter* ACFCharacter = Cast<AACFCharacter>(Pawn);
 
-	if (!TamingComponent || TamingComponent->TameState != ETameState::Tamed)
+	if (!TamingComponent || TamingComponent->TamedState != ETameState::Tamed)
 	{
 		// Not tamed yet → maybe start a taming attempt instead
 		TamingComponent->StartTameAttempt(Pawn);
@@ -78,12 +96,12 @@ void APDDinosaurBase::OnInteractedByPawn_Implementation(APawn* Pawn, const FStri
 FText APDDinosaurBase::GetInteractableName_Implementation()
 {
 	// return Tame if not tamed and once tamed return mount/pet based on role
-	if (TamingComponent && TamingComponent->TameState == ETameState::Wild)
+	if (TamingComponent && TamingComponent->TamedState == ETameState::Wild)
 	{
 		return FText::FromString("Tame");
 	}
 
-	if (TamingComponent && TamingComponent->TameState == ETameState::Tamed)
+	if (TamingComponent && TamingComponent->TamedState == ETameState::Tamed)
 	{
 		if (TamingComponent->TamedRole == ETamedRole::Mount)
 		{
@@ -98,6 +116,7 @@ FText APDDinosaurBase::GetInteractableName_Implementation()
 	
 	return FText::FromString("Interact");
 }
+
 #pragma endregion
 
 #pragma region Private Movement Functions
@@ -119,6 +138,11 @@ void APDDinosaurBase::Brake(float Value)
 	{
 		QuadMovementComp->MoveForwardLocal(Value);
 	}
+}
+
+void APDDinosaurBase::OnLoaded_Implementation()
+{
+	TamingComponent->HandleLoadedActor();
 }
 
 void APDDinosaurBase::ChangeVelocityState()
