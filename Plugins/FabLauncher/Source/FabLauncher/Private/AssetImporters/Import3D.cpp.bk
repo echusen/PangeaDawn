@@ -1,0 +1,461 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+#include "Runtime/Engine/Classes/Engine/StaticMesh.h"
+#include "Utilities/FLMeshOp.h"
+#include "Utilities/FLMiscUtils.h"
+#include "Utilities/FLMaterialUtils.h"
+
+#include "EditorAssetLibrary.h"
+#include "EditorStaticMeshLibrary.h"
+#include "Runtime/Core/Public/Misc/MessageDialog.h"
+#include "Runtime/Core/Public/Internationalization/Text.h"
+#include "Engine/RendererSettings.h"
+
+#include "FLAssetImportData.h"
+#include "UObject/PerPlatformProperties.h"
+
+void ImportMTS(TSharedPtr<FAssetTypeData> AssetImportData, TArray<UMaterialInstanceConstant*> MaterialInstance, TSharedPtr<ImportParams3DAsset> Asset3DParameters)
+{
+	TSharedPtr<FMeshOps> MeshUtils = FMeshOps::Get();
+
+	TArray<FString> ExistingAssets = GetAssetsList(Asset3DParameters->BaseParams->AssetDestination);
+	MeshUtils->ImportMesh(AssetImportData->MeshList[0]->Path, Asset3DParameters->ParamsAssetType->MeshDestination, "");
+	TArray<FString> ImportedAssets;
+	TArray<FString> AllAssets = GetAssetsList(Asset3DParameters->ParamsAssetType->MeshDestination);
+
+	TMap<FString, TArray<UStaticMesh*>> ScatterLods;
+
+	for (FString Asset : AllAssets)
+	{
+		if (!ExistingAssets.Contains(Asset))
+		{
+			ImportedAssets.Add(Asset);
+			UStaticMesh* ImportedMesh = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Asset));
+
+				for (int8 MatCount = 0; MatCount < MaterialInstance.Num(); MatCount++) {
+					int8 MaterialSlotCount = ImportedMesh->GetMaterialIndex(*MaterialInstance[MatCount]->GetName().Left(MaterialInstance[MatCount]->GetName().Len() - 5));
+					if (MaterialSlotCount == -1)
+					{
+						continue;
+					}
+					else {
+						if (MaterialInstance[MatCount] != nullptr)
+							ImportedMesh->SetMaterial(MaterialSlotCount, CastChecked<UMaterialInterface>(MaterialInstance[MatCount]));
+					}
+					ImportedMesh->PostEditChange();
+				}
+			//}
+		}
+	}
+
+	if (AssetImportData->LodList.Num() > 0) {
+		TArray<FString> LodPathList = ParseLodList(AssetImportData);
+		FString LodDestination = FPaths::Combine(Asset3DParameters->ParamsAssetType->MeshDestination, TEXT("Lods"));
+		int32 LodCounter = 1;
+		for (FString LodPath : LodPathList)
+		{
+			if (LodCounter > 7) continue;
+
+			MeshUtils->ImportMesh(LodPath, LodDestination);
+			TArray<FString> ImportedLods = UEditorAssetLibrary::ListAssets(LodDestination);
+
+			for (FString MeshLod : ImportedLods)
+			{
+				FString MeshLodName = FPaths::GetBaseFilename(MeshLod);
+
+				TArray<FString> NameTags;
+				FString LodNameRefined = TEXT("");
+
+				MeshLodName.ParseIntoArray(NameTags, TEXT("_"));
+				for (FString Tag : NameTags)
+				{
+					if (!Tag.Contains(TEXT("LOD")))
+					{
+						LodNameRefined.Append(Tag);
+					}
+				}
+				for (int8 MatCount = 0; MatCount < MaterialInstance.Num(); MatCount++) {
+					int8 MaterialSlotCount = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(MeshLod))->GetMaterialIndex(*MaterialInstance[MatCount]->GetName().Left(MaterialInstance[MatCount]->GetName().Len() - 5));
+					if (MaterialSlotCount == -1)
+					{
+						continue;
+					}
+					else {
+						if (MaterialInstance[MatCount] != nullptr)
+							CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(MeshLod))->SetMaterial(MaterialSlotCount, CastChecked<UMaterialInterface>(MaterialInstance[MatCount]));
+					}
+				}
+			}
+		}
+	}
+	MeshUtils.Reset();
+
+}
+
+void ImportScatter(TSharedPtr<FAssetTypeData> AssetImportData, TArray<UMaterialInstanceConstant*> MaterialInstance, TSharedPtr<ImportParams3DAsset> Asset3DParameters)
+{
+	TSharedPtr<FMeshOps> MeshUtils = FMeshOps::Get();
+
+	TArray<FString> ExistingAssets = GetAssetsList(Asset3DParameters->BaseParams->AssetDestination);
+	MeshUtils->ImportMesh(AssetImportData->MeshList[0]->Path, Asset3DParameters->ParamsAssetType->MeshDestination, "");
+	TArray<FString> ImportedAssets;
+	TArray<FString> AllAssets = GetAssetsList(Asset3DParameters->ParamsAssetType->MeshDestination);
+	TMap<FString, TArray<UStaticMesh*>> ScatterLods;
+
+	for (FString Asset : AllAssets)
+	{
+		if (!ExistingAssets.Contains(Asset))
+		{
+			ImportedAssets.Add(Asset);
+			UStaticMesh* ImportedMesh = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Asset));
+			if (MaterialInstance[0] != nullptr)
+				ImportedMesh->SetMaterial(0, CastChecked<UMaterialInterface>(MaterialInstance[0]));
+
+			ImportedMesh->PostEditChange();
+		}
+	}
+
+	if (AssetImportData->LodList.Num() > 0) {
+
+		TArray<FString> LodPathList = ParseLodList(AssetImportData);
+		FString LodDestination = FPaths::Combine(Asset3DParameters->ParamsAssetType->MeshDestination, TEXT("Lods"));
+		int32 LodCounter = 1;
+		for (FString LodPath : LodPathList)
+		{
+			if (LodCounter > 7) continue;
+
+			MeshUtils->ImportMesh(LodPath, LodDestination);
+			TArray<FString> ImportedLods = UEditorAssetLibrary::ListAssets(LodDestination);
+
+			for (FString MeshLod : ImportedLods)
+			{
+				FString MeshLodName = FPaths::GetBaseFilename(MeshLod);
+
+				TArray<FString> NameTags;
+				FString LodNameRefined = TEXT("");
+
+				MeshLodName.ParseIntoArray(NameTags, TEXT("_"));
+				for (FString Tag : NameTags)
+				{
+					if (!Tag.Contains(TEXT("LOD")))
+					{
+						LodNameRefined.Append(Tag);
+					}
+				}
+
+
+
+				for (FString SourceMeshPath : ImportedAssets)
+				{
+					FString SourceMeshName = FPaths::GetBaseFilename(SourceMeshPath);
+					TArray<FString> MeshNameTags;
+					FString MeshNameRefined = TEXT("");
+					UStaticMesh* ImportedScatter = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(SourceMeshPath));
+
+					SourceMeshName.ParseIntoArray(MeshNameTags, TEXT("_"));
+
+					for (FString Tag : MeshNameTags)
+					{
+						if (!Tag.Contains(TEXT("LOD")))
+						{
+							MeshNameRefined.Append(Tag);
+						}
+					}
+
+					if (MeshNameRefined == LodNameRefined)
+					{
+
+						UDEPRECATED_EditorStaticMeshLibrary::SetLodFromStaticMesh(ImportedScatter, LodCounter, CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(MeshLod)), 0, true);
+
+					}
+					ImportedScatter->PostEditChange();
+					ImportedScatter->MarkPackageDirty();
+
+				}
+
+
+			}
+			LodCounter++;
+			UEditorAssetLibrary::DeleteDirectory(LodDestination);
+		}
+	}
+
+	int32 VarCounter = 1;
+	FString OverridenName;
+	FString OverridenExtension;
+	AssetImportData->MeshList[0]->NameOverride.Split(TEXT("."), &OverridenName, &OverridenExtension);
+
+	OverridenName = SanitizeName(OverridenName);
+	for (FString Asset : ImportedAssets)
+	{
+		FString BasePath = FPaths::GetPath(Asset);
+		FString RenamedPath = FPaths::Combine(BasePath, (OverridenName + TEXT("_") + FString::FromInt(VarCounter)));
+
+		if (MaterialInstance[0] != nullptr)
+			CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(Asset))->SetMaterial(1, CastChecked<UMaterialInterface>(MaterialInstance[0]));
+
+		UEditorAssetLibrary::RenameAsset(Asset, RenamedPath);
+
+		UObject* Renamed = UEditorAssetLibrary::LoadAsset(RenamedPath);
+		if(Renamed)
+		{
+
+			UStaticMesh* ImportedScatter = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(RenamedPath));
+			MeshUtils->RemoveExtraMaterialSlot(ImportedScatter);
+	
+			if (true)//FabLauncherSettings->bCreateFoliage)
+			{
+	
+				MeshUtils->CreateFoliageAsset(Asset3DParameters->ParamsAssetType->MeshDestination, ImportedScatter, (OverridenName + TEXT("_") + FString::FromInt(VarCounter)));
+			}
+			ImportedScatter->MarkPackageDirty();
+			if (AssetImportData->AssetMetaInfo->bSavePackages)
+			{
+				AssetUtils::SavePackage(ImportedScatter);
+			}
+			//AssetUtils::SavePackage(ImportedScatter);
+			VarCounter++;
+		}
+	}
+
+	MeshUtils.Reset();
+
+}
+
+void FImportPlant::ImportAsset(TSharedPtr<FAssetTypeData> AssetImportData)
+{
+	if (AssetImportData->MeshList.Num() == 0) return;
+	TSharedPtr<FAssetImportParams> AssetSetupParameters = FAssetImportParams::Get();
+	TSharedPtr<ImportParams3DPlantAsset> AssetPlantParameters = AssetSetupParameters->Get3DPlantParams(AssetImportData);	
+	PlantImportType ImportType = GetImportType(AssetImportData);
+	TMap<FString, FString> ImportedPlants = ImportPlants(AssetImportData, AssetPlantParameters);
+	FString LastLOD = "";
+	if (AssetImportData->LodList.Num() == 0) {
+		LastLOD = (AssetImportData->AssetMetaInfo->ActiveLOD == TEXT("high")) ? TEXT("lod-1") : AssetImportData->AssetMetaInfo->ActiveLOD;
+	}
+	else {
+		LastLOD = AssetImportData->LodList[AssetImportData->LodList.Num() - 1]->Lod;
+	}
+	FString MinLOD = (AssetImportData->AssetMetaInfo->MinLOD == TEXT("")) ? LastLOD : AssetImportData->AssetMetaInfo->MinLOD;
+	int32 HighestLodIndex = FCString::Atoi(*MinLOD.Replace(TEXT("lod"), TEXT("")));
+	HighestLodIndex = HighestLodIndex - FCString::Atoi(*AssetImportData->AssetMetaInfo->ActiveLOD.Replace(TEXT("lod"), TEXT("")));
+
+	UMaterialInstanceConstant* BillboardMatInst = nullptr;
+	UMaterialInstanceConstant* MaterialInstance = nullptr;
+
+	if (ImportType == PlantImportType::BLLBOARD_NORMAL)// && !FabLauncherSettings->bEnableLods)
+	{
+		ImportType = PlantImportType::NORMAL_ONLY;
+	}
+
+	switch (ImportType)
+	{
+	case PlantImportType::BILLBOARD_ONLY:
+		AssetImportData->TextureComponents.Empty();
+		PopulateBillboardTextures(AssetImportData);	
+		BillboardMatInst = FImportSurface::Get()->ImportSurface(AssetImportData, AssetPlantParameters->ParamsAssetType->BillboardMasterMaterial);
+		
+		ApplyMaterial(ImportType, BillboardMatInst, nullptr, ImportedPlants, AssetImportData->AssetMetaInfo->bSavePackages);
+		break;
+
+	case PlantImportType::BLLBOARD_NORMAL:
+		
+		MaterialInstance = FImportSurface::Get()->ImportSurface( AssetImportData, AssetPlantParameters->ParamsAssetType->PlantsMasterMaterial);
+		AssetImportData->TextureComponents.Empty();
+		PopulateBillboardTextures(AssetImportData);		
+		BillboardMatInst = FImportSurface::Get()->ImportSurface(AssetImportData, AssetPlantParameters->ParamsAssetType->BillboardMasterMaterial, true);
+		ApplyMaterial(ImportType, MaterialInstance, BillboardMatInst, ImportedPlants,  AssetImportData->AssetMetaInfo->bSavePackages);
+		break;
+
+	case PlantImportType::NORMAL_ONLY:
+		MaterialInstance = FImportSurface::Get()->ImportSurface(AssetImportData, AssetPlantParameters->ParamsAssetType->PlantsMasterMaterial);
+		ApplyMaterial(ImportType, MaterialInstance, nullptr, ImportedPlants, AssetImportData->AssetMetaInfo->bSavePackages);
+		break;
+
+	default:
+		break;
+	}
+
+
+	AssetUtils::FocusOnSelected(AssetPlantParameters->BaseParams->AssetDestination);
+	FImportSurface::Get()->AllTextureMaps.Empty();
+
+}
+
+TMap<FString, FString> FImportPlant::ImportPlants(TSharedPtr<FAssetTypeData> AssetImportData, TSharedPtr<ImportParams3DPlantAsset> AssetPlantParameters)
+{
+	TArray<FString> AllLodList = ParseLodList(AssetImportData);
+
+	TArray<TSharedPtr<FAssetLodData>> SelectedLods = ParsePlantsLodList(AssetImportData);
+
+	TMap<FString, FString> ImportedPlantVariations;
+
+	FString FileExtension;
+	FString FilePath;
+	AssetImportData->MeshList[0]->Path.Split(TEXT("."), &FilePath, &FileExtension);
+	FileExtension = FPaths::GetExtension(AssetImportData->MeshList[0]->Path);
+
+	int32 VarCounter = 1;
+	
+	for (auto PlantVar : AssetImportData->MeshList)
+	{	
+
+		FString VariantPath = FMeshOps::Get()->ImportMesh(PlantVar->Path, AssetPlantParameters->ParamsAssetType->MeshDestination);
+		if (!UEditorAssetLibrary::DoesAssetExist(VariantPath)) continue;
+		UStaticMesh* ImportedAsset = CastChecked<UStaticMesh>(LoadAsset(VariantPath));
+		FString VariantName = FPaths::GetBaseFilename(VariantPath);
+		FString Variant, LodNumber;
+		VariantName.Split(TEXT("_"), &Variant, &LodNumber);
+		TArray<FString> VarLodList;
+		if (AssetImportData->LodList.Num() > 0)
+		{
+			// Alternate implementation for TArray based variable, gives more control
+			//TMap<FString, TSharedPtr<FAssetLodData>> VariationLodsImported;			
+			TArray<FString> VariationLodsImported;
+			VariationLodsImported.Add(AssetImportData->AssetMetaInfo->ActiveLOD);
+			
+			for(TSharedPtr<FAssetLodData> LodData : SelectedLods)
+			{
+				FString LodBaseFilename = FPaths::GetBaseFilename(LodData->Path);
+
+				FString VariantTag;
+				FString LodTag;
+
+				LodBaseFilename.Split(TEXT("_"), &VariantTag, &LodTag);
+				if (VariantTag == Variant)
+				{
+					VariationLodsImported.Add(LodData->Lod);
+					//VariationLodsImported.Add(LodData->Lod, LodData);					
+					VarLodList.Add(LodData->Path);
+				}
+			}
+
+
+			if (FileExtension == TEXT("abc"))
+			{
+				FMeshOps::Get()->ApplyAbcLods(ImportedAsset, VarLodList, AssetPlantParameters->ParamsAssetType->MeshDestination);
+			}
+			else {
+
+				//FMeshOps::Get()->ApplyLods(VarLodList, ImportedAsset);
+			}			
+			//Apply the custom lod screen sizes.
+			if (AssetImportData->PlantsLodScreenSizes.Contains(Variant))
+			{
+				SetLodScreenSizes(ImportedAsset, AssetImportData->PlantsLodScreenSizes[Variant], VariationLodsImported);
+			}
+		}
+		
+		FString OverridenName;
+		FString OverridenExtension;
+		PlantVar->NameOverride.Split(TEXT("."), &OverridenName, &OverridenExtension);
+		OverridenName = SanitizeName(OverridenName);
+		FString PlantAssetName = OverridenName + TEXT("_") + FString::FromInt(VarCounter);
+		VarCounter++;
+		if (true)//FabLauncherSettings->bCreateFoliage)
+		{
+			FMeshOps::Get()->CreateFoliageAsset(AssetPlantParameters->ParamsAssetType->MeshDestination, ImportedAsset, PlantAssetName);
+		}
+		ImportedAsset->MarkPackageDirty();
+		
+		FString RenamedAssetPath = FPaths::Combine(FPaths::GetPath(VariantPath), PlantAssetName);
+		//ImportedPlants.Add(RenamedAssetPath);
+		FString Variation;
+		FString Name;
+		PlantVar->Name.Split(TEXT("_"), &Variation, &Name);
+		ImportedPlantVariations.Add(Variation, RenamedAssetPath);
+		UEditorAssetLibrary::RenameAsset(VariantPath, RenamedAssetPath);
+
+		if (AssetImportData->AssetMetaInfo->bSavePackages)
+		{
+			AssetUtils::SavePackage(ImportedAsset);
+		}
+	}
+	return ImportedPlantVariations;
+}
+
+void FImportPlant::ApplyMaterial(PlantImportType ImportType, UMaterialInstanceConstant* MaterialInstance, UMaterialInstanceConstant* BillboardInstance, TMap<FString, FString> ImportedPlants,  bool bSavePackage)
+{	
+	
+	for (const TPair<FString, FString>& PlantVar : ImportedPlants  )
+	{
+		UStaticMesh* ImportedPlantMesh = CastChecked<UStaticMesh>(UEditorAssetLibrary::LoadAsset(PlantVar.Value));
+		if(MaterialInstance !=nullptr)
+			ImportedPlantMesh->SetMaterial(0, CastChecked<UMaterialInterface>(MaterialInstance));
+
+		if (ImportType == PlantImportType::BLLBOARD_NORMAL && BillboardInstance != nullptr)
+		{
+			
+			AssetUtils::AddStaticMaterial(ImportedPlantMesh, BillboardInstance);			
+			FMeshSectionInfo MeshSectionInfo = ImportedPlantMesh->GetSectionInfoMap().Get(ImportedPlantMesh->GetNumLODs()-1, 0);
+			MeshSectionInfo.MaterialIndex = ImportedPlantMesh->GetStaticMaterials().Num() - 1;
+			ImportedPlantMesh->GetSectionInfoMap().Set(ImportedPlantMesh->GetNumLODs() - 1, 0, MeshSectionInfo);
+			ImportedPlantMesh->Modify();
+			ImportedPlantMesh->PostEditChange();
+			ImportedPlantMesh->MarkPackageDirty();
+
+
+		}
+
+		if (bSavePackage)
+		{
+			AssetUtils::SavePackage(ImportedPlantMesh);
+		}
+
+	}
+
+}
+
+
+void FImportPlant::SetLodScreenSizes(UStaticMesh* SourceMesh, TMap<FString, float>& LodScreenSizes, const TArray<FString>& SelectedLods)
+{
+	//Check if lod screen size information exist in the json.
+	if (LodScreenSizes.Contains(TEXT("lod0")) && LodScreenSizes[TEXT("lod0")] == 0) return;
+
+	//Check if any lods are skipped.
+	TArray<int8> ImportedLods;
+	int8 ActiveLod = FCString::Atoi(*SelectedLods[0].Replace(TEXT("lod"), TEXT("")));
+	bool bSequence = true;
+
+	for (int8 i = 1 ; i < SelectedLods.Num()-1; i++)
+	{
+		int8 CurrentLod = FCString::Atoi(*SelectedLods[i].Replace(TEXT("lod"), TEXT("")));
+		if (CurrentLod != ActiveLod + 1) {
+			bSequence = false;
+			break;
+		}
+		ActiveLod = CurrentLod;
+	}
+
+
+	
+	if (bSequence)
+	{
+		if (SelectedLods[0] != TEXT("lod0") && LodScreenSizes.Contains(SelectedLods[0]))
+		{
+			LodScreenSizes.Remove(SelectedLods[0]);
+			LodScreenSizes.Add(SelectedLods[0], 1.0);			
+		}
+		int8 count = 0;
+		SourceMesh->bAutoComputeLODScreenSize = false;
+		for (FString Lod : SelectedLods)
+		{
+			FStaticMeshSourceModel& SourceModel = SourceMesh->GetSourceModel(count);
+			if (LodScreenSizes.Contains(Lod)) {
+				SourceModel.ScreenSize = FPerPlatformFloat(LodScreenSizes[Lod]);
+			}
+			else {
+				SourceMesh->bAutoComputeLODScreenSize = true;
+				return;
+			}
+
+			count++;
+		}
+	}
+
+
+	
+}
+
+
+
+

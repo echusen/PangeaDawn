@@ -27,9 +27,7 @@ public:
 		ActorClass: Used for NPC, Interactable, or Custom slots.
 		Not visible when SlotType == Decoration.
 	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NPC/Interactable",
-		meta = (EditCondition="SlotType == EFacilitySlotType::NPC || SlotType == EFacilitySlotType::Interactable || SlotType == EFacilitySlotType::Custom",
-				AllowedClasses="Actor"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NPC/Interactable", meta = (EditCondition="SlotType == EFacilitySlotType::NPC || SlotType == EFacilitySlotType::Interactable || SlotType == EFacilitySlotType::Custom"))
 	TSubclassOf<AActor> ActorClass;
 
 	/*
@@ -37,7 +35,7 @@ public:
 		Can be StaticMesh or SkeletalMesh.
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Decoration",
-		meta = (AllowedClasses="StaticMesh,SkeletalMesh",
+		meta = (
 				EditCondition="SlotType == EFacilitySlotType::Decoration"))
 	TObjectPtr<UObject> DecorationAsset = nullptr;
 
