@@ -9,6 +9,7 @@
 #include "PDDinosaurBase.generated.h"
 
 
+class UALSLoadAndSaveComponent;
 class UPangeaBreedableComponent;
 class UPangeaTamingComponent;
 class UACFMountComponent;
@@ -37,13 +38,17 @@ public:
 	virtual bool CanBeInteracted_Implementation(class APawn* Pawn) override;
 	virtual void OnInteractedByPawn_Implementation(class APawn* Pawn, const FString& interactionType = "") override;
 	virtual FText GetInteractableName_Implementation() override;
+	
+	UFUNCTION()
+	virtual TArray<UActorComponent*> GetComponentsToSave_Implementation() const override;
+	
 
 protected:
 	// Actor Components
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"), SaveGame)
 	TObjectPtr<UPangeaBreedableComponent> BreedableComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"), SaveGame)
 	TObjectPtr<UPangeaTamingComponent> TamingComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
@@ -51,6 +56,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UACFVaultComponent> VaultComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UALSLoadAndSaveComponent> ALSLoadAndSaveComponent;
 	
 	UFUNCTION(BlueprintCallable, Category="Dinosaur Movement")
 	void Accelerate(float Value);
@@ -58,6 +66,10 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Dinosaur Movement")
 	void Brake(float Value);
 
+public:
+	virtual void OnLoaded_Implementation() override;
+
+protected:
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadWrite, Category="Dinosaur Movement")
 	bool bIsAccelerating;
 

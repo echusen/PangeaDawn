@@ -27,15 +27,23 @@ public:
 	UPangeaTamingComponent();
 
 	// --- Species data ---
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config", SaveGame)
 	UTameSpeciesConfig* TameSpeciesConfig = nullptr;
 
 	// --- Runtime state ---
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State")
-	ETameState TameState = ETameState::Wild;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State", SaveGame)
+	ETameState TamedState = ETameState::Wild;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State", SaveGame)
 	ETamedRole TamedRole = ETamedRole::None;
+
+	// // Persisted current team for SaveGame loading
+	// UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State", SaveGame)
+	// FGameplayTag ChangedTeam;
+	//
+	// // Persisted AI controller class for SaveGame loading
+	// UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="State", SaveGame)
+	// TSubclassOf<AAIController> CurrentAIControllerClass;
 
 	// --- Core API ---
 	UFUNCTION(BlueprintCallable, Category="Taming")
@@ -53,8 +61,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void HandleTameStateChanged(ETameState NewState);
 
+	UFUNCTION(BlueprintCallable, Category="Load")
+	void HandleLoadedActor();
+
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void SetTamedRole(ETamedRole NewRole);
+
+	UFUNCTION(BlueprintCallable, Category="Taming")
+	ETamedRole GetTamedRole() const {return TamedRole;}
+
+	UFUNCTION(BlueprintCallable, Category="Taming")
+	ETameState GetTameState() const {return TamedState;}
 
 	// --- Minigame ---
 	UPROPERTY(EditDefaultsOnly, Category="Taming|UI")
@@ -105,9 +122,9 @@ private:
 	void ApplyRoleTag(ETamedRole Role);
 
 	// --- Utility ---
-	void ChangeTeam(const FGameplayTag& TeamTag) const;
+	void ChangeTeam(const FGameplayTag& TeamTag);
 	void GrantTamedAbilities() const;
-	void SwitchAIController(TSubclassOf<AAIController> NewControllerClass) const;
+	void SwitchAIController(TSubclassOf<AAIController> NewControllerClass);
 	ETamedRole DetermineFinalRole(ETamedRole DesiredRole) const;
 
 	// --- Tag helpers ---

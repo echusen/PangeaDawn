@@ -24,6 +24,16 @@ void UPangeaTamingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	//Initialize
+	if (ETameState::Wild == TamedState)
+	{
+		InitializeWild();
+	}
+	else if (ETameState::Hostile == TamedState)
+	{
+		InitializeHostile();
+	}
+
 	//bind event
 	OnTameStateChanged.AddDynamic(this, &UPangeaTamingComponent::HandleTameStateChanged);
 }
@@ -78,20 +88,20 @@ void UPangeaTamingComponent::InitializeWild()
 {
 	if (!TameSpeciesConfig) return;
 	ClearStateTags();
-	TameState = ETameState::Wild;
+	TamedState = ETameState::Wild;
 	ApplyStateTags();
 	ChangeTeam(TameSpeciesConfig->WildTeamTag);
-	OnTameStateChanged.Broadcast(TameState);
+	OnTameStateChanged.Broadcast(TamedState);
 }
 
 void UPangeaTamingComponent::InitializeHostile()
 {
 	if (!TameSpeciesConfig) return;
 	ClearStateTags();
-	TameState = ETameState::Hostile;
+	TamedState = ETameState::Hostile;
 	ApplyStateTags();
 	ChangeTeam(TameSpeciesConfig->HostileTeamTag);
-	OnTameStateChanged.Broadcast(TameState);
+	OnTameStateChanged.Broadcast(TamedState);
 }
 
 // ------------------------------------------------------------
@@ -141,7 +151,7 @@ void UPangeaTamingComponent::TransitionToTamedState(ETamedRole DesiredRole)
 
 	// --- Update tame state ---
 	ClearStateTags();
-	TameState = ETameState::Tamed;
+	TamedState = ETameState::Tamed;
 	ApplyStateTags();
 	ChangeTeam(TameSpeciesConfig->TamedTeamTag);
 
@@ -155,7 +165,7 @@ void UPangeaTamingComponent::TransitionToTamedState(ETamedRole DesiredRole)
 	ConsumeTameItems();
 
 	// --- Broadcast event ---
-	OnTameStateChanged.Broadcast(TameState);
+	OnTameStateChanged.Broadcast(TamedState);
 
 	UE_LOG(LogTemp, Log, TEXT("[TamingComponent] %s transitioned to Tamed (Role: %s)"),
 		*GetNameSafe(GetOwner()),
@@ -189,6 +199,14 @@ void UPangeaTamingComponent::HandleTameStateChanged(ETameState NewState)
 	}
 	
 	UACFFunctionLibrary::GetLocalACFPlayerCharacter(GetOwner())->GetComponentByClass<UACFInteractionComponent>()->RegisterInteractable(GetOwner());
+}
+
+void UPangeaTamingComponent::HandleLoadedActor()
+{
+	if (GetTameState() == ETameState::Tamed)
+	{
+		TransitionToTamedState(GetTamedRole());
+	}
 }
 
 // ------------------------------------------------------------
@@ -364,7 +382,7 @@ void UPangeaTamingComponent::ClearTameTags()
 void UPangeaTamingComponent::ApplyStateTags()
 {
 	if (!TameSpeciesConfig) return;
-	switch (TameState)
+	switch (TamedState)
 	{
 	case ETameState::Wild: AddTagToActor(GetOwner(), TameSpeciesConfig->WildStateTag); break;
 	case ETameState::Hostile: AddTagToActor(GetOwner(), TameSpeciesConfig->HostileStateTag); break;
@@ -414,12 +432,17 @@ void UPangeaTamingComponent::ConsumeTameItems() const
 // --------------------- UTILITIES ----------------------------
 // ------------------------------------------------------------
 
-void UPangeaTamingComponent::ChangeTeam(const FGameplayTag& TeamTag) const
+void UPangeaTamingComponent::ChangeTeam(const FGameplayTag& TeamTag) 
 {
 	if (UACFTeamComponent* TeamComp = GetOwner()->FindComponentByClass<UACFTeamComponent>())
 	{
 		if (TeamTag.IsValid())
+		{
 			TeamComp->SetTeam(TeamTag);
+			
+			// Persist the selected team for SaveGame
+			//ChangedTeam = TeamTag;
+		}
 	}
 }
 
@@ -434,8 +457,9 @@ void UPangeaTamingComponent::GrantTamedAbilities() const
 	}
 }
 
-void UPangeaTamingComponent::SwitchAIController(TSubclassOf<AAIController> NewControllerClass) const
+void UPangeaTamingComponent::SwitchAIController(TSubclassOf<AAIController> NewControllerClass)
 {
+
 	APawn* Pawn = Cast<APawn>(GetOwner());
 	if (!Pawn || !NewControllerClass) return;
 
@@ -446,9 +470,9 @@ void UPangeaTamingComponent::SwitchAIController(TSubclassOf<AAIController> NewCo
 	}
 
 	if (AAIController* NewAIC = Pawn->GetWorld()->SpawnActor<AAIController>(NewControllerClass, Pawn->GetActorLocation(), Pawn->GetActorRotation()))
+	{
 		NewAIC->Possess(Pawn);
+		//CurrentAIControllerClass = NewControllerClass;
+	}
+	
 }
-
-
-
-

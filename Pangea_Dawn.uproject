@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.6",
+	"EngineAssociation": "5.7",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -34,7 +34,8 @@
 				"Engine",
 				"CoreUObject",
 				"UMG",
-				"AscentCombatFramework"
+				"AscentCombatFramework",
+				"AscentTeams"
 			]
 		},
 		{
@@ -49,6 +50,11 @@
 				"ActionsSystem",
 				"GameplayAbilities"
 			]
+		},
+		{
+			"Name": "PangeaBaseUpgradeSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
@@ -81,6 +87,13 @@
 			"Name": "DarkerNodes",
 			"Enabled": true,
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/4b3441f0228a40ec9ca986489a5bd682"
+		},
+		{
+			"Name": "WinDualShock",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64"
+			]
 		}
 	]
 }

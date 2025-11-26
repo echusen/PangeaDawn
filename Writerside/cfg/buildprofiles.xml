@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<buildprofiles>
+    <profile name="default">
+        <project>
+            <name>Pangea Dawn Systems Documentation</name>
+            <version>1.0</version>
+        </project>
+        <build>
+            <output>dist</output>
+            <instance>pd</instance>
+        </build>
+        <validation>
+            <check-links>true</check-links>
+            <check-images>true</check-images>
+        </validation>
+    </profile>
+</buildprofiles>
+

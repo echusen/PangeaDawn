@@ -50,16 +50,16 @@ public:
 	// --- Roles ---
 	// ------------------------------------------------------------
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles", SaveGame)
 	bool bCanBeMount = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles", SaveGame)
 	bool bCanBeCompanion = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles", SaveGame)
 	TSubclassOf<AAIController> TamedMountAIController;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Roles", SaveGame)
 	TSubclassOf<AAIController> TamedCompanionAIController;
 #pragma endregion
 
@@ -83,19 +83,19 @@ public:
 	// --- Tame Behavior ---
 	// ------------------------------------------------------------
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior", SaveGame)
 	float TameDuration = 5.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior", SaveGame)
 	float RetryTameCooldown = 5.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior", SaveGame)
 	bool bRunAwayOnFail = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior", SaveGame)
 	FGameplayTag RunawayActionTag = FGameplayTag::RequestGameplayTag("Actions.Flee");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Taming|Behavior", SaveGame)
 	UCurveFloat* TameDifficultyCurve = nullptr;
 #pragma endregion
 
@@ -107,10 +107,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GAS")
 	FGameplayTag TameAbilityTag;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GAS")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GAS", SaveGame)
 	TArray<TSubclassOf<UGameplayAbility>> AbilitiesGrantedWhenTamed;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GAS")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="GAS", SaveGame)
 	TArray<TSubclassOf<UGameplayEffect>> EffectsOnTameSuccess;
 #pragma endregion
 
@@ -120,40 +120,40 @@ public:
 	// ------------------------------------------------------------
 
 	// State tags (used by AI / Behavior Trees)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State", SaveGame)
 	FGameplayTag WildStateTag = FGameplayTag::RequestGameplayTag("Tame.State.Wild");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State", SaveGame)
 	FGameplayTag HostileStateTag = FGameplayTag::RequestGameplayTag("Tame.State.Hostile");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|State", SaveGame)
 	FGameplayTag TamedStateTag = FGameplayTag::RequestGameplayTag("Tame.State.Tamed");
 
 	// Team tags (team switching on tame)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team", SaveGame)
 	FGameplayTag WildTeamTag = FGameplayTag::RequestGameplayTag("Teams.Neutral");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team", SaveGame)
 	FGameplayTag HostileTeamTag = FGameplayTag::RequestGameplayTag("Teams.Enemies");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Team", SaveGame)
 	FGameplayTag TamedTeamTag = FGameplayTag::RequestGameplayTag("Teams.Heroes");
 
 	// Role tags (for identification)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Role")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Role", SaveGame)
 	FGameplayTag MountRoleTag = FGameplayTag::RequestGameplayTag("Tame.Role.Mount");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Role")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Role", SaveGame)
 	FGameplayTag CompanionRoleTag = FGameplayTag::RequestGameplayTag("Tame.Role.Companion");
 
 	// Attempt tags (used for cooldowns and state tracking)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt", SaveGame)
 	FGameplayTag InProgressTag = FGameplayTag::RequestGameplayTag("Tame.Attempt.InProgress");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt", SaveGame)
 	FGameplayTag SuccessTag = FGameplayTag::RequestGameplayTag("Tame.Attempt.Success");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tags|Attempt", SaveGame)
 	FGameplayTag FailTag = FGameplayTag::RequestGameplayTag("Tame.Attempt.Fail");
 #pragma endregion
 };

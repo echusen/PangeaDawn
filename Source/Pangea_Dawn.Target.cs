@@ -8,8 +8,13 @@ public class Pangea_DawnTarget : TargetRules
 	public Pangea_DawnTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Game;
-		DefaultBuildSettings = BuildSettingsVersion.V5;
-		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_6;
+		DefaultBuildSettings = BuildSettingsVersion.V6;
 		ExtraModuleNames.Add("Pangea_Dawn");
+		RegisterModulesCreatedByRider();
+	}
+
+	private void RegisterModulesCreatedByRider()
+	{
+		ExtraModuleNames.AddRange(new string[] { "PangeaBaseUpgradeSystem" });
 	}
 }
