@@ -16,7 +16,7 @@
 FInventoryItem::FInventoryItem(const FBaseItem& inItem)
 {
     Count = inItem.Count;
-    ItemGuid = FGuid::NewGuid();
+    ItemGuid = inItem.GetItemGuid();
     ItemClass = inItem.ItemClass.Get();
 }
 

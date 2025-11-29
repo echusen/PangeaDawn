@@ -21,7 +21,7 @@
  * - Order is not required; the routine component can sort by time on build if enabled.
  */
 UCLASS(BlueprintType)
-class AIFRAMEWORK_API UACFAIRoutineDataAsset : public UDataAsset
+class AIFRAMEWORK_API UACFAIRoutineDataAsset : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 

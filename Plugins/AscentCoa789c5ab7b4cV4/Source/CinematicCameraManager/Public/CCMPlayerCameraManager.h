@@ -8,6 +8,7 @@
 #include <Engine/DataTable.h>
 #include <GameFramework/Actor.h>
 
+#include "ACFCameraPointComponent.h"
 #include "CCMPlayerCameraManager.generated.h"
 
 class APawn;
@@ -290,8 +291,7 @@ private:
 		float TargetFOV) const;
 
 	// Implement this in your class (or reuse the one you already have)
-	bool ResolveCameraPoint(AActor* OwnerWithPoints,
-		const FGameplayTag& CameraTag,
-		FTransform& OutTransform,
-		float& OutFOV) const;
+bool ResolveCameraPoint(AActor* OwnerWithPoints,
+		const FGameplayTag& CameraTag
+	) const;
 };

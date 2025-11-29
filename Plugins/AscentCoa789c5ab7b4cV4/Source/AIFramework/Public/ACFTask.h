@@ -12,7 +12,7 @@ class AController;
 /**
  * A generic task for AI Routines
  */
-UCLASS(EditInlineNew, BlueprintType, Abstract, DefaultToInstanced)
+UCLASS(EditInlineNew, BlueprintType, Abstract, DefaultToInstanced, Blueprintable)
 class AIFRAMEWORK_API UACFTask : public UObject
 {
 	GENERATED_BODY()

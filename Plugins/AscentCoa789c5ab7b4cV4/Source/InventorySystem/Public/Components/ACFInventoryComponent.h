@@ -63,16 +63,6 @@ public:
 	UPROPERTY(SaveGame, BlueprintReadOnly, meta = (ClampMin = "0.0", ClampMax = "100.0"), Category = ACF)
 	float DropChancePercentage = 0.f;
 
-	FGuid GetItemGuid() const
-	{
-		return ItemGuid;
-	}
-
-	void ForceGuid(const FGuid& newGuid)
-	{
-		ItemGuid = newGuid;
-	}
-
 	FORCEINLINE bool operator==(const FInventoryItem& Other) const
 	{
 		return this->GetItemGuid() == Other.GetItemGuid();

@@ -54,6 +54,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = ACF)
     int32 Count = 1;
 
+
+	FGuid GetItemGuid() const
+	{
+		return ItemGuid;
+	}
+
+	void ForceGuid(const FGuid& newGuid)
+	{
+		ItemGuid = newGuid;
+	}
+
     FORCEINLINE bool operator==(const FBaseItem& Other) const
     {
         return this->ItemClass == Other.ItemClass;

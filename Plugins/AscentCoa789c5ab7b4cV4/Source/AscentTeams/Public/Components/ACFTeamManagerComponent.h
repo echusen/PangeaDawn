@@ -58,11 +58,11 @@ public:
 
 protected:
     // Runtime settings - replicated
-    UPROPERTY(ReplicatedUsing = OnRep_BattleType, BlueprintReadOnly, Category = "ACF Team")
+    UPROPERTY(ReplicatedUsing = OnRep_BattleType, BlueprintReadOnly, EditDefaultsOnly, Category = "ACF Team")
     EBattleType CurrentBattleType = EBattleType::ETeamBased;
 
     // Only runtime settings, NOT data duplication
-    UPROPERTY(ReplicatedUsing = OnRep_FriendlyFireEnabled, BlueprintReadOnly, Category = "ACF Team")
+    UPROPERTY(ReplicatedUsing = OnRep_FriendlyFireEnabled, BlueprintReadOnly, EditDefaultsOnly, Category = "ACF Team")
     bool bFriendlyFireEnabled = false;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ACF Team")

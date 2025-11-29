@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CineCameraComponent.h"
 #include "GameplayTagContainer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
@@ -14,7 +15,7 @@
  * Lightweight camera point marker (transform + metadata only).
  */
 UCLASS(ClassGroup=(Camera), meta=(BlueprintSpawnableComponent))
-class CINEMATICCAMERAMANAGER_API UACFCameraPointComponent : public UCameraComponent
+class CINEMATICCAMERAMANAGER_API UACFCameraPointComponent : public UCineCameraComponent
 {
 	GENERATED_BODY()
 

@@ -156,7 +156,7 @@ void UACFBuildingManagerComponent::ServerBuild_Implementation(const FPrimaryAsse
         return;
     }
 
-    // Check se la classe è caricata
+    // Check if the class is loaded
     UClass* ActorClass = Recipe->ItemType.Get();
     if (!ActorClass) {
         UE_LOG(LogAscentBuildingSystem, Log, TEXT("ServerBuild: Class not loaded, starting async load: %s"), *Recipe->ItemType.ToSoftObjectPath().ToString());

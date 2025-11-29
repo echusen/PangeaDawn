@@ -20,7 +20,8 @@ class UACFItemsManagerComponent;
  * Contains helper functions for spawning items, filtering inventory, and retrieving item data.
  */
 UCLASS()
-class INVENTORYSYSTEM_API UACFItemSystemFunctionLibrary : public UBlueprintFunctionLibrary {
+class INVENTORYSYSTEM_API UACFItemSystemFunctionLibrary : public UBlueprintFunctionLibrary
+{
 	GENERATED_BODY()
 
 public:
@@ -34,7 +35,9 @@ public:
 		* @return The spawned world item actor, or nullptr if spawn failed
 		*/
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = ACFLibrary)
-	static AACFWorldItem* SpawnWorldItemNearLocation(UObject* WorldContextObject, const TArray<FBaseItem>& ContainedItem, const FVector& location, float acceptanceRadius = 100.f);
+	static AACFWorldItem* SpawnWorldItemNearLocation(UObject* WorldContextObject,
+	                                                 const TArray<FBaseItem>& ContainedItem, const FVector& location,
+	                                                 float acceptanceRadius = 100.f);
 
 	/**
 	 * Spawns a currency item near the specified location.
@@ -46,7 +49,8 @@ public:
 	 * @return The spawned currency world item actor, or nullptr if spawn failed
 	 */
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = ACFLibrary)
-	static AACFWorldItem* SpawnCurrencyItemNearLocation(UObject* WorldContextObject, float currencyAmount, const FVector& location, float acceptanceRadius = 100.f);
+	static AACFWorldItem* SpawnCurrencyItemNearLocation(UObject* WorldContextObject, float currencyAmount,
+	                                                    const FVector& location, float acceptanceRadius = 100.f);
 
 	/* FILTERS */
 
@@ -58,7 +62,8 @@ public:
 	 * @param outItems - Output array containing only items matching the specified type
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static void FilterByItemType(const TArray<FInventoryItem>& inItems, EItemType inType, TArray<FInventoryItem>& outItems);
+	static void FilterByItemType(const TArray<FInventoryItem>& inItems, EItemType inType,
+	                             TArray<FInventoryItem>& outItems);
 
 	/**
 	 * Filters an array of inventory items by their equipment slot.
@@ -68,7 +73,19 @@ public:
 	 * @param outItems - Output array containing only items matching the specified slot
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static void FilterByItemSlot(const TArray<FInventoryItem>& inItems, FGameplayTag inSlot, TArray<FInventoryItem>& outItems);
+	static void FilterByItemSlot(const TArray<FInventoryItem>& inItems, FGameplayTag inSlot,
+	                             TArray<FInventoryItem>& outItems);
+
+	/**
+	* Filters an array of inventory items by their equipment slot.
+	*
+	* @param inItems - Input array of inventory items to filter
+	* @param inSlots - Equipment slots gameplay tag to filter by
+	* @param outItems - Output array containing only items matching the specified slot
+	*/
+	UFUNCTION(BlueprintPure, Category = ACFLibrary)
+	static void FilterByItemSlots(const TArray<FInventoryItem>& inItems, TArray<FGameplayTag> inSlots,
+	                             TArray<FInventoryItem>& outItems);
 
 	/**
 	 * Finds and returns a specific fragment from an item by its class type.
@@ -79,6 +96,17 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary, meta = (DeterminesOutputType = "FragmentClass"))
 	static UACFItemFragment* FindFragmentByClass(const UACFItem* inItem, TSubclassOf<UACFItemFragment> FragmentClass);
+
+	/*
+	* Finds and returns a specific fragment from an item by its class type.
+	*
+	* @param inItemClass - Class of the Item to search for the fragment
+	* @param FragmentClass - Class type of the fragment to find
+	* @return The found fragment, or nullptr if not found
+	*/
+	UFUNCTION(BlueprintPure, Category = ACFLibrary, meta = (DeterminesOutputType = "FragmentClass"))
+	static UACFItemFragment* FindFragmentInItemClassByClass(const TSubclassOf<UACFItem> inItemClass, TSubclassOf<UACFItemFragment> FragmentClass);
+
 
 	/**
 	 * Retrieves the item descriptor data for a given item class.
@@ -98,7 +126,8 @@ public:
 	 * @return True if modifier was found, false otherwise
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static bool GetEquippableAttributeSetModifier(const TSubclassOf<class UACFItem>& itemClass, FAttributesSetModifier& outModifier);
+	static bool GetEquippableAttributeSetModifier(const TSubclassOf<class UACFItem>& itemClass,
+	                                              FAttributesSetModifier& outModifier);
 
 	/**
 	 * Gets all timed attribute set modifiers for a consumable item.
@@ -108,7 +137,8 @@ public:
 	 * @return True if modifiers were found, false otherwise
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static bool GetConsumableTimedAttributeSetModifier(const TSubclassOf<class UACFItem>& itemClass, TArray<FTimedAttributeSetModifier>& outModifiers);
+	static bool GetConsumableTimedAttributeSetModifier(const TSubclassOf<class UACFItem>& itemClass,
+	                                                   TArray<FTimedAttributeSetModifier>& outModifiers);
 
 	/**
 	 * Gets all statistic modifiers for a consumable item.
@@ -118,7 +148,8 @@ public:
 	 * @return True if modifiers were found, false otherwise
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static bool GetConsumableStatModifier(const TSubclassOf<class UACFItem>& itemClass, TArray<FStatisticValue>& outModifiers);
+	static bool GetConsumableStatModifier(const TSubclassOf<class UACFItem>& itemClass,
+	                                      TArray<FStatisticValue>& outModifiers);
 
 	/* GAS GETTERS */
 
@@ -131,7 +162,8 @@ public:
 	 * @return True if effects were found, false otherwise
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static bool GetEquippableGameplayEffects(const TSubclassOf<class UACFItem>& itemClass, TArray<FGEModifier>& outModifiers);
+	static bool GetEquippableGameplayEffects(const TSubclassOf<class UACFItem>& itemClass,
+	                                         TArray<FGEModifier>& outModifiers);
 
 	/**
 	 * Gets the gameplay effect type for an equippable item.
@@ -151,7 +183,8 @@ public:
 	 * @return True if effects were found, false otherwise
 	 */
 	UFUNCTION(BlueprintPure, Category = ACFLibrary)
-	static bool GetConsumableGameplayEffects(const TSubclassOf<class UACFItem>& itemClass, TArray<FGEModifier>& outModifiers);
+	static bool GetConsumableGameplayEffects(const TSubclassOf<class UACFItem>& itemClass,
+	                                         TArray<FGEModifier>& outModifiers);
 
 	/**
 	 * Converts an inventory item to a base item structure.
@@ -159,8 +192,17 @@ public:
 	 * @param inItem - Inventory item to convert
 	 * @return Base item structure
 	 */
-	UFUNCTION(BlueprintCallable, Category = ACFLibrary)
+	UFUNCTION(BlueprintPure, Category = ACFLibrary)
 	static FBaseItem MakeBaseItemFromInventory(const FInventoryItem& inItem);
+
+		/**
+	 * Converts a base inventory item to a Inventory item structure.
+	 *
+	 * @param inItem - Inventory item to convert
+	 * @return Base item structure
+	 */
+	UFUNCTION(BlueprintPure, Category = ACFLibrary)
+	static FInventoryItem MakeInventoryItemFromBase(const FBaseItem& inItem);
 
 	/**
 	 * Calculates the transform for shooting based on the source pawn and target type.
@@ -284,5 +326,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = ACFLibrary)
 	static bool IsValidItemSlotTag(FGameplayTag TagToCheck);
 
-	static AACFWorldItem* SpawnWorldItem(UObject* WorldContextObject, const FVector& location, float acceptanceRadius = 100.f);
+	static AACFWorldItem* SpawnWorldItem(UObject* WorldContextObject, const FVector& location,
+	                                     float acceptanceRadius = 100.f);
 };
