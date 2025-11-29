@@ -131,6 +131,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = ACF)
     bool DoesSlotMatchesRule(const FACFItemGenerationRule& generationRules, const FItemGenerationSlot& item);
 
+    void BuyItemsFromVendor(UACFVendorComponent* vendorComp, const FInventoryItem& item, UACFEquipmentComponent* equipComp);
+
     /**
      * Event triggered when an item is crafted successfully
      */

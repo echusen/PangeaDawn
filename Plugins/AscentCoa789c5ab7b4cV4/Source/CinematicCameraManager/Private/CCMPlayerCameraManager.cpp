@@ -118,81 +118,19 @@ void ACCMPlayerCameraManager::BlendToPoint(AActor* OwnerWithPoints,
 		return;
 	}
 
-	// Resolve point
-	FTransform TargetXform;
-	float TargetFOV = 70.f;
-	const bool bResolved = ResolveCameraPoint(OwnerWithPoints, CameraTag, TargetXform, TargetFOV);
-	if (!bResolved)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CCM] Resolve FAIL tag=%s on %s"),
-			*CameraTag.ToString(), *GetNameSafe(OwnerWithPoints));
-		ensureMsgf(false, TEXT("[CCM] Resolve FAIL"));
-		return;
-	}
+	const bool bResolved = ResolveCameraPoint(OwnerWithPoints, CameraTag);
 
-	// Decide next stub (ensure it differs from current view target)
-	if (!CameraStubA) {
-		GetOrSpawnStub(true);
-	}
-
-	if (!CameraStubB) {
-		GetOrSpawnStub(false);
-	}
-
-	AActor* CurrentViewTarget = PlayerController->GetViewTarget();
-	ACameraActor* NextStub = nullptr;
-
-	if (CurrentViewTarget == CameraStubA)
-	{
-		NextStub = CameraStubB;
-	}
-	else if (CurrentViewTarget == CameraStubB)
-	{
-		NextStub = CameraStubA;
-	}
-	else
-	{
-		NextStub = CameraStubA;
-	}
-
-	//  Move stub and activate camera
-	MoveStubToPoint(NextStub, TargetXform, TargetFOV);
-
-	UE_LOG(LogTemp, Log, TEXT("[CCM] BlendToPoint tag=%s  From=%s  To=%s  FOV=%.1f  BlendTime=%.2f"),
-		*CameraTag.ToString(),
-		*GetNameSafe(CurrentViewTarget),
-		*GetNameSafe(NextStub),
-		TargetFOV, BlendTime);
-
-	// Force a different target if, for some reason, it's the same
-	if (CurrentViewTarget == NextStub)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CCM] NextStub equals CurrentViewTarget. Forcing alternate stub."));
-		NextStub = (NextStub == CameraStubA) ? CameraStubB : CameraStubA;
-		MoveStubToPoint(NextStub, TargetXform, TargetFOV);
-	}
-
-	// Do the actual blend
-
-	//TO DO: COPY PASTE CAMERA SETTINGS BEFORE THE COPY
-	PlayerController->SetViewTargetWithBlend(NextStub, BlendTime, BlendFunc, BlendExp, bLockOutgoing);
-	LastViewTarget = NextStub;
+	if (!bResolved)return;
+	PlayerController->SetViewTargetWithBlend(OwnerWithPoints, BlendTime, BlendFunc, BlendExp, bLockOutgoing);
+	
 }
 
 bool ACCMPlayerCameraManager::ResolveCameraPoint(
 	AActor* OwnerWithPoints,
-	const FGameplayTag& CameraTag,
-	FTransform& OutTransform,
-	float& OutFOV
+	const FGameplayTag& CameraTag
 ) const
 {
-	OutFOV = 70.f;
-
-	if (!IsValid(OwnerWithPoints))
-	{
-		return false;
-	}
-
+	
 	// 1) Look for UCameraPointComponent with matching tag on the target actor
 	TArray<UACFCameraPointComponent*> CameraPoints;
 	OwnerWithPoints->GetComponents<UACFCameraPointComponent>(CameraPoints);
@@ -205,15 +143,9 @@ bool ACCMPlayerCameraManager::ResolveCameraPoint(
 			if (!BestPoint || Candidate->SelectionWeight > BestPoint->SelectionWeight)
 			{
 				BestPoint = Candidate;
+				return true;
 			}
 		}
-	}
-
-	if (BestPoint)
-	{
-		OutTransform = BestPoint->GetComponentTransform();
-		OutFOV = BestPoint->DesiredFOV;
-		return true;
 	}
 	return false;
 }

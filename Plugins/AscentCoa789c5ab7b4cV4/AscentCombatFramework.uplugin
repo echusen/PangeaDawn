@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "4.1.1",
+	"Version": 412,
+	"VersionName": "4.1.2",
 	"FriendlyName": "Ascent Combat Framework Ultimate",
 	"Description": "",
 	"Category": "ACF Tools",
@@ -9,7 +9,7 @@
 	"CreatedByURL": "www.darktowerinteractive.com",
 	"DocsURL": "https://slimwiki.com/dark-tower-int/acfu/welcome",
 	"MarketplaceURL": "https://www.fab.com/listings/cc258205-8fcf-41e5-9b48-6ec44e46d7eb",
-	"SupportURL": "https://discord.gg/ahqhXnJ",
+	"SupportURL": "https://slimwiki.com/dark-tower-int/acfu/welcome",
 	"EngineVersion": "5.7.0",
 	"CanContainContent": true,
 	"Installed": true,

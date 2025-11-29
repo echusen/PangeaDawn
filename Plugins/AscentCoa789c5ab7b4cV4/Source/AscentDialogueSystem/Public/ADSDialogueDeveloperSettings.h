@@ -77,7 +77,7 @@ protected:
     bool bEnableAIDialogue = false;
 
     // Global API key for TTS services (OpenAI, etc.)
-    UPROPERTY(EditAnywhere, config, Category = "Conversational AI|TTS", meta = (DisplayName = "TTS API Key"))
+    UPROPERTY(EditAnywhere, config, Category = "Conversational AI|TTS", meta = (DisplayName = "TTS API Key"), meta = (PasswordField = true))
     FString TTSAPIKey;
 
     // Default API endpoint for TTS generation
