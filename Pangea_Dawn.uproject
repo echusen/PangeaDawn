@@ -49,6 +49,11 @@
 				"ActionsSystem",
 				"GameplayAbilities"
 			]
+		},
+		{
+			"Name": "AttributeSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
