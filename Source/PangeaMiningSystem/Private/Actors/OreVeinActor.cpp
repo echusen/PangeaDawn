@@ -1,5 +1,4 @@
-﻿// OreVeinActor.cpp
-#include "Actors/OreVeinActor.h"
+﻿#include "Actors/OreVeinActor.h"
 #include "SmartObjectComponent.h"
 #include "TimerManager.h"
 
@@ -11,27 +10,49 @@ AOreVeinActor::AOreVeinActor()
     RootComponent = MeshComponent;
 
     StorageComponent = CreateDefaultSubobject<UACFStorageComponent>(TEXT("StorageComponent"));
+    SmartObjectComponent = CreateDefaultSubobject<USmartObjectComponent>(TEXT("SmartObjectComponent"));
+}
+
+const FMiningVeinConfig& AOreVeinActor::GetVeinConfig() const
+{
+    static FMiningVeinConfig DummyConfig;
+
+    if (LevelConfig)
+    {
+        const FMiningLevelDefinition& Def = LevelConfig->GetLevelDefinitionChecked(LevelIndex);
+        return Def.VeinConfig;
+    }
+
+    return DummyConfig;
 }
 
 void AOreVeinActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    if (HasAuthority())
+    if (!HasAuthority())
     {
-        if (StorageComponent)
-        {
-            StorageComponent->SetMaxInventorySlots(MaxStorageCapacity);
-        }
-
-        GetWorldTimerManager().SetTimer(
-            OreGenerationTimerHandle,
-            this,
-            &AOreVeinActor::GenerateOre,
-            1.0f,
-            true
-        );
+        return;
     }
+
+    const FMiningVeinConfig& VeinCfg = GetVeinConfig();
+
+    if (!StorageComponent)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("OreVeinActor %s has no StorageComponent"), *GetName());
+        return;
+    }
+
+    StorageComponent->SetMaxInventorySlots(VeinCfg.MaxStorageCapacity);
+
+    // 1 second tick – you can expose this if needed.
+    GetWorldTimerManager().SetTimer(
+        OreGenerationTimerHandle,
+        this,
+        &AOreVeinActor::GenerateOre,
+        1.0f,
+        true
+    );
 }
 
 void AOreVeinActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -46,35 +67,53 @@ void AOreVeinActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AOreVeinActor::GenerateOre()
 {
-    if (!StorageComponent || !CommonMaterialClass)
+    if (!HasAuthority() || !StorageComponent || !LevelConfig)
     {
         return;
     }
 
-    if (StorageComponent->GetInventoryListConst().Num() >= MaxStorageCapacity)
+    const FMiningVeinConfig& VeinCfg = GetVeinConfig();
+
+    if (StorageComponent->GetInventoryListConst().Num() >= VeinCfg.MaxStorageCapacity)
     {
         return;
     }
 
-    // Generate common material
-    FBaseItem CommonItem;
-    CommonItem.ItemClass = CommonMaterialClass;
-    CommonItem.Count = FMath::FloorToInt(MineralsPerSecond);
-
-    if (CommonItem.Count > 0)
+    const int32 NumEntries = VeinCfg.GeneratedItems.Num();
+    if (NumEntries == 0)
     {
-        StorageComponent->AddItem(CommonItem);
+        return;
     }
 
-    // Roll for rare material
-    if (RareMaterialClass && FMath::FRand() < RareMaterialChance)
+    for (int32 Index = 0; Index < NumEntries; ++Index)
     {
-        FBaseItem RareItem;
-        RareItem.ItemClass = RareMaterialClass;
-        RareItem.Count = 1;
+        const FBaseItem& TemplateItem = VeinCfg.GeneratedItems[Index];
+        if (!TemplateItem.ItemClass)
+        {
+            continue;
+        }
 
-        StorageComponent->AddItem(RareItem);
+        // Optional per-entry chance.
+        if (VeinCfg.ItemChances.IsValidIndex(Index))
+        {
+            const float Chance = VeinCfg.ItemChances[Index];
+            if (Chance < 1.f && FMath::FRand() > Chance)
+            {
+                continue;
+            }
+        }
 
-        UE_LOG(LogTemp, Log, TEXT("%s: Generated rare material!"), *GetName());
+        FBaseItem ToAdd = TemplateItem;
+
+        // Scale count by MineralsPerSecond.
+        const float RawCount = static_cast<float>(TemplateItem.Count) * VeinCfg.MineralsPerSecond;
+        ToAdd.Count = FMath::Max(0, FMath::FloorToInt(RawCount));
+
+        if (ToAdd.Count <= 0)
+        {
+            continue;
+        }
+
+        StorageComponent->AddItem(ToAdd);
     }
 }

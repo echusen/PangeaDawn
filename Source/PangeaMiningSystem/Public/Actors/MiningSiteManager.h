@@ -5,12 +5,18 @@
 #include "Data/MiningLevelConfig.h"
 #include "MiningSiteManager.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMiningSiteLevelChanged, int32, NewLevel);
+class AOreVeinActor;
+class AMiningChestActor;
 
 /**
- * Manages mining site by spawning all level actors once and toggling visibility
+ * Responsible for:
+ * - reading the MiningLevelConfig
+ * - spawning / upgrading vein + chest + optional dining actors
+ * - wiring LevelConfig/LevelIndex into AOreVeinActor
+ *
+ * It does NOT handle AI routines or inventory transfers; those stay in Blueprint/ACF.
  */
-UCLASS()
+UCLASS(Blueprintable)
 class PANGEAMININGSYSTEM_API AMiningSiteManager : public AActor
 {
     GENERATED_BODY()
@@ -20,68 +26,41 @@ public:
 
     virtual void BeginPlay() override;
 
-    // ========== LEVEL MANAGEMENT ==========
-    UFUNCTION(BlueprintCallable, Category = "Mining|Level")
-    void SetLevel(int32 NewLevel);
+    /** Main config asset for all levels of this site. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining")
+    TObjectPtr<UMiningLevelConfig> LevelConfig;
 
-    UFUNCTION(BlueprintCallable, Category = "Mining|Level")
-    bool UpgradeToNextLevel();
+    /** Current level index into LevelConfig->Levels. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining")
+    int32 CurrentLevelIndex = 0;
 
-    UFUNCTION(BlueprintCallable, Category = "Mining|Level")
-    int32 GetCurrentLevel() const { return CurrentLevel; }
+    /** Where the vein will be spawned (relative to manager). */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawning")
+    FTransform VeinSpawnTransform;
 
-    UFUNCTION(BlueprintCallable, Category = "Mining|Level")
-    bool CanUpgrade() const;
-
-    // ========== ACTOR REFERENCES ==========
-    UFUNCTION(BlueprintCallable, Category = "Mining|Actors")
-    AActor* GetActiveWorkstation() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Mining|Actors")
-    AActor* GetActiveChest() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Mining|Actors")
-    AActor* GetActiveDiningTable() const;
-
-    // ========== EVENTS ==========
-    UPROPERTY(BlueprintAssignable, Category = "Mining|Events")
-    FOnMiningSiteLevelChanged OnLevelChanged;
-
-protected:
-    // ========== CONFIGURATION ==========
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mining|Setup")
-    TObjectPtr<UMiningLevelConfig> LevelConfig = nullptr;
-
-    // ========== SPAWN TRANSFORMS ==========
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining|Placement")
-    FTransform WorkstationSpawnTransform;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining|Placement")
+    /** Where the chest will be spawned (relative to manager). */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawning")
     FTransform ChestSpawnTransform;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining|Placement")
-    FTransform DiningTableSpawnTransform;
+    /** Optional extra spawn (dining area, etc.). */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawning")
+    FTransform DiningSpawnTransform;
 
-    // ========== STATE ==========
-    UPROPERTY(SaveGame, Replicated)
-    int32 CurrentLevel = 0;
+    /** Runtime references – useful for Blueprint logic. */
+    UPROPERTY(BlueprintReadOnly, Category = "Runtime")
+    TObjectPtr<AOreVeinActor> SpawnedVein;
 
-    // ========== SPAWNED ACTORS (ALL LEVELS) ==========
-    // We spawn ALL actors from all levels at BeginPlay
-    UPROPERTY()
-    TMap<int32, TObjectPtr<AActor>> WorkstationsByLevel;
+    UPROPERTY(BlueprintReadOnly, Category = "Runtime")
+    TObjectPtr<AMiningChestActor> SpawnedChest;
 
-    UPROPERTY()
-    TMap<int32, TObjectPtr<AActor>> ChestsByLevel;
+    UPROPERTY(BlueprintReadOnly, Category = "Runtime")
+    TObjectPtr<AActor> SpawnedDining;
 
-    UPROPERTY()
-    TMap<int32, TObjectPtr<AActor>> DiningTablesByLevel;
+    /** Upgrades to the next level definition (if any). */
+    UFUNCTION(BlueprintCallable, Category = "Mining")
+    void UpgradeToNextLevel();
 
-private:
-    void SpawnAllLevelActors();
-    void UpdateVisibilityForLevel(int32 Level);
-    void SetActorEnabled(AActor* Actor, bool bEnabled);
-    void UpdateChestCapacity();
-
-    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+protected:
+    void SpawnForCurrentLevel();
+    void DestroySpawnedActors();
 };

@@ -1,235 +1,114 @@
-﻿// MiningSiteManager.cpp
-#include "Actors/MiningSiteManager.h"
-#include "Net/UnrealNetwork.h"
-#include "Components/ACFStorageComponent.h"
+﻿#include "Actors/MiningSiteManager.h"
+#include "Actors/OreVeinActor.h"
+#include "Actors/MiningChestActor.h"
 
 AMiningSiteManager::AMiningSiteManager()
 {
     PrimaryActorTick.bCanEverTick = false;
-    bReplicates = true;
-
-    WorkstationSpawnTransform = FTransform(FVector(0, 0, 0));
-    ChestSpawnTransform = FTransform(FVector(300, 0, 0));
-    DiningTableSpawnTransform = FTransform(FVector(-300, 0, 0));
 }
 
 void AMiningSiteManager::BeginPlay()
 {
     Super::BeginPlay();
+    SpawnForCurrentLevel();
+}
 
-    if (HasAuthority())
+void AMiningSiteManager::DestroySpawnedActors()
+{
+    if (SpawnedVein)
     {
-        SpawnAllLevelActors();
+        SpawnedVein->Destroy();
+        SpawnedVein = nullptr;
+    }
 
-        if (CurrentLevel == 0)
-        {
-            SetLevel(1);
-        }
-        else
-        {
-            UpdateVisibilityForLevel(CurrentLevel);
-        }
+    if (SpawnedChest)
+    {
+        SpawnedChest->Destroy();
+        SpawnedChest = nullptr;
+    }
+
+    if (SpawnedDining)
+    {
+        SpawnedDining->Destroy();
+        SpawnedDining = nullptr;
     }
 }
 
-void AMiningSiteManager::SpawnAllLevelActors()
+void AMiningSiteManager::SpawnForCurrentLevel()
 {
     if (!LevelConfig)
     {
-        UE_LOG(LogTemp, Error, TEXT("MiningSiteManager: LevelConfig not set!"));
+        UE_LOG(LogTemp, Warning, TEXT("MiningSiteManager %s has no LevelConfig"), *GetName());
         return;
     }
 
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = this;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    const FMiningLevelDefinition& Def = LevelConfig->GetLevelDefinitionChecked(CurrentLevelIndex);
 
-    for (const FMiningLevelData& LevelData : LevelConfig->MiningLevels)
+    UWorld* World = GetWorld();
+    if (!World)
     {
-        int32 Level = LevelData.Level;
-
-        // Spawn Workstation
-        if (LevelData.WorkstationActorClass)
-        {
-            FTransform WorldTransform = WorkstationSpawnTransform * GetActorTransform();
-            AActor* Workstation = GetWorld()->SpawnActor<AActor>(
-                LevelData.WorkstationActorClass,
-                WorldTransform,
-                SpawnParams
-            );
-
-            if (Workstation)
-            {
-                WorkstationsByLevel.Add(Level, Workstation);
-            }
-        }
-
-        // Spawn Chest
-        if (LevelData.ChestActorClass)
-        {
-            FTransform WorldTransform = ChestSpawnTransform * GetActorTransform();
-            AActor* Chest = GetWorld()->SpawnActor<AActor>(
-                LevelData.ChestActorClass,
-                WorldTransform,
-                SpawnParams
-            );
-
-            if (Chest)
-            {
-                ChestsByLevel.Add(Level, Chest);
-                
-                // Set capacity
-                if (UACFStorageComponent* StorageComp = Chest->FindComponentByClass<UACFStorageComponent>())
-                {
-                    StorageComp->SetMaxInventorySlots(LevelData.StorageCapacityUnits);
-                }
-            }
-        }
-
-        // Spawn Dining Table
-        if (LevelData.DiningTableActorClass)
-        {
-            FTransform WorldTransform = DiningTableSpawnTransform * GetActorTransform();
-            AActor* DiningTable = GetWorld()->SpawnActor<AActor>(
-                LevelData.DiningTableActorClass,
-                WorldTransform,
-                SpawnParams
-            );
-
-            if (DiningTable)
-            {
-                DiningTablesByLevel.Add(Level, DiningTable);
-            }
-        }
-    }
-}
-
-void AMiningSiteManager::SetLevel(int32 NewLevel)
-{
-    if (!HasAuthority()) return;
-    if (!LevelConfig) return;
-
-    FMiningLevelData LevelData;
-    if (!LevelConfig->GetLevelData(NewLevel, LevelData))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Level %d not found!"), NewLevel);
         return;
     }
 
-    CurrentLevel = NewLevel;
-    UpdateVisibilityForLevel(NewLevel);
+    const FTransform WorldVeinTransform = VeinSpawnTransform * GetActorTransform();
+    const FTransform WorldChestTransform = ChestSpawnTransform * GetActorTransform();
+    const FTransform WorldDiningTransform = DiningSpawnTransform * GetActorTransform();
 
-    OnLevelChanged.Broadcast(CurrentLevel);
-}
-
-void AMiningSiteManager::UpdateVisibilityForLevel(int32 Level)
-{
-    // Hide all actors from all levels
-    for (const auto& Pair : WorkstationsByLevel)
+    if (Def.VeinActorClass)
     {
-        if (Pair.Value)
+        SpawnedVein = World->SpawnActorDeferred<AOreVeinActor>(
+            Def.VeinActorClass,
+            WorldVeinTransform,
+            this,
+            nullptr,
+            ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+
+        if (SpawnedVein)
         {
-            Pair.Value->SetActorHiddenInGame(true);
-            Pair.Value->SetActorEnableCollision(false);
+            SpawnedVein->LevelConfig = LevelConfig;
+            SpawnedVein->LevelIndex = CurrentLevelIndex;
+            SpawnedVein->FinishSpawning(WorldVeinTransform);
         }
     }
 
-    for (const auto& Pair : ChestsByLevel)
+    if (Def.ChestActorClass)
     {
-        if (Pair.Value)
+        SpawnedChest = World->SpawnActor<AMiningChestActor>(
+            Def.ChestActorClass,
+            WorldChestTransform);
+        if (SpawnedChest)
         {
-            Pair.Value->SetActorHiddenInGame(true);
-            Pair.Value->SetActorEnableCollision(false);
+            // Optionally set capacity from Def.ChestStorageCapacityUnits here if needed.
+            if (SpawnedChest->StorageComponent)
+            {
+                SpawnedChest->StorageComponent->SetMaxInventorySlots(Def.ChestStorageCapacityUnits);
+            }
         }
     }
 
-    for (const auto& Pair : DiningTablesByLevel)
+    if (Def.DiningActorClass)
     {
-        if (Pair.Value)
-        {
-            Pair.Value->SetActorHiddenInGame(true);
-            Pair.Value->SetActorEnableCollision(false);
-        }
-    }
-
-    // Show only current level actors
-    if (TObjectPtr<AActor>* Workstation = WorkstationsByLevel.Find(Level))
-    {
-        if (*Workstation)
-        {
-            (*Workstation)->SetActorHiddenInGame(false);
-            (*Workstation)->SetActorEnableCollision(true);
-        }
-    }
-
-    if (TObjectPtr<AActor>* Chest = ChestsByLevel.Find(Level))
-    {
-        if (*Chest)
-        {
-            (*Chest)->SetActorHiddenInGame(false);
-            (*Chest)->SetActorEnableCollision(true);
-        }
-    }
-
-    if (TObjectPtr<AActor>* DiningTable = DiningTablesByLevel.Find(Level))
-    {
-        if (*DiningTable)
-        {
-            (*DiningTable)->SetActorHiddenInGame(false);
-            (*DiningTable)->SetActorEnableCollision(true);
-        }
+        SpawnedDining = World->SpawnActor<AActor>(
+            Def.DiningActorClass,
+            WorldDiningTransform);
     }
 }
 
-bool AMiningSiteManager::UpgradeToNextLevel()
+void AMiningSiteManager::UpgradeToNextLevel()
 {
-    if (!HasAuthority()) return false;
-    
-    int32 NextLevel = CurrentLevel + 1;
-    if (NextLevel > LevelConfig->GetMaxLevel())
+    if (!LevelConfig)
     {
-        return false;
+        return;
     }
 
-    SetLevel(NextLevel);
-    return true;
-}
-
-bool AMiningSiteManager::CanUpgrade() const
-{
-    if (!LevelConfig) return false;
-    return CurrentLevel < LevelConfig->GetMaxLevel();
-}
-
-AActor* AMiningSiteManager::GetActiveWorkstation() const
-{
-    if (const TObjectPtr<AActor>* Actor = WorkstationsByLevel.Find(CurrentLevel))
+    const int32 MaxIndex = LevelConfig->Levels.Num() - 1;
+    if (CurrentLevelIndex >= MaxIndex)
     {
-        return *Actor;
+        return; // already at max
     }
-    return nullptr;
-}
 
-AActor* AMiningSiteManager::GetActiveChest() const
-{
-    if (const TObjectPtr<AActor>* Actor = ChestsByLevel.Find(CurrentLevel))
-    {
-        return *Actor;
-    }
-    return nullptr;
-}
+    ++CurrentLevelIndex;
 
-AActor* AMiningSiteManager::GetActiveDiningTable() const
-{
-    if (const TObjectPtr<AActor>* Actor = DiningTablesByLevel.Find(CurrentLevel))
-    {
-        return *Actor;
-    }
-    return nullptr;
-}
-
-void AMiningSiteManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(AMiningSiteManager, CurrentLevel);
+    DestroySpawnedActors();
+    SpawnForCurrentLevel();
 }

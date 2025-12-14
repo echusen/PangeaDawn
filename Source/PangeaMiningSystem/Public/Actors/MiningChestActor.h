@@ -7,6 +7,10 @@
 
 class USmartObjectComponent;
 
+/**
+ * Generic chest that exposes a UACFStorageComponent and Smart Object slot.
+ * Capacity etc. is configured by the manager or via Blueprint.
+ */
 UCLASS(Blueprintable)
 class PANGEAMININGSYSTEM_API AMiningChestActor : public AActor
 {
