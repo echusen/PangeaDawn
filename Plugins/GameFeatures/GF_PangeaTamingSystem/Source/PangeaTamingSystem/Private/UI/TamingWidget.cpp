@@ -2,6 +2,8 @@
 
 
 #include "UI/TamingWidget.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 void UTamingWidget::NativeConstruct()
 {

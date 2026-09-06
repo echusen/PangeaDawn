@@ -30,6 +30,10 @@
 	],
 	"Plugins": [
 		{
+			"Name": "ModularGameplay",
+			"Enabled": true
+		},
+		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,
 			"TargetAllowList": [
@@ -75,15 +79,6 @@
 			"Name": "NarrativeCommonUI",
 			"Enabled": true,
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/f1adaffd049b44cca254832b2beeb1b7"
-		},
-		{
-			"Name": "AgentIntegrationKit",
-			"Enabled": true,
-			"SupportedTargetPlatforms": [
-				"Win64",
-				"Mac",
-				"Linux"
-			]
 		},
 		{
 			"Name": "AbilitySystemGameFeatureActions",

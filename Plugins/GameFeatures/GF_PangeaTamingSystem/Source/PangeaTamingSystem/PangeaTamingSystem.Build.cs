@@ -9,6 +9,6 @@ public class PangeaTamingSystem : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] { "AIFramework" });
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "GameplayAbilities", "GameplayTasks", "AIModule", "AscentTeams", "InventorySystem", "AscentCombatFramework", "UMG", "ActionsSystem", "PangeaCore" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "GameplayAbilities", "GameplayTasks", "AIModule", "AscentTeams", "InventorySystem", "AscentCombatFramework", "UMG", "CommonUI", "ActionsSystem", "PangeaCore" });
 	}
 }

@@ -9,6 +9,7 @@ public class Pangea_DawnEditorTarget : TargetRules
 	{
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
+        IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
 		ExtraModuleNames.Add("Pangea_Dawn");
 		RegisterModulesCreatedByRider();
 	}

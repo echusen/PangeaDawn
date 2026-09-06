@@ -25,6 +25,7 @@
 	"ExplicitlyLoaded": true,
 	"BuiltInInitialFeatureState": "Active",
 	"Plugins": [
+        { "Name": "CommonUI", "Enabled": true },
 		{
 			"Name": "AscentCombatFramework",
 			"Enabled": true

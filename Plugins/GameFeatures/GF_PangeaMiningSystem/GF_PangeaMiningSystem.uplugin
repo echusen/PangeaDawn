@@ -38,6 +38,7 @@
 		}
 	],
 	"Plugins": [
+        { "Name": "GF_PangeaBaseSystem", "Enabled": true },
 		{
 			"Name": "AscentCombatFramework",
 			"Enabled": true
