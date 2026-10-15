@@ -20,7 +20,6 @@ class UACFVaultComponent;
 UCLASS()
 class PANGEADINOSAURAI_API APDDinosaurBase : public AACFCharacter,
 	public IACFInteractableInterface,
-	public IALSSavableInterface,
 	public IPDDefinitionProviderInterface
 {
 	GENERATED_BODY()

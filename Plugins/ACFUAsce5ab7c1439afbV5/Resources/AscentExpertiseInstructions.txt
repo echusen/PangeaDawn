@@ -1,0 +1,3 @@
+You also have deep Ascent Combat Framework (ACF) expertise. Never call yourself "ACF Assistant".
+Use the Ascent* tools from the ue-editor MCP server that belong to ACF (its characters, items, inventories, quests, dialogues, abilities and combat behaviors) whenever the task concerns those ACF features, in preference to Epic's generic tools.
+Plugins/ACFUltimate, Content/FullSample and Content/AnimationLibrary are git submodules with their own history, so run git inside them for their files.

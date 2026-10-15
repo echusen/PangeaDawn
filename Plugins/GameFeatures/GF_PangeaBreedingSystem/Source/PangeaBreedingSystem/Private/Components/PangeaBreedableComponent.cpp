@@ -2,11 +2,11 @@
 
 #include "Components/PangeaBreedableComponent.h"
 
-#include "AdvancedRPGSystem/Public/ARSStatisticsComponent.h"
 #include "ARSFunctionLibrary.h"
 #include "ARSTypes.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "ACFGASStatisticsComponent.h"
 #include "Components/PangeaBreedingFarmComponent.h"
 #include "Definitions/PangeaBreedingFragment.h"
 #include "Definitions/PangeaCreatureDefinition.h"
@@ -44,7 +44,7 @@ void UPangeaBreedableComponent::BeginPlay()
 
     if (!ACFAttributes && GetOwner())
     {
-        ACFAttributes = GetOwner()->FindComponentByClass<UARSStatisticsComponent>();
+        ACFAttributes = GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>();
     }
 
     if (!InheritedStatProfile.IsEmpty())
@@ -297,7 +297,7 @@ void UPangeaBreedableComponent::ApplyInheritedStatProfile()
 
     if (!ACFAttributes && GetOwner())
     {
-        ACFAttributes = GetOwner()->FindComponentByClass<UARSStatisticsComponent>();
+        ACFAttributes = GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>();
     }
 
     UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();

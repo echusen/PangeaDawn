@@ -1,7 +1,6 @@
 #include "Components/PangeaHunterSenseComponent.h"
 
 #include "Actors/ACFCharacter.h"
-#include "ARSStatisticsComponent.h"
 #include "Actors/PangeaHuntClueActor.h"
 #include "Components/ACFCharacterMovementComponent.h"
 #include "Components/PangeaTrackEmitterComponent.h"
@@ -816,7 +815,7 @@ float UPangeaHunterSenseComponent::GetModifiedRevealRadius(const float BaseRevea
 	if (bUseStatModifiedRevealRadius && RevealRadiusStatTag.IsValid())
 	{
 		const AActor* Owner = GetOwner();
-		const UARSStatisticsComponent* StatisticsComponent = Owner ? Owner->FindComponentByClass<UARSStatisticsComponent>() : nullptr;
+		const UACFGASStatisticsComponent* StatisticsComponent = Owner ? Owner->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
 		if (StatisticsComponent)
 		{
 			BonusRadius += StatisticsComponent->GetCurrentValueForStatitstic(RevealRadiusStatTag) * RevealRadiusPerStatPoint;

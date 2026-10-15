@@ -19,6 +19,7 @@ public class Pangea_Dawn : ModuleRules
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
+			"CommonUI"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -31,9 +32,7 @@ public class Pangea_Dawn : ModuleRules
 				"BlueprintGraph",
 				"GraphEditor",
 				"Kismet",
-				"KismetCompiler",
-				"NarrativeQuestEditor",
-				"NarrativeDialogueEditor"
+				"KismetCompiler"
 			});
 		}
 

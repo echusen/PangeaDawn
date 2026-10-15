@@ -9,7 +9,6 @@
 #include "Engine/Engine.h"
 #include "Interfaces/PDDefinitionProviderInterface.h"
 #include "ARSFunctionLibrary.h"
-#include "ARSStatisticsComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 
@@ -471,7 +470,7 @@ EHuntClueType UPangeaTrackEmitterComponent::DetermineClueType(const float Curren
 
 	const AACFCharacter* ACFCharacter = Cast<AACFCharacter>(GetOwner());
 	const UACFCharacterMovementComponent* MovementComponent = ACFCharacter ? ACFCharacter->GetACFCharacterMovementComponent() : nullptr;
-	const UARSStatisticsComponent* StatisticsComponent = GetOwner() ? GetOwner()->FindComponentByClass<UARSStatisticsComponent>() : nullptr;
+	const UACFGASStatisticsComponent* StatisticsComponent = GetOwner() ? GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
 
 	if (StatisticsComponent && HuntSpeciesConfig && HuntSpeciesConfig->bSpawnBloodClues)
 	{

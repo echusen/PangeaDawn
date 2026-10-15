@@ -10,11 +10,11 @@
 #include "Types/BreedingTypes.h"
 #include "PangeaBreedableComponent.generated.h"
 
+class UACFGASStatisticsComponent;
 class UPangeaBreedingFragment;
 class UPangeaGeneticStrategy;
 class UPangeaCreatureDefinition;
 class UAbilitySystemComponent;
-class UARSStatisticsComponent;
 class UPangeaBreedingFarmComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBred, class APangeaEggActor*, Egg, AActor*, OtherParentActor);
@@ -56,7 +56,7 @@ public:
     FGeneticTraitSet GeneticTraits;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    TObjectPtr<UARSStatisticsComponent> ACFAttributes;
+    TObjectPtr<UACFGASStatisticsComponent> ACFAttributes;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Genetics")
     FPangeaInheritedStatProfile InheritedStatProfile;

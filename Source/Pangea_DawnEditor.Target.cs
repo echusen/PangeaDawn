@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 using UnrealBuildTool;
 using System.Collections.Generic;
 
@@ -8,13 +6,19 @@ public class Pangea_DawnEditorTarget : TargetRules
 	public Pangea_DawnEditorTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Editor;
-		DefaultBuildSettings = BuildSettingsVersion.V6;
+		DefaultBuildSettings = BuildSettingsVersion.V7;
+		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
+
 		ExtraModuleNames.Add("Pangea_Dawn");
 		RegisterModulesCreatedByRider();
 	}
 
 	private void RegisterModulesCreatedByRider()
 	{
-		ExtraModuleNames.AddRange(new string[] { "PangeaBaseUpgradeSystem", "PangeaCore" });
+		ExtraModuleNames.AddRange(new string[]
+		{
+			"PangeaBaseUpgradeSystem",
+			"PangeaCore"
+		});
 	}
 }
