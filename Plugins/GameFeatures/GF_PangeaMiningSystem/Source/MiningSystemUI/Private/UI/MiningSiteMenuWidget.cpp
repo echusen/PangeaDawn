@@ -9,6 +9,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Items/ACFItem.h"
 #include "Blueprint/WidgetTree.h"
+#include "UI/MiningUIPresentation.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
@@ -18,6 +19,18 @@ void UMiningSiteMenuWidget::InitializeFromSite(AMiningSiteActor* InSiteActor, AP
 {
 	SiteActor = InSiteActor;
 	InteractingPawn = InInteractingPawn;
+    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+    {
+        Page->OnActivated().RemoveAll(this);
+        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(SiteActor)) { FMiningUIPresentation::Close(this); return; } if (UWorld* World = GetWorld()) World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true); RefreshUI(); });
+        if (UWorld* World = GetWorld()) World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true);
+        Page->OnDeactivated().RemoveAll(this);
+        Page->OnDeactivated().AddWeakLambda(this, [this]()
+        {
+            if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(RefreshTimerHandle);
+        });
+    }
+
 	RefreshUI();
 }
 
@@ -45,7 +58,7 @@ void UMiningSiteMenuWidget::NativeDestruct()
 		World->GetTimerManager().ClearTimer(RefreshTimerHandle);
 	}
 
-	if (SiteActor)
+	if (IsValid(SiteActor))
 	{
 		SiteActor->ClearActiveMenuWidget(this);
 	}
@@ -60,17 +73,14 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 		return;
 	}
 
-	RootBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("RootBorder"));
-	RootBorder->SetPadding(FMargin(18.0f));
-	RootBorder->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.02f, 0.88f));
-	WidgetTree->RootWidget = RootBorder;
+	RootBorder = FMiningUIPresentation::Screen(WidgetTree);
 
 	RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("RootBox"));
-	RootBorder->SetContent(RootBox);
+	FMiningUIPresentation::ScrollContent(WidgetTree, CastChecked<UAUTBorder>(RootBorder), RootBox);
 
 	auto AddText = [this](const TCHAR* Name, int32 FontSize) -> UTextBlock*
 	{
-		UTextBlock* TextBlock = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		UTextBlock* TextBlock = FMiningUIPresentation::Text(WidgetTree, Name, FontSize);
 		TextBlock->SetAutoWrapText(true);
 		FSlateFontInfo FontInfo = TextBlock->GetFont();
 		FontInfo.Size = FontSize;
@@ -85,7 +95,8 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 	auto AddButton = [this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
 	{
 		OutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), ButtonName);
-		OutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TextName);
+        FMiningUIPresentation::Button(OutButton);
+		OutText = FMiningUIPresentation::Text(WidgetTree, TextName);
 		OutText->SetText(Label);
 		OutText->SetJustification(ETextJustify::Center);
 		OutButton->AddChild(OutText);
@@ -95,10 +106,10 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 		}
 	};
 
-	TitleText = AddText(TEXT("TitleText"), 20);
-	HintText = AddText(TEXT("HintText"), 12);
-	StatusText = AddText(TEXT("StatusText"), 14);
-	CostText = AddText(TEXT("CostText"), 12);
+	TitleText = AddText(TEXT("TitleText"), 28);
+	HintText = AddText(TEXT("HintText"), 16);
+	StatusText = AddText(TEXT("StatusText"), 18);
+	CostText = AddText(TEXT("CostText"), 18);
 
 	AddButton(TEXT("UpgradeButton"), TEXT("UpgradeButtonText"), FText::FromString(TEXT("Upgrade")), UpgradeButton, UpgradeButtonText);
 	AddButton(TEXT("SyncProductionButton"), TEXT("SyncProductionButtonText"), FText::FromString(TEXT("Sync Production")), SyncProductionButton, SyncProductionButtonText);
@@ -133,7 +144,7 @@ void UMiningSiteMenuWidget::RefreshUI()
 		return;
 	}
 
-	const UMiningSiteComponent* SiteComponent = SiteActor ? SiteActor->MiningSiteComponent : nullptr;
+	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
 	const int32 CurrentLevel = SiteComponent ? SiteComponent->GetCurrentLevel() : INDEX_NONE;
 
 	TitleText->SetText(FText::Format(
@@ -146,7 +157,7 @@ void UMiningSiteMenuWidget::RefreshUI()
 
 	if (UpgradeButton)
 	{
-		const bool bCanUpgrade = SiteActor && SiteActor->CanUpgradeFromInteraction(InteractingPawn);
+		const bool bCanUpgrade = IsValid(SiteActor) && SiteActor->CanUpgradeFromInteraction(InteractingPawn);
 		UpgradeButton->SetIsEnabled(bCanUpgrade);
 	}
 
@@ -163,7 +174,7 @@ void UMiningSiteMenuWidget::RefreshUI()
 
 FText UMiningSiteMenuWidget::BuildStatusText() const
 {
-	const UMiningSiteComponent* SiteComponent = SiteActor ? SiteActor->MiningSiteComponent : nullptr;
+	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
 	if (!SiteComponent)
 	{
 		return FText::FromString(TEXT("No mining site data."));
@@ -193,7 +204,7 @@ FText UMiningSiteMenuWidget::BuildStatusText() const
 
 FText UMiningSiteMenuWidget::BuildCostText() const
 {
-	const UMiningSiteComponent* SiteComponent = SiteActor ? SiteActor->MiningSiteComponent : nullptr;
+	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
 	if (!SiteComponent)
 	{
 		return FText::GetEmpty();
@@ -231,8 +242,8 @@ FText UMiningSiteMenuWidget::BuildCostText() const
 
 FText UMiningSiteMenuWidget::BuildHintText() const
 {
-	const UMiningSiteComponent* SiteComponent = SiteActor ? SiteActor->MiningSiteComponent : nullptr;
-	if (!SiteActor || !SiteComponent)
+	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
+	if (!IsValid(SiteActor) || !SiteComponent)
 	{
 		return FText::FromString(TEXT("No site selected."));
 	}
@@ -259,7 +270,7 @@ void UMiningSiteMenuWidget::UpdateActionLabels()
 {
 	if (UpgradeButtonText)
 	{
-		const UMiningSiteComponent* SiteComponent = SiteActor ? SiteActor->MiningSiteComponent : nullptr;
+		const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
 		FMiningSiteLevelDefinition NextLevel;
 		if (SiteComponent && SiteComponent->GetNextLevelDefinition(NextLevel))
 		{
@@ -289,23 +300,17 @@ void UMiningSiteMenuWidget::HandleRefreshTick()
 
 void UMiningSiteMenuWidget::CloseMenu()
 {
-	if (SiteActor)
+	if (IsValid(SiteActor))
 	{
 		SiteActor->ClearActiveMenuWidget(this);
 	}
 
-	RemoveFromParent();
-
-	if (APlayerController* PlayerController = Cast<APlayerController>(InteractingPawn ? InteractingPawn->GetController() : nullptr))
-	{
-		PlayerController->bShowMouseCursor = false;
-		PlayerController->SetInputMode(FInputModeGameOnly());
-	}
+	FMiningUIPresentation::Close(this);
 }
 
 void UMiningSiteMenuWidget::OnUpgradeClicked()
 {
-	if (SiteActor)
+	if (IsValid(SiteActor))
 	{
 		SiteActor->ServerPurchaseNextUpgrade(InteractingPawn);
 	}
@@ -315,7 +320,7 @@ void UMiningSiteMenuWidget::OnUpgradeClicked()
 
 void UMiningSiteMenuWidget::OnSyncProductionClicked()
 {
-	if (SiteActor)
+	if (IsValid(SiteActor))
 	{
 		SiteActor->ServerSyncProduction();
 	}
@@ -325,7 +330,7 @@ void UMiningSiteMenuWidget::OnSyncProductionClicked()
 
 void UMiningSiteMenuWidget::OnAdvanceDayClicked()
 {
-	if (SiteActor)
+	if (IsValid(SiteActor))
 	{
 		SiteActor->ServerAdvanceOneSimulatedDay();
 	}

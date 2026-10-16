@@ -1,4 +1,5 @@
 #include "Actors/MiningSiteActor.h"
+#include "Actors/MiningScreenHost.h"
 
 #include "Components/ACFInteractionComponent.h"
 #include "Components/ACFInventoryComponent.h"
@@ -92,6 +93,7 @@ void AMiningSiteActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void AMiningSiteActor::BeginPlay()
 {
 	Super::BeginPlay();
+	if (StatusText) StatusText->SetVisibility(false);
 
 	if (MiningSiteComponent)
 	{
@@ -137,6 +139,7 @@ void AMiningSiteActor::BeginPlay()
 
 void AMiningSiteActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	MiningScreenHost::Close(ActiveMenuWidget.Get());
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PresentationRefreshTimerHandle);

@@ -79,16 +79,17 @@ void APDDinosaurBase::Tick(float DeltaTime)
 
 TArray<UActorComponent*> APDDinosaurBase::GetComponentsToSave_Implementation() const
 {
-	TArray<UActorComponent*> ComponentsToSave;
+	// Preserve ACF's stats, damage state and equipment as well as feature state.
+	TArray<UActorComponent*> ComponentsToSave = Super::GetComponentsToSave_Implementation();
 
 	if (UActorComponent* BreedableComponent = FindComponentByInterface(UPDBreedableInterface::StaticClass()))
 	{
-		ComponentsToSave.Add(BreedableComponent);
+		ComponentsToSave.AddUnique(BreedableComponent);
 	}
 	
 	if (UActorComponent* TamingComponent = FindComponentByInterface(UPDTameableInterface::StaticClass()))
 	{
-		ComponentsToSave.Add(TamingComponent);
+		ComponentsToSave.AddUnique(TamingComponent);
 	}
 
 	return ComponentsToSave;
@@ -201,6 +202,12 @@ void APDDinosaurBase::Brake(float Value)
 
 void APDDinosaurBase::OnLoaded_Implementation()
 {
+	Super::OnLoaded_Implementation();
+	if (IsActorBeingDestroyed())
+	{
+		return;
+	}
+
 	if (UActorComponent* TamingComponent = FindComponentByInterface(UPDTameableInterface::StaticClass()))
 	{
 		IPDTameableInterface* Tameable = Cast<IPDTameableInterface>(TamingComponent);

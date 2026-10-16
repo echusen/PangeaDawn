@@ -4,6 +4,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Blueprint/WidgetTree.h"
+#include "UI/MiningUIPresentation.h"
 #include "Items/ACFItem.h"
 
 void UMiningSettlementStockpileRowWidget::InitializeRow(UMiningSettlementStockpileWidget* InOwnerWidget, TSubclassOf<UACFItem> InItemClass, int32 InCount, bool bInFromPlayerInventory, const FString& InLabel)
@@ -34,9 +35,10 @@ void UMiningSettlementStockpileRowWidget::BuildWidgetTree()
 	}
 
 	TransferButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("TransferButton"));
+    FMiningUIPresentation::Button(TransferButton);
 	WidgetTree->RootWidget = TransferButton;
 
-	TransferButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TransferButtonText"));
+	TransferButtonText = FMiningUIPresentation::Text(WidgetTree, TEXT("TransferButtonText"));
 	TransferButtonText->SetText(FText::FromString(LabelText));
 	TransferButtonText->SetJustification(ETextJustify::Center);
 	TransferButton->AddChild(TransferButtonText);

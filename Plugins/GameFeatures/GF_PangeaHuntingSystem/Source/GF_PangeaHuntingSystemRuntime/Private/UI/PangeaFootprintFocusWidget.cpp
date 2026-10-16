@@ -1,6 +1,7 @@
 #include "UI/PangeaFootprintFocusWidget.h"
 
 #include "Rendering/DrawElements.h"
+#include "AUTUIFunctionLibrary.h"
 
 void UPangeaFootprintFocusWidget::SetFocusState(const bool bInHasTarget, const float InProgress)
 {
@@ -25,6 +26,10 @@ int32 UPangeaFootprintFocusWidget::NativePaint(const FPaintArgs& Args, const FGe
 	}
 
 	const FVector2D Center = RingCenter.IsNearlyZero() ? AllottedGeometry.GetLocalSize() * 0.5f : RingCenter;
+	FAUTBarStyle Theme;
+	const bool bHasTheme = UAUTUIFunctionLibrary::TryGetBarStyle(FGameplayTag::RequestGameplayTag(TEXT("UIStyle.Bar.Stamina")), Theme);
+	const FLinearColor BackTint = bHasTheme ? Theme.BarStyle.BackgroundImage.TintColor.GetSpecifiedColor() : BackgroundColor;
+	const FLinearColor FillTint = bHasTheme ? Theme.BarStyle.FillImage.TintColor.GetSpecifiedColor() : ProgressColor;
 	const int32 ClampedSegmentCount = FMath::Clamp(SegmentCount, 12, 128);
 
 	TArray<FVector2D> BackgroundPoints;
@@ -41,7 +46,7 @@ int32 UPangeaFootprintFocusWidget::NativePaint(const FPaintArgs& Args, const FGe
 		AllottedGeometry.ToPaintGeometry(),
 		BackgroundPoints,
 		ESlateDrawEffect::None,
-		BackgroundColor,
+		BackTint,
 		true,
 		RingThickness);
 
@@ -63,7 +68,7 @@ int32 UPangeaFootprintFocusWidget::NativePaint(const FPaintArgs& Args, const FGe
 			AllottedGeometry.ToPaintGeometry(),
 			ProgressPoints,
 			ESlateDrawEffect::None,
-			ProgressColor,
+			FillTint,
 			true,
 			RingThickness);
 	}

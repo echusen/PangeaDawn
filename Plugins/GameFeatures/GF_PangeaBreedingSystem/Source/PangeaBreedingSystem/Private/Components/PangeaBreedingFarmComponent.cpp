@@ -21,11 +21,18 @@ void UPangeaBreedingFarmComponent::BeginPlay()
 {
     Super::BeginPlay();
 
+    if (!BreedingZone)
+    {
+        if (APangeaBreedingFarmActor* FarmActor = Cast<APangeaBreedingFarmActor>(GetOwner()))
+            BreedingZone = FarmActor->BreedingZone;
+    }
+
     if (BreedingZone)
     {
         UE_LOG(LogTemp, Warning, TEXT("FarmLogic bound to breeding zone: %s"), *BreedingZone->GetName());
-        BreedingZone->OnComponentBeginOverlap.AddDynamic(this, &UPangeaBreedingFarmComponent::OnOverlapBegin);
-        BreedingZone->OnComponentEndOverlap.AddDynamic(this, &UPangeaBreedingFarmComponent::OnOverlapEnd);
+        BreedingZone->OnComponentBeginOverlap.AddUniqueDynamic(this, &UPangeaBreedingFarmComponent::OnOverlapBegin);
+        BreedingZone->OnComponentEndOverlap.AddUniqueDynamic(this, &UPangeaBreedingFarmComponent::OnOverlapEnd);
+        RefreshContainedBreedables();
     }
     else
     {
@@ -35,7 +42,7 @@ void UPangeaBreedingFarmComponent::BeginPlay()
 
 void UPangeaBreedingFarmComponent::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-    UE_LOG(LogTemp, Warning, TEXT("Breedable Entered: %s"), *OtherActor->GetName());
+    if (!IsValid(OtherActor) || OtherActor == GetOwner()) return;
 
     if (UPangeaBreedableComponent* Breedable = OtherActor->FindComponentByClass<UPangeaBreedableComponent>())
     {
@@ -48,6 +55,7 @@ void UPangeaBreedingFarmComponent::OnOverlapBegin(UPrimitiveComponent* Overlappe
 
 void UPangeaBreedingFarmComponent::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
+    if (!IsValid(OtherActor) || (BreedingZone && BreedingZone->IsOverlappingActor(OtherActor))) return;
     if (UPangeaBreedableComponent* Breedable = OtherActor->FindComponentByClass<UPangeaBreedableComponent>())
     {
         ContainedBreedables.Remove(Breedable);
@@ -61,7 +69,7 @@ void UPangeaBreedingFarmComponent::GetBreedablesByGender(TArray<UPangeaBreedable
 
     for (UPangeaBreedableComponent* Breedable : ContainedBreedables)
     {
-        if (!IsValid(Breedable)) continue;
+        if (!IsValid(Breedable) || !UPangeaBreedingLibrary::GetBreedingFragmentFromBreedable(Breedable)) continue;
 
         switch (Breedable->Gender)
         {
@@ -71,11 +79,25 @@ void UPangeaBreedingFarmComponent::GetBreedablesByGender(TArray<UPangeaBreedable
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Farm GetBreedablesByGender: Males=%d, Females=%d"), OutMales.Num(), OutFemales.Num());
+    UE_LOG(LogTemp, Verbose, TEXT("Farm GetBreedablesByGender: Males=%d, Females=%d"), OutMales.Num(), OutFemales.Num());
 }
 
 APangeaEggActor* UPangeaBreedingFarmComponent::TryBreed(UPangeaBreedableComponent* Male, UPangeaBreedableComponent* Female)
 {
+    // Enforce the same rules for every caller, not just the UI. Egg initialization
+    // is authority-only and must never be reached with invalid or stale parents.
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Male) || !IsValid(Female) || Male == Female)
+        return nullptr;
+    RefreshContainedBreedables();
+    if (!ContainedBreedables.Contains(Male) || !ContainedBreedables.Contains(Female) ||
+        Male->Gender != ECreatureGender::Male || Female->Gender != ECreatureGender::Female ||
+        !IPDBreedableInterface::Execute_IsFertile(Male) || !IPDBreedableInterface::Execute_IsFertile(Female))
+        return nullptr;
+    const FParentSnapshot MaleSnapshot = Male->BuildParentSnapshot();
+    const FParentSnapshot FemaleSnapshot = Female->BuildParentSnapshot();
+    if (MaleSnapshot.SpeciesID.IsNone() || MaleSnapshot.SpeciesID != FemaleSnapshot.SpeciesID)
+        return nullptr;
+
     UPangeaCreatureDefinition* CreatureDefinition = UPangeaBreedingLibrary::GetCreatureDefinitionFromBreedable(Female);
     const UPangeaBreedingFragment* BreedingFragment = UPangeaBreedingLibrary::GetBreedingFragmentFromBreedable(Female);
 
@@ -99,21 +121,20 @@ APangeaEggActor* UPangeaBreedingFarmComponent::TryBreed(UPangeaBreedableComponen
 
 void UPangeaBreedingFarmComponent::RefreshContainedBreedables()
 {
-    APangeaBreedingFarmActor* FarmActor = Cast<APangeaBreedingFarmActor>(GetOwner());
-    if (!FarmActor->BreedingZone)
+    if (!BreedingZone)
     {
-        UE_LOG(LogTemp, Warning, TEXT("RefreshContainedBreedables - no valid collision component on %s"), *GetOwner()->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("RefreshContainedBreedables - no valid collision component on %s"), *GetNameSafe(GetOwner()));
         return;
     }
 
     TArray<AActor*> OverlappingActors;
-    FarmActor->BreedingZone->GetOverlappingActors(OverlappingActors, AActor::StaticClass());
+    BreedingZone->GetOverlappingActors(OverlappingActors, AActor::StaticClass());
 
     int32 AddedCount = 0;
 
-    ContainedBreedables.RemoveAll([](const UPangeaBreedableComponent* Breedable)
+    ContainedBreedables.RemoveAll([&OverlappingActors](const UPangeaBreedableComponent* Breedable)
     {
-        return !IsValid(Breedable);
+        return !IsValid(Breedable) || !OverlappingActors.Contains(Breedable->GetOwner());
     });
 
     for (AActor* Actor : OverlappingActors)

@@ -173,7 +173,7 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 			SmartObjectSubsystem->RegisterSmartObject(SmartObjectComponent);
 		}
 
-		SmartObjectComponent->SetSmartObjectEnabled(bShouldEnable);
+		SmartObjectComponent->K2_SetSmartObjectEnabled(bShouldEnable);
 	};
 
 	auto EnsureIndexedComponents =
@@ -217,7 +217,7 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 		{
 			if (WorkerSmartObjectComponents[Index])
 			{
-				WorkerSmartObjectComponents[Index]->SetSmartObjectEnabled(false);
+				WorkerSmartObjectComponents[Index]->K2_SetSmartObjectEnabled(false);
 			}
 			continue;
 		}
@@ -236,7 +236,7 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 		{
 			if (GuardSmartObjectComponents[Index])
 			{
-				GuardSmartObjectComponents[Index]->SetSmartObjectEnabled(false);
+				GuardSmartObjectComponents[Index]->K2_SetSmartObjectEnabled(false);
 			}
 			continue;
 		}

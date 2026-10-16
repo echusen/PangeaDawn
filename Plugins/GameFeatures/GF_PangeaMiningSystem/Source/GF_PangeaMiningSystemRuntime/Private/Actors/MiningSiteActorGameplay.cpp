@@ -8,6 +8,7 @@
 #include "DataAssets/MiningSiteDefinition.h"
 #include "Items/ACFItem.h"
 #include "Blueprint/UserWidget.h"
+#include "Actors/MiningScreenHost.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
@@ -121,7 +122,7 @@ void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 
 	if (ActiveMenuWidget.IsValid())
 	{
-		ActiveMenuWidget.Get()->RemoveFromParent();
+		MiningScreenHost::Close(ActiveMenuWidget.Get());
 	}
 	ActiveMenuWidget = nullptr;
 
@@ -131,24 +132,7 @@ void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 		return;
 	}
 
-	TSubclassOf<UUserWidget> WidgetClass = MiningSiteMenuClass;
-	if (MiningSiteComponent && MiningSiteComponent->SiteDefinition && !MiningSiteComponent->SiteDefinition->SiteMenuWidgetClass.IsNull())
-	{
-		if (UClass* DefinitionWidgetClass = MiningSiteComponent->SiteDefinition->SiteMenuWidgetClass.LoadSynchronous())
-		{
-			WidgetClass = DefinitionWidgetClass;
-		}
-	}
-	if (!WidgetClass)
-	{
-		WidgetClass = LoadClass<UUserWidget>(nullptr, TEXT("/Script/MiningSystemUI.MiningSiteMenuWidget"));
-	}
-	if (!WidgetClass)
-	{
-		return;
-	}
-
-	ActiveMenuWidget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
+	ActiveMenuWidget = MiningScreenHost::Open(PlayerController, TEXT("UI.Widget.Pangea.MiningSite"));
 	if (!ActiveMenuWidget.IsValid())
 	{
 		return;
@@ -166,9 +150,7 @@ void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 		ActiveMenuWidget.Get()->ProcessEvent(InitializeFunction, &Params);
 	}
 
-	ActiveMenuWidget.Get()->AddToViewport();
-	PlayerController->bShowMouseCursor = true;
-	PlayerController->SetInputMode(FInputModeUIOnly());
+
 }
 
 void AMiningSiteActor::ClearActiveMenuWidget(UUserWidget* Widget)

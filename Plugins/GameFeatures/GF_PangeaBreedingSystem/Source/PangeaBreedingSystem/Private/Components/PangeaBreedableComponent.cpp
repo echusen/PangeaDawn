@@ -6,6 +6,7 @@
 #include "ARSTypes.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Actors/ACFCharacter.h"
 #include "ACFGASStatisticsComponent.h"
 #include "Components/PangeaBreedingFarmComponent.h"
 #include "Definitions/PangeaBreedingFragment.h"
@@ -20,8 +21,6 @@ UPangeaBreedableComponent::UPangeaBreedableComponent()
 
 bool UPangeaBreedableComponent::IsFertile_Implementation() const
 {
-    UE_LOG(LogTemp, Warning, TEXT("%s fertility check - bIsFertile=%d, bIsOnCooldown=%d, Remaining=%.1f"),
-        *GetOwner()->GetName(), bIsFertile, bIsOnFertilityCooldown, FertilityCooldownRemaining);
     return !bIsOnFertilityCooldown && bIsFertile;
 }
 
@@ -41,6 +40,11 @@ void UPangeaBreedableComponent::BeginPlay()
     Super::BeginPlay();
 
     AssignGenderFromDefinition(false);
+
+    // Injected components can begin before ACF finishes initializing GAS attributes.
+    // Reapply the saved inherited modifier after the character-data initialization.
+    if (AACFCharacter* Character = Cast<AACFCharacter>(GetOwner()))
+        Character->OnCharacterFullyInitialized.AddUniqueDynamic(this, &UPangeaBreedableComponent::ApplyInheritedStatProfile);
 
     if (!ACFAttributes && GetOwner())
     {
@@ -151,8 +155,9 @@ void UPangeaBreedableComponent::EndFertilityCooldown()
 {
     bIsOnFertilityCooldown = false;
     FertilityCooldownRemaining = 0.0f;
+    GetWorld()->GetTimerManager().ClearTimer(FertilityCooldownTimerHandle);
     GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
-    OnFertilityStateChanged.Broadcast(true);
+    OnFertilityStateChanged.Broadcast(bIsFertile);
 
     UE_LOG(LogTemp, Warning, TEXT("%s: fertility cooldown ended"), *GetOwner()->GetName());
 }
@@ -178,6 +183,18 @@ FParentSnapshot UPangeaBreedableComponent::BuildParentSnapshot() const
         return Snapshot;
     }
 
+    // GAS inheritance does not depend on a skeletal mesh or a material slot.
+    for (const FPangeaInheritedStatRule& Rule : BreedingFragment->InheritedStatRules)
+    {
+        const float Value = GetInheritedSourceValue(Rule.StatType, Rule.StatTag);
+        switch (Rule.StatType)
+        {
+        case EPangeaInheritedStatType::Statistic: Snapshot.InheritedStatistics.Add(Rule.StatTag, Value); break;
+        case EPangeaInheritedStatType::PrimaryAttribute: Snapshot.InheritedPrimaryAttributes.Add(Rule.StatTag, Value); break;
+        case EPangeaInheritedStatType::Attribute: Snapshot.InheritedAttributes.Add(Rule.StatTag, Value); break;
+        }
+    }
+
     USkeletalMeshComponent* Mesh = Owner->FindComponentByClass<USkeletalMeshComponent>();
     if (!Mesh)
     {
@@ -185,7 +202,7 @@ FParentSnapshot UPangeaBreedableComponent::BuildParentSnapshot() const
     }
 
     const int32 SlotIndex = BreedingFragment->InheritanceMaterialSlot;
-    if (SlotIndex >= Mesh->GetNumMaterials())
+    if (SlotIndex < 0 || SlotIndex >= Mesh->GetNumMaterials())
     {
         UE_LOG(LogTemp, Warning, TEXT("%s: Invalid slot index %d for species %s"),
             *Owner->GetName(), SlotIndex, *GetNameSafe(BreedingFragment));
@@ -225,35 +242,13 @@ FParentSnapshot UPangeaBreedableComponent::BuildParentSnapshot() const
         }
     }
 
-    if (ACFAttributes)
-    {
-        for (const FPangeaInheritedStatRule& Rule : BreedingFragment->InheritedStatRules)
-        {
-            const float Value = GetInheritedSourceValue(Rule.StatType, Rule.StatTag);
-
-            switch (Rule.StatType)
-            {
-            case EPangeaInheritedStatType::Statistic:
-                Snapshot.InheritedStatistics.Add(Rule.StatTag, Value);
-                break;
-
-            case EPangeaInheritedStatType::PrimaryAttribute:
-                Snapshot.InheritedPrimaryAttributes.Add(Rule.StatTag, Value);
-                break;
-
-            case EPangeaInheritedStatType::Attribute:
-                Snapshot.InheritedAttributes.Add(Rule.StatTag, Value);
-                break;
-            }
-        }
-    }
-
     return Snapshot;
 }
 
 APangeaEggActor* UPangeaBreedableComponent::BreedWith(UPangeaBreedableComponent* OtherParent, UPangeaBreedingFarmComponent* Farm)
 {
-    if (!OtherParent || !Farm || !bIsFertile || !OtherParent->bIsFertile)
+    if (!IsValid(OtherParent) || !IsValid(Farm) || OtherParent == this ||
+        !IPDBreedableInterface::Execute_IsFertile(this) || !IPDBreedableInterface::Execute_IsFertile(OtherParent))
     {
         return nullptr;
     }
@@ -265,7 +260,8 @@ APangeaEggActor* UPangeaBreedableComponent::BreedWith(UPangeaBreedableComponent*
         return nullptr;
     }
 
-    APangeaEggActor* Egg = Farm->TryBreed(this, OtherParent);
+    APangeaEggActor* Egg = Gender == ECreatureGender::Male
+        ? Farm->TryBreed(this, OtherParent) : Farm->TryBreed(OtherParent, this);
     if (Egg)
     {
         OnBred.Broadcast(Egg, OtherParent->GetOwner());
@@ -366,7 +362,7 @@ TMap<FName, FLinearColor> UPangeaBreedableComponent::CollectMaterialGenetics() c
     }
 
     const int32 SlotIndex = BreedingFragment->InheritanceMaterialSlot;
-    if (SlotIndex >= Mesh->GetNumMaterials())
+    if (SlotIndex < 0 || SlotIndex >= Mesh->GetNumMaterials())
     {
         return Out;
     }

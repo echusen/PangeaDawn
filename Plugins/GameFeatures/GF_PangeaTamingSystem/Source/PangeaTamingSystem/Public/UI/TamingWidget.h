@@ -30,6 +30,9 @@ public:
 	FOnTamingMinigameResult OnResult;
 
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+	virtual void NativeOnDeactivated() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UFUNCTION(BlueprintCallable, Category="Taming")
 	void OnPressedE();
@@ -38,5 +41,10 @@ protected:
 	FTimerHandle TimerHandle;
 
 	void OnTimeExpired();
+
+private:
+	friend class UPangeaTamingComponent;
+	// Native initialization detail: called after runtime duration and result binding.
+	void StartCountdown(float InDuration);
 
 };

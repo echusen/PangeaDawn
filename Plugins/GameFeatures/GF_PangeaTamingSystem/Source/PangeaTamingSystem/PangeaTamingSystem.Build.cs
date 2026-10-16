@@ -6,7 +6,7 @@ public class PangeaTamingSystem : ModuleRules
 {
 	public PangeaTamingSystem(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PrivateDependencyModuleNames.AddRange(new string[] { "AIFramework" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AIFramework", "AscentUINavigationSystem" });
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		// TamingWidget publicly inherits from ACFHUDUserWidget, which derives from CommonUI.

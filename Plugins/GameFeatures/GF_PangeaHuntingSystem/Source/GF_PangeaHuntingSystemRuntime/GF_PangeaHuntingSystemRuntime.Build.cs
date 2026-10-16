@@ -25,7 +25,7 @@ public class GF_PangeaHuntingSystemRuntime : ModuleRules
 				"AdvancedRPGSystem",
 				"UMG",
 				"Slate",
-				"SlateCore"
+				"SlateCore", "AscentUINavigationSystem", "AscentUITools", "CommonUI"
 			});
 	}
 }

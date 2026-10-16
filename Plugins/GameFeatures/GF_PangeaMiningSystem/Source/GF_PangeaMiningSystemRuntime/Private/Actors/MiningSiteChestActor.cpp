@@ -8,6 +8,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "Blueprint/UserWidget.h"
+#include "Actors/MiningScreenHost.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Items/ACFItem.h"
@@ -58,6 +59,7 @@ AMiningSiteChestActor::AMiningSiteChestActor()
 void AMiningSiteChestActor::BeginPlay()
 {
 	Super::BeginPlay();
+	if (StatusText) StatusText->SetVisibility(false);
 
 	UE_LOG(LogPangeaMiningSiteChest, Log, TEXT("Mining chest BeginPlay. Chest=%s World=%s Location=%s Owner=%s"),
 		*GetNameSafe(this),
@@ -79,6 +81,7 @@ void AMiningSiteChestActor::BeginPlay()
 
 void AMiningSiteChestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	MiningScreenHost::Close(ActiveChestWidget.Get());
 	UE_LOG(LogPangeaMiningSiteChest, Warning, TEXT("Mining chest EndPlay. Chest=%s World=%s Location=%s Owner=%s Reason=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(GetWorld()),
@@ -107,7 +110,7 @@ void AMiningSiteChestActor::OpenChestMenu(APawn* InteractingPawn)
 
 	if (ActiveChestWidget.IsValid())
 	{
-		ActiveChestWidget.Get()->RemoveFromParent();
+		MiningScreenHost::Close(ActiveChestWidget.Get());
 	}
 	ActiveChestWidget = nullptr;
 
@@ -117,17 +120,7 @@ void AMiningSiteChestActor::OpenChestMenu(APawn* InteractingPawn)
 		return;
 	}
 
-	TSubclassOf<UUserWidget> WidgetClass = ChestWidgetClass;
-	if (!WidgetClass)
-	{
-		WidgetClass = LoadClass<UUserWidget>(nullptr, TEXT("/Script/MiningSystemUI.MiningSiteChestWidget"));
-	}
-	if (!WidgetClass)
-	{
-		return;
-	}
-
-	ActiveChestWidget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
+	ActiveChestWidget = MiningScreenHost::Open(PlayerController, TEXT("UI.Widget.Pangea.MiningChest"));
 	if (!ActiveChestWidget.IsValid())
 	{
 		return;
@@ -145,9 +138,7 @@ void AMiningSiteChestActor::OpenChestMenu(APawn* InteractingPawn)
 		ActiveChestWidget.Get()->ProcessEvent(InitializeFunction, &Params);
 	}
 
-	ActiveChestWidget.Get()->AddToViewport();
-	PlayerController->bShowMouseCursor = true;
-	PlayerController->SetInputMode(FInputModeUIOnly());
+
 }
 
 void AMiningSiteChestActor::ClearActiveChestWidget(UUserWidget* Widget)
@@ -217,6 +208,7 @@ bool AMiningSiteChestActor::CanBeInteracted_Implementation(APawn* Pawn)
 
 void AMiningSiteChestActor::UpdateStatusText()
 {
+	MiningScreenHost::Refresh(ActiveChestWidget.Get(), this, TEXT("InitializeFromChest"));
 	if (!StatusText || !StorageComponent)
 	{
 		return;

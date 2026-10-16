@@ -5,6 +5,11 @@ public class MiningSystemUI : ModuleRules
     public MiningSystemUI(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.Add("UnrealEd"); // Editor-only latent PIE smoke tests.
+            PrivateDependencyModuleNames.Add("PangeaBaseUpgradeSystem"); // Village-to-mine interaction regression.
+        }
 
         PublicDependencyModuleNames.AddRange(
             new string[]
@@ -24,6 +29,10 @@ public class MiningSystemUI : ModuleRules
             {
                 "Slate",
                 "SlateCore",
+                "AscentUINavigationSystem",
+                "CommonUI",
+                "AscentUITools",
+                "GameplayTags",
             }
         );
 

@@ -1,6 +1,7 @@
 #include "Actors/MiningSettlementStockpileActor.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Actors/MiningScreenHost.h"
 #include "Components/ACFInteractionComponent.h"
 #include "Components/ACFInventoryComponent.h"
 #include "Components/ACFStorageComponent.h"
@@ -60,6 +61,7 @@ AMiningSettlementStockpileActor::AMiningSettlementStockpileActor()
 void AMiningSettlementStockpileActor::BeginPlay()
 {
 	Super::BeginPlay();
+	if (StockpileLabel) StockpileLabel->SetVisibility(false);
 
 	InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleInteractionBegin);
 	InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HandleInteractionEnd);
@@ -90,6 +92,7 @@ void AMiningSettlementStockpileActor::BeginPlay()
 
 void AMiningSettlementStockpileActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	MiningScreenHost::Close(ActiveStockpileWidget.Get());
 	for (const TWeakObjectPtr<UACFInteractionComponent>& InteractionComponent : RegisteredInteractionComponents)
 	{
 		if (InteractionComponent.IsValid())
@@ -134,7 +137,7 @@ void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 
 	if (ActiveStockpileWidget.IsValid())
 	{
-		ActiveStockpileWidget.Get()->RemoveFromParent();
+		MiningScreenHost::Close(ActiveStockpileWidget.Get());
 	}
 	ActiveStockpileWidget = nullptr;
 
@@ -144,17 +147,7 @@ void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 		return;
 	}
 
-	TSubclassOf<UUserWidget> WidgetClass = StockpileWidgetClass;
-	if (!WidgetClass)
-	{
-		WidgetClass = LoadClass<UUserWidget>(nullptr, TEXT("/Script/MiningSystemUI.MiningSettlementStockpileWidget"));
-	}
-	if (!WidgetClass)
-	{
-		return;
-	}
-
-	ActiveStockpileWidget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
+	ActiveStockpileWidget = MiningScreenHost::Open(PlayerController, TEXT("UI.Widget.Pangea.Stockpile"));
 	if (!ActiveStockpileWidget.IsValid())
 	{
 		return;
@@ -172,9 +165,7 @@ void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 		ActiveStockpileWidget.Get()->ProcessEvent(InitializeFunction, &Params);
 	}
 
-	ActiveStockpileWidget.Get()->AddToViewport();
-	PlayerController->bShowMouseCursor = true;
-	PlayerController->SetInputMode(FInputModeUIOnly());
+
 }
 
 void AMiningSettlementStockpileActor::ClearActiveStockpileWidget(UUserWidget* Widget)
@@ -306,6 +297,7 @@ bool AMiningSettlementStockpileActor::CanBeInteracted_Implementation(APawn* Pawn
 
 void AMiningSettlementStockpileActor::UpdateStatusText()
 {
+	MiningScreenHost::Refresh(ActiveStockpileWidget.Get(), this, TEXT("InitializeFromStockpile"));
 	if (!StockpileLabel || !StorageComponent)
 	{
 		return;

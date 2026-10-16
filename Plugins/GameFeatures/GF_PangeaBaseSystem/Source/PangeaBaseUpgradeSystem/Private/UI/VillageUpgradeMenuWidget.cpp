@@ -1,4 +1,5 @@
-﻿#include "UI/VillageUpgradeMenuWidget.h"
+#include "UI/VillageUpgradeMenuWidget.h"
+#include "ANSNavPageWidget.h"
 
 #include "Actors/VillageBase.h"
 #include "Components/UpgradeSystemComponent.h"
@@ -17,10 +18,10 @@ void UVillageUpgradeMenuWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	
-	UE_LOG(LogTemp, Error, TEXT("UpgradeMenu: NativeOnInitialized FIRED"));
+	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: NativeOnInitialized FIRED"));
 
-	UE_LOG(LogTemp, Error, TEXT("UpgradeMenu: Button ptr = %s"), *GetNameSafe(UpgradeButton));
-	UE_LOG(LogTemp, Error, TEXT("UpgradeMenu: ReqScroll ptr = %s"), *GetNameSafe(RequirementsScroll));
+	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: Button ptr = %s"), *GetNameSafe(UpgradeButton));
+	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: ReqScroll ptr = %s"), *GetNameSafe(RequirementsScroll));
 
 
 	if (UpgradeButton)
@@ -37,6 +38,19 @@ void UVillageUpgradeMenuWidget::InitializeFromVillage(AVillageBase* InVillage, A
 	
 	VillageActor = InVillage;
 	InteractingPawn = InInteractingPawn;
+	if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+	{
+		Page->OnActivated().RemoveAll(this);
+		Page->OnActivated().AddWeakLambda(this, [this]()
+		{
+			if (!IsValid(VillageActor))
+			{
+				if (UANSNavPageWidget* Host = GetTypedOuter<UANSNavPageWidget>()) Host->RemoveSelf();
+				return;
+			}
+			RefreshUI();
+		});
+	}
 
 	RefreshUI();
 }
@@ -251,20 +265,13 @@ void UVillageUpgradeMenuWidget::RefreshUI()
 void UVillageUpgradeMenuWidget::OnUpgradeButtonClicked()
 {
 	
-    if (!VillageActor || !InteractingPawn)
+    if (!IsValid(VillageActor) || !IsValid(InteractingPawn))
         return;
 
     const bool bSuccess = VillageActor->UpgradeBase(InteractingPawn);
 
     if (bSuccess)
     {
-        // Auto-close UI
-        RemoveFromParent();
-
-        if (APlayerController* PC = Cast<APlayerController>(InteractingPawn->GetController()))
-        {
-            PC->bShowMouseCursor = false;
-            PC->SetInputMode(FInputModeGameOnly());
-        }
+        if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>()) Page->RemoveSelf();
     }
 }

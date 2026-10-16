@@ -8,7 +8,10 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
+#include "UI/MiningUIPresentation.h"
 #include "GameFramework/PlayerController.h"
 #include "Items/ACFItem.h"
 
@@ -16,6 +19,17 @@ void UMiningSettlementStockpileWidget::InitializeFromStockpile(AMiningSettlement
 {
 	StockpileActor = InStockpileActor;
 	InteractingPawn = InInteractingPawn;
+    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+    {
+        Page->OnActivated().RemoveAll(this);
+        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(StockpileActor)) { FMiningUIPresentation::Close(this); return; }  RefreshUI(); });
+
+        Page->OnDeactivated().RemoveAll(this);
+        Page->OnDeactivated().AddWeakLambda(this, [this]()
+        {
+        });
+    }
+
 	RefreshUI();
 }
 
@@ -34,11 +48,11 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 	}
 
 	RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("RootBox"));
-	WidgetTree->RootWidget = RootBox;
+	FMiningUIPresentation::ScrollContent(WidgetTree, FMiningUIPresentation::Screen(WidgetTree), RootBox);
 
 	auto AddText = [this](const TCHAR* Name, int32 FontSize) -> UTextBlock*
 	{
-		UTextBlock* TextBlock = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		UTextBlock* TextBlock = FMiningUIPresentation::Text(WidgetTree, Name, FontSize);
 		TextBlock->SetAutoWrapText(true);
 		FSlateFontInfo FontInfo = TextBlock->GetFont();
 		FontInfo.Size = FontSize;
@@ -60,15 +74,39 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 		return Box;
 	};
 
-	TitleText = AddText(TEXT("TitleText"), 20);
-	StatusText = AddText(TEXT("StatusText"), 14);
+	TitleText = AddText(TEXT("TitleText"), 28);
+	StatusText = AddText(TEXT("StatusText"), 18);
 	PlayerInventoryTitleText = AddText(TEXT("PlayerInventoryTitleText"), 16);
 	PlayerItemsBox = AddBox(TEXT("PlayerItemsBox"));
 	StockpileInventoryTitleText = AddText(TEXT("StockpileInventoryTitleText"), 16);
 	StockpileItemsBox = AddBox(TEXT("StockpileItemsBox"));
 
+	// Keep deposit and withdrawal choices side by side, rather than pushing
+	// the stockpile below a potentially long player inventory.
+	UHorizontalBox* Inventories = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("Inventories"));
+	RootBox->AddChildToVerticalBox(Inventories);
+	auto AddInventoryColumn = [this, Inventories](const TCHAR* Name, UTextBlock* Heading, UVerticalBox* Items)
+	{
+		UVerticalBox* Column = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), Name);
+		UHorizontalBoxSlot* ColumnSlot = Inventories->AddChildToHorizontalBox(Column);
+		ColumnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		ColumnSlot->SetPadding(FMargin(8.f));
+		Heading->RemoveFromParent();
+		Column->AddChildToVerticalBox(Heading)->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+		Items->RemoveFromParent();
+		USizeBox* ListBounds = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		ListBounds->SetHeightOverride(340.f);
+		UScrollBox* ListScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+		ListBounds->SetContent(ListScroll);
+		ListScroll->AddChild(Items);
+		Column->AddChildToVerticalBox(ListBounds);
+	};
+	AddInventoryColumn(TEXT("PlayerInventoryColumn"), PlayerInventoryTitleText, PlayerItemsBox);
+	AddInventoryColumn(TEXT("StockpileColumn"), StockpileInventoryTitleText, StockpileItemsBox);
+
 	CloseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CloseButton"));
-	CloseButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CloseButtonText"));
+    FMiningUIPresentation::Button(CloseButton);
+	CloseButtonText = FMiningUIPresentation::Text(WidgetTree, TEXT("CloseButtonText"));
 	CloseButtonText->SetText(FText::FromString(TEXT("Close")));
 	CloseButtonText->SetJustification(ETextJustify::Center);
 	CloseButton->AddChild(CloseButtonText);
@@ -103,7 +141,7 @@ void UMiningSettlementStockpileWidget::RefreshUI()
 		RebuildSection(PlayerItemsBox, InventoryComponent->GetInventory(), true);
 	}
 
-	if (StockpileActor && StockpileActor->StorageComponent)
+	if (IsValid(StockpileActor) && StockpileActor->StorageComponent)
 	{
 		RebuildSection(StockpileItemsBox, StockpileActor->StorageComponent->GetInventory(), false);
 	}
@@ -118,7 +156,7 @@ void UMiningSettlementStockpileWidget::RebuildSection(UVerticalBox* Container, c
 
 	if (Items.IsEmpty())
 	{
-		UTextBlock* EmptyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), bFromPlayerInventory ? TEXT("EmptyPlayerText") : TEXT("EmptyStockpileText"));
+		UTextBlock* EmptyText = FMiningUIPresentation::Text(WidgetTree, bFromPlayerInventory ? TEXT("EmptyPlayerText") : TEXT("EmptyStockpileText"));
 		EmptyText->SetText(FText::FromString(TEXT("Empty")));
 		if (UVerticalBoxSlot* VerticalBoxSlot = Container->AddChildToVerticalBox(EmptyText))
 		{
@@ -155,7 +193,7 @@ void UMiningSettlementStockpileWidget::RebuildSection(UVerticalBox* Container, c
 
 FText UMiningSettlementStockpileWidget::BuildStatusText() const
 {
-	if (!StockpileActor || !StockpileActor->StorageComponent)
+	if (!IsValid(StockpileActor) || !StockpileActor->StorageComponent)
 	{
 		return FText::FromString(TEXT("No stockpile storage."));
 	}
@@ -171,23 +209,17 @@ FText UMiningSettlementStockpileWidget::BuildStatusText() const
 
 void UMiningSettlementStockpileWidget::CloseMenu()
 {
-	if (StockpileActor)
+	if (IsValid(StockpileActor))
 	{
 		StockpileActor->ClearActiveStockpileWidget(this);
 	}
 
-	RemoveFromParent();
-
-	if (APlayerController* PlayerController = Cast<APlayerController>(InteractingPawn ? InteractingPawn->GetController() : nullptr))
-	{
-		PlayerController->bShowMouseCursor = false;
-		PlayerController->SetInputMode(FInputModeGameOnly());
-	}
+	FMiningUIPresentation::Close(this);
 }
 
 void UMiningSettlementStockpileWidget::HandleTransferRequest(TSubclassOf<UACFItem> ItemClass, int32 Count, bool bFromPlayerInventory)
 {
-	if (!StockpileActor || !InteractingPawn || !ItemClass || Count <= 0)
+	if (!IsValid(StockpileActor) || !InteractingPawn || !ItemClass || Count <= 0)
 	{
 		return;
 	}

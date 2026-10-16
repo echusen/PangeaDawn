@@ -1,4 +1,4 @@
-﻿using UnrealBuildTool;
+using UnrealBuildTool;
 
 public class PangeaBaseUpgradeSystem : ModuleRules
 {
@@ -24,6 +24,8 @@ public class PangeaBaseUpgradeSystem : ModuleRules
             {
                 "Slate",
                 "SlateCore",
+                "AscentUINavigationSystem",
+                "CommonUI",
                 "GameplayAbilities",
                 "GameplayTasks",
                 "AIModule",

@@ -5,6 +5,7 @@
 
 #include "AQSQuestManagerComponent.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Controller.h"
 
 bool UReq_QuestCompleted::IsRequirementMetForContext(const FBaseUpgradeContext& Context) const
 {
@@ -17,7 +18,12 @@ bool UReq_QuestCompleted::IsRequirementMet_Implementation(UObject* ContextObject
 	if (!Pawn)
 		return false;
 
-	UAQSQuestManagerComponent* QuestManager = Pawn->FindComponentByClass<UAQSQuestManagerComponent>();
+	// ACF Ultimate keeps personal quests on the owning controller, not the pawn.
+	// Never resolve player index 0 here: requirements must use the interacting player.
+	UAQSQuestManagerComponent* QuestManager = Pawn->GetController()
+		? Pawn->GetController()->FindComponentByClass<UAQSQuestManagerComponent>() : nullptr;
+	if (!QuestManager)
+		QuestManager = Pawn->FindComponentByClass<UAQSQuestManagerComponent>();
 	if (!QuestManager)
 		return false;
 

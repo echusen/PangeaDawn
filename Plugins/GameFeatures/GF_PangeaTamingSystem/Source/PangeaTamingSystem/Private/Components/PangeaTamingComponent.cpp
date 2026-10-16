@@ -2,6 +2,10 @@
 
 
 #include "Components/PangeaTamingComponent.h"
+#include "ANSUIPlayerSubsystem.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "CommonActivatableWidget.h"
+#include "Engine/GameInstance.h"
 
 #include "Actors/ACFCharacter.h"
 #include "DataAssets/TameSpeciesConfig.h"
@@ -12,6 +16,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/ACFCompanionGroupAIComponent.h"
 #include "Components/ACFInteractionComponent.h"
+#include "Components/ACFInventoryComponent.h"
 #include "Components/ACFTeamComponent.h"
 #include "Game/ACFFunctionLibrary.h"
 #include "Game/ACFPlayerController.h"
@@ -30,10 +35,8 @@ void UPangeaTamingComponent::BeginPlay()
 	ResolveConfigFromDefinition();
 	ResolveConfigFromOwnerClass();
 
+	OnTameStateChanged.AddUniqueDynamic(this, &UPangeaTamingComponent::HandleTameStateChanged);
 	InitializeStartupTameState();
-
-	//bind event
-	OnTameStateChanged.AddDynamic(this, &UPangeaTamingComponent::HandleTameStateChanged);
 }
 
 void UPangeaTamingComponent::ResolveConfigFromDefinition()
@@ -59,6 +62,19 @@ void UPangeaTamingComponent::ResolveConfigFromDefinition()
 	{
 		TameSpeciesConfig = TamingFragment->TameSpeciesConfig;
 	}
+}
+
+void UPangeaTamingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ClearTameTags();
+	if (UTamingWidget* Widget = Cast<UTamingWidget>(ActiveMinigameWidget))
+	{
+		Widget->OnResult.RemoveDynamic(this, &UPangeaTamingComponent::OnMinigameResult);
+		if (GetWorld() && GetWorld()->GetGameInstance())
+            if (UANSUIPlayerSubsystem* UI = GetWorld()->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>()) UI->RemoveInGameWidget(Widget, false, false);
+	}
+	ActiveMinigameWidget = nullptr;
+	Super::EndPlay(EndPlayReason);
 }
 
 void UPangeaTamingComponent::ResolveConfigFromOwnerClass()
@@ -117,6 +133,8 @@ bool UPangeaTamingComponent::HasRequiredStats(AActor* Instigator) const
 
 bool UPangeaTamingComponent::HasRequiredItem(AActor* Instigator) const
 {
+	if (!IsValid(Instigator)) return false;
+
 	if (!TameSpeciesConfig || !TameSpeciesConfig->RequiredTamingItem)
 		return true;
 
@@ -127,6 +145,11 @@ bool UPangeaTamingComponent::HasRequiredItem(AActor* Instigator) const
 
 bool UPangeaTamingComponent::CheckTamePrerequisites(AActor* Instigator) const
 {
+	if (!IsValid(Instigator) || !CanBeTamed() || TamedState == ETameState::Tamed)
+		return false;
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Instigator);
+	if (ASC && TameSpeciesConfig->FailTag.IsValid() && ASC->HasMatchingGameplayTag(TameSpeciesConfig->FailTag))
+		return false;
 	return HasRequiredItem(Instigator) && HasRequiredStats(Instigator);
 }
 
@@ -172,14 +195,12 @@ void UPangeaTamingComponent::InitializeHostile()
 
 void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 {
-	if (!TameSpeciesConfig) return;
-	CachedInstigator = Instigator;
-
-	if (!CheckTamePrerequisites(Instigator))
+	if (!CheckTamePrerequisites(Instigator) || IsValid(ActiveMinigameWidget)) return;
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Instigator))
 	{
-		OnTameResolved(false, ETamedRole::None);
-		return;
+		if (TameSpeciesConfig->InProgressTag.IsValid() && ASC->HasMatchingGameplayTag(TameSpeciesConfig->InProgressTag)) return;
 	}
+	CachedInstigator = Instigator;
 
 	if (AACFCharacter* Character = Cast<AACFCharacter>(Instigator))
 	{
@@ -194,7 +215,9 @@ void UPangeaTamingComponent::StartTameAttempt(AActor* Instigator)
 
 void UPangeaTamingComponent::OnTameResolved(bool bSuccess, ETamedRole DesiredRole)
 {
-	if (!TameSpeciesConfig) return;
+	if (!TameSpeciesConfig || TamedState == ETameState::Tamed) return;
+	// Recheck the item at completion; it may have been spent during the minigame.
+	bSuccess = bSuccess && CachedInstigator.IsValid() && HasRequiredItem(CachedInstigator.Get());
 
 	ClearTameTags();
 
@@ -253,22 +276,41 @@ void UPangeaTamingComponent::TransitionToFailedState(AActor* Instigator)
 
 void UPangeaTamingComponent::HandleTameStateChanged(ETameState NewState)
 {
-	UACFFunctionLibrary::GetLocalACFPlayerCharacter(GetOwner())->GetComponentByClass<UACFInteractionComponent>()->UnregisterInteractable(GetOwner());
-
-	if (TamedRole == ETamedRole::Companion)
+	const APawn* Tamer = Cast<APawn>(CachedInstigator.Get());
+	APlayerController* Controller = Tamer ? Cast<APlayerController>(Tamer->GetController()) : nullptr;
+	// Restoring an existing single-player save has no current taming instigator.
+	if (!Controller && GetNetMode() == NM_Standalone)
+		Controller = UACFFunctionLibrary::GetLocalACFPlayerController(GetWorld());
+	if (NewState == ETameState::Tamed && TamedRole == ETamedRole::Companion && Controller && GetOwner()->HasAuthority())
 	{
-		UACFFunctionLibrary::GetLocalACFPlayerController(GetWorld())->GetComponentByClass<UACFCompanionGroupAIComponent>()->AddExistingCharacterToGroup(Cast<AACFCharacter>(GetOwner()));
+		if (UACFCompanionGroupAIComponent* Group = Controller->FindComponentByClass<UACFCompanionGroupAIComponent>())
+			Group->AddExistingCharacterToGroup(Cast<AACFCharacter>(GetOwner()));
 	}
-	
-	UACFFunctionLibrary::GetLocalACFPlayerCharacter(GetOwner())->GetComponentByClass<UACFInteractionComponent>()->RegisterInteractable(GetOwner());
+	// Do not forcibly register distant dinosaurs or steal another player's interaction.
+	if (Controller && Controller->GetPawn())
+	{
+		if (UACFInteractionComponent* Interaction = Controller->GetPawn()->FindComponentByClass<UACFInteractionComponent>())
+			Interaction->RefreshInteractions();
+	}
 }
 
 void UPangeaTamingComponent::HandleLoadedActor()
 {
+	ResolveConfigFromDefinition();
+	ResolveConfigFromOwnerClass();
 	if (GetTameState() == ETameState::Tamed)
 	{
-		TransitionToTamedState(GetTamedRole());
+		// Restoration is not a second tame: never consume items or stack success effects.
+		ClearStateTags();
+		ApplyStateTags();
+		if (TameSpeciesConfig)
+			ChangeTeam(TameSpeciesConfig->TamedTeamTag);
+		SetTamedRole(GetTamedRole());
+		GrantTamedAbilities();
+		OnTameStateChanged.Broadcast(TamedState);
 	}
+	else
+		InitializeStartupTameState();
 }
 
 // ------------------------------------------------------------
@@ -282,21 +324,21 @@ void UPangeaTamingComponent::StartTameCooldown(AActor* Instigator)
 	const float Cooldown = FMath::Max(0.1f, TameSpeciesConfig->RetryTameCooldown);
 	const FGameplayTag FailTag = TameSpeciesConfig->FailTag;
 
-	GetWorld()->GetTimerManager().SetTimerForNextTick([this, Instigator, FailTag, Cooldown]()
+	// The tag belongs to the instigator; its cleanup must survive this dinosaur's despawn.
+	if (UWorld* World = GetWorld())
 	{
-		if (UWorld* World = GetWorld())
+		FTimerHandle Handle;
+		const TWeakObjectPtr<AActor> WeakInstigator(Instigator);
+		World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Instigator, [WeakInstigator, FailTag]()
 		{
-			FTimerHandle Handle;
-			World->GetTimerManager().SetTimer(
-				Handle,
-				FTimerDelegate::CreateWeakLambda(this, [this, Instigator, FailTag]()
-				{
-					RemoveTagFromActor(Instigator, FailTag);
-					UE_LOG(LogTemp, Log, TEXT("[TamingComponent] Cooldown expired for %s"), *GetNameSafe(Instigator));
-				}),
-				Cooldown, false);
-		}
-	});
+			if (AActor* Actor = WeakInstigator.Get())
+			{
+				FGameplayTagContainer Tags;
+				if (FailTag.IsValid()) Tags.AddTag(FailTag);
+				UAbilitySystemBlueprintLibrary::RemoveLooseGameplayTags(Actor, Tags);
+			}
+		}), Cooldown, false);
+	}
 }
 
 // ------------------------------------------------------------
@@ -305,46 +347,46 @@ void UPangeaTamingComponent::StartTameCooldown(AActor* Instigator)
 
 void UPangeaTamingComponent::StartMinigame(AActor* Instigator, AActor* Target, float Duration)
 {
-	if (!MinigameWidgetClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] No MinigameWidgetClass assigned."));
-		return;
-	}
+	if (Target != GetOwner() || !CheckTamePrerequisites(Instigator) || IsValid(ActiveMinigameWidget)) return;
+	CachedInstigator = Instigator;
+	APawn* Pawn = Cast<APawn>(Instigator);
+	APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 
-	APlayerController* PC = Cast<APlayerController>(Instigator ? Instigator->GetInstigatorController() : nullptr);
-	if (!PC && GetWorld())
-		PC = GetWorld()->GetFirstPlayerController();
-
-	if (!PC)
+	if (!PC || !PC->IsLocalController() || !PC->GetLocalPlayer())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] No valid PlayerController for CreateWidget."));
+		ClearTameTags();
 		return;
 	}
 
-	if (UTamingWidget* Widget = CreateWidget<UTamingWidget>(PC, MinigameWidgetClass))
+	UANSUIPlayerSubsystem* UI = PC->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>();
+	UCommonActivatableWidget* Page = UI ? UI->SpawnWidgetByTag(FGameplayTag::RequestGameplayTag(TEXT("UI.Widget.Pangea.Taming"))) : nullptr;
+	if (UTamingWidget* Widget = Cast<UTamingWidget>(Page))
 	{
-		Widget->Duration = Duration;
+		Widget->Duration = FMath::Max(0.1f, Duration);
 		Widget->OnResult.AddDynamic(this, &UPangeaTamingComponent::OnMinigameResult);
-		Widget->AddToViewport();
 		ActiveMinigameWidget = Widget;
+		Widget->StartCountdown(Duration);
 		UE_LOG(LogTemp, Log, TEXT("[TamingComponent] Minigame started for %s"), *GetNameSafe(Target));
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[TamingComponent] Failed to create TamingWidget instance."));
+		ClearTameTags();
 	}
 }
 
 void UPangeaTamingComponent::OnMinigameResult(bool bSuccess)
 {
-	if (!TameSpeciesConfig) return;
-
-	if (ActiveMinigameWidget)
-	{
-		ActiveMinigameWidget->RemoveFromParent();
-		ActiveMinigameWidget = nullptr;
-	}
-
+    if (!ActiveMinigameWidget) return;
+    // Release our reference before deactivation so cancellation cannot re-enter.
+    UTamingWidget* Widget = Cast<UTamingWidget>(ActiveMinigameWidget);
+    ActiveMinigameWidget = nullptr;
+    if (Widget)
+    {
+        Widget->OnResult.RemoveDynamic(this, &UPangeaTamingComponent::OnMinigameResult);
+        if (UANSUIPlayerSubsystem* UI = GetWorld()->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>()) UI->RemoveInGameWidget(Widget, false, false);
+    }
 	if (bSuccess)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[TamingComponent] Minigame succeeded for %s"), *GetNameSafe(GetOwner()));
@@ -365,6 +407,8 @@ void UPangeaTamingComponent::SetTamedRole(ETamedRole NewRole)
 {
 	if (!TameSpeciesConfig) return;
 
+	if (NewRole != ETamedRole::None)
+		NewRole = DetermineFinalRole(NewRole);
 	TamedRole = NewRole;
 	ApplyRoleTag(NewRole);
 	OnTameRoleSelected.Broadcast(TamedRole);
@@ -374,11 +418,6 @@ void UPangeaTamingComponent::SetTamedRole(ETamedRole NewRole)
 		switch (NewRole)
 		{
 		case ETamedRole::Mount:
-			if (AController* Old = Pawn->GetController())
-			{
-				Old->UnPossess();
-				Old->Destroy();
-			}
 			if (TameSpeciesConfig->TamedMountAIController)
 				SwitchAIController(TameSpeciesConfig->TamedMountAIController);
 			break;
@@ -403,11 +442,11 @@ bool UPangeaTamingComponent::CanBeTamed() const
 
 ETamedRole UPangeaTamingComponent::DetermineFinalRole(ETamedRole DesiredRole) const
 {
-	if (DesiredRole != ETamedRole::None)
-		return DesiredRole;
-
 	if (!TameSpeciesConfig)
 		return ETamedRole::None;
+	if ((DesiredRole == ETamedRole::Mount && TameSpeciesConfig->bCanBeMount) ||
+		(DesiredRole == ETamedRole::Companion && TameSpeciesConfig->bCanBeCompanion))
+		return DesiredRole;
 
 	if (TameSpeciesConfig->bCanBeMount && !TameSpeciesConfig->bCanBeCompanion)
 		return ETamedRole::Mount;
@@ -486,13 +525,12 @@ void UPangeaTamingComponent::ApplyTameSuccessEffects() const
 
 void UPangeaTamingComponent::ConsumeTameItems() const
 {
-	if (!TameSpeciesConfig || !CachedInstigator.IsValid()) return;
+	if (!TameSpeciesConfig || !CachedInstigator.IsValid() || !TameSpeciesConfig->RequiredTamingItem || TameSpeciesConfig->RequiredItemCount <= 0) return;
 
 	if (UACFInventoryComponent* Inv = CachedInstigator->FindComponentByClass<UACFInventoryComponent>())
 	{
-		FInventoryItem Item;
-		Item.ItemClass = TameSpeciesConfig->RequiredTamingItem;
-		Inv->RemoveItem(Item, TameSpeciesConfig->RequiredItemCount);
+		// ACF inventory entries are GUID-identified. A class-only temporary item cannot be removed.
+		Inv->ConsumeItems({FBaseItem(TameSpeciesConfig->RequiredTamingItem, TameSpeciesConfig->RequiredItemCount)});
 	}
 }
 
@@ -520,7 +558,7 @@ void UPangeaTamingComponent::GrantTamedAbilities() const
 	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
 	{
 		for (const TSubclassOf<UGameplayAbility>& Ability : TameSpeciesConfig->AbilitiesGrantedWhenTamed)
-			if (Ability)
+			if (Ability && GetOwner()->HasAuthority() && !ASC->FindAbilitySpecFromClass(Ability))
 				ASC->GiveAbility(FGameplayAbilitySpec(Ability, 1, INDEX_NONE));
 	}
 }
@@ -529,7 +567,9 @@ void UPangeaTamingComponent::SwitchAIController(TSubclassOf<AAIController> NewCo
 {
 
 	APawn* Pawn = Cast<APawn>(GetOwner());
-	if (!Pawn || !NewControllerClass) return;
+	if (!Pawn || !Pawn->HasAuthority() || !NewControllerClass) return;
+	// Never destroy a player's controller (including when a tamed mount is possessed).
+	if (Pawn->GetController() && (!Pawn->GetController()->IsA<AAIController>() || Pawn->GetController()->IsA(NewControllerClass))) return;
 
 	if (AController* Old = Pawn->GetController())
 	{

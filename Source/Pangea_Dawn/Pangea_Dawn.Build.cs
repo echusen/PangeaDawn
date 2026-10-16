@@ -23,6 +23,7 @@ public class Pangea_Dawn : ModuleRules
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
+		DynamicallyLoadedModuleNames.Add("GF_PangeaMiningSystemRuntime");
 
 		if (Target.Type == TargetType.Editor)
 		{

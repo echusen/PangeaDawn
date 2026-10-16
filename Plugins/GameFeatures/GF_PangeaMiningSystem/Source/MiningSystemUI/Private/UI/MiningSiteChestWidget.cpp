@@ -7,6 +7,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
+#include "UI/MiningUIPresentation.h"
 #include "GameFramework/PlayerController.h"
 #include "Items/ACFItem.h"
 
@@ -14,6 +15,17 @@ void UMiningSiteChestWidget::InitializeFromChest(AMiningSiteChestActor* InChestA
 {
 	ChestActor = InChestActor;
 	InteractingPawn = InInteractingPawn;
+    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+    {
+        Page->OnActivated().RemoveAll(this);
+        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(ChestActor)) { FMiningUIPresentation::Close(this); return; }  RefreshUI(); });
+
+        Page->OnDeactivated().RemoveAll(this);
+        Page->OnDeactivated().AddWeakLambda(this, [this]()
+        {
+        });
+    }
+
 	RefreshUI();
 }
 
@@ -32,11 +44,11 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 	}
 
 	RootBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("RootBox"));
-	WidgetTree->RootWidget = RootBox;
+	FMiningUIPresentation::ScrollContent(WidgetTree, FMiningUIPresentation::Screen(WidgetTree), RootBox);
 
 	auto AddText = [this](const TCHAR* Name, int32 FontSize) -> UTextBlock*
 	{
-		UTextBlock* TextBlock = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		UTextBlock* TextBlock = FMiningUIPresentation::Text(WidgetTree, Name, FontSize);
 		TextBlock->SetAutoWrapText(true);
 		FSlateFontInfo FontInfo = TextBlock->GetFont();
 		FontInfo.Size = FontSize;
@@ -51,7 +63,8 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 	auto AddButton = [this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
 	{
 		OutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), ButtonName);
-		OutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TextName);
+        FMiningUIPresentation::Button(OutButton);
+		OutText = FMiningUIPresentation::Text(WidgetTree, TextName);
 		OutText->SetText(Label);
 		OutText->SetJustification(ETextJustify::Center);
 		OutButton->AddChild(OutText);
@@ -61,8 +74,8 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 		}
 	};
 
-	TitleText = AddText(TEXT("TitleText"), 20);
-	StatusText = AddText(TEXT("StatusText"), 14);
+	TitleText = AddText(TEXT("TitleText"), 28);
+	StatusText = AddText(TEXT("StatusText"), 18);
 
 	AddButton(TEXT("WithdrawAllButton"), TEXT("WithdrawAllButtonText"), FText::FromString(TEXT("Withdraw All")), WithdrawAllButton, WithdrawAllButtonText);
 	AddButton(TEXT("CloseButton"), TEXT("CloseButtonText"), FText::FromString(TEXT("Close")), CloseButton, CloseButtonText);
@@ -91,7 +104,7 @@ void UMiningSiteChestWidget::RefreshUI()
 
 FText UMiningSiteChestWidget::BuildStatusText() const
 {
-	if (!ChestActor || !ChestActor->StorageComponent)
+	if (!IsValid(ChestActor) || !ChestActor->StorageComponent)
 	{
 		return FText::FromString(TEXT("No chest storage."));
 	}
@@ -123,23 +136,17 @@ FText UMiningSiteChestWidget::BuildStatusText() const
 
 void UMiningSiteChestWidget::CloseMenu()
 {
-	if (ChestActor)
+	if (IsValid(ChestActor))
 	{
 		ChestActor->ClearActiveChestWidget(this);
 	}
 
-	RemoveFromParent();
-
-	if (APlayerController* PlayerController = Cast<APlayerController>(InteractingPawn ? InteractingPawn->GetController() : nullptr))
-	{
-		PlayerController->bShowMouseCursor = false;
-		PlayerController->SetInputMode(FInputModeGameOnly());
-	}
+	FMiningUIPresentation::Close(this);
 }
 
 void UMiningSiteChestWidget::OnWithdrawAllClicked()
 {
-	if (ChestActor)
+	if (IsValid(ChestActor))
 	{
 		ChestActor->ServerWithdrawAllToPawn(InteractingPawn);
 	}

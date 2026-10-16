@@ -17,6 +17,12 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
 #include "UI/PangeaFootprintFocusWidget.h"
+#include "ANSUIPlayerSubsystem.h"
+#include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Engine/GameInstance.h"
 
 namespace PangeaHuntingDebug
 {
@@ -95,6 +101,21 @@ void UPangeaHunterSenseComponent::TickComponent(float DeltaTime, ELevelTick Tick
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// ACF broadcasts from Crouch/UnCrouch before movement has necessarily applied
+	// the request. Read the actual state too, including replicated crouch changes.
+	if (AACFCharacter* Character = CachedOwnerCharacter.Get())
+	{
+		if (UACFCharacterMovementComponent* Movement = CachedMovementComponent.Get())
+		{
+			if (bIsCrouched != Character->bIsCrouched || bIsAiming != Movement->GetIsAiming())
+			{
+				bIsCrouched = Character->bIsCrouched;
+				bIsAiming = Movement->GetIsAiming();
+				RefreshSenseState();
+			}
+		}
+	}
+
 	if (!bHuntingSenseActive || !IsLocallyControlledHunter())
 	{
 		if (bUsePlaceholderMeshVisuals)
@@ -128,11 +149,11 @@ void UPangeaHunterSenseComponent::HandleAimChanged(const bool bIsNowAiming)
 
 void UPangeaHunterSenseComponent::HandleCrouchChanged(const bool bIsNowCrouched)
 {
-	bIsCrouched = !bIsNowCrouched;
+	bIsCrouched = bIsNowCrouched;
 	if (AACFCharacter* OwnerCharacter = CachedOwnerCharacter.Get())
 	{
 		PrintDebugMessage(
-			FString::Printf(TEXT("Crouch changed delegate=%s inverted=%s actualFlag=%s"),
+			FString::Printf(TEXT("Crouch changed delegate=%s cached=%s actualFlag=%s"),
 				bIsNowCrouched ? TEXT("true") : TEXT("false"),
 				bIsCrouched ? TEXT("true") : TEXT("false"),
 				OwnerCharacter->bIsCrouched ? TEXT("true") : TEXT("false")),
@@ -579,53 +600,43 @@ void UPangeaHunterSenseComponent::EnsureFootprintFocusWidget()
 		WidgetClass = UPangeaFootprintFocusWidget::StaticClass();
 	}
 
-	FootprintFocusWidget = CreateWidget<UPangeaFootprintFocusWidget>(PlayerController, WidgetClass);
-	if (FootprintFocusWidget)
-	{
-		int32 ViewportX = 0;
-		int32 ViewportY = 0;
-		PlayerController->GetViewportSize(ViewportX, ViewportY);
-		const FVector2D CrosshairPosition(ViewportX * 0.5f, ViewportY * 0.5f);
-		const FVector2D WidgetOffset = FocusConfig ? FocusConfig->FootprintFocusWidgetScreenOffset : FootprintFocusWidgetScreenOffset;
-		const FVector2D WidgetSize = FocusConfig ? FocusConfig->FootprintFocusWidgetSize : FootprintFocusWidgetSize;
-		FootprintFocusWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
-		FootprintFocusWidget->SetPositionInViewport(CrosshairPosition + WidgetOffset, true);
-		FootprintFocusWidget->SetDesiredSizeInViewport(FVector2D(FMath::Max(1.f, WidgetSize.X), FMath::Max(1.f, WidgetSize.Y)));
-		FootprintFocusWidget->AddToViewport();
-		FootprintFocusWidget->SetRingCenter(FVector2D::ZeroVector);
-		FootprintFocusWidget->SetFocusState(false, 0.f);
-	}
+    // The focus indicator is HUD content, never an independent viewport widget.
+    TArray<UUserWidget*> Widgets;
+    UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, Widgets, UUserWidget::StaticClass(), false);
+    for (UUserWidget* HUDWidget : Widgets)
+    {
+        if (!HUDWidget || HUDWidget->GetOwningPlayer() != PlayerController) continue;
+        UCanvasPanel* Layer = Cast<UCanvasPanel>(HUDWidget->GetWidgetFromName(TEXT("PangeaGameplayOverlay")));
+        if (!Layer) continue;
+        FootprintFocusWidget = CreateWidget<UPangeaFootprintFocusWidget>(PlayerController, WidgetClass);
+        if (!FootprintFocusWidget) return;
+        UCanvasPanelSlot* Slot = Layer->AddChildToCanvas(FootprintFocusWidget);
+        Slot->SetAnchors(FAnchors(0.5f, 0.5f));
+        Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+        Slot->SetAutoSize(false);
+        Slot->SetSize(FocusConfig ? FocusConfig->FootprintFocusWidgetSize : FootprintFocusWidgetSize);
+        FootprintFocusWidget->SetRingCenter(FVector2D::ZeroVector);
+        FootprintFocusWidget->SetFocusState(false, 0.f);
+        return;
+    }
+    // HUD may not have constructed yet. A later focus update retries safely.
 }
-
 void UPangeaHunterSenseComponent::UpdateFootprintFocusWidget(const bool bHasTarget, const float Progress)
 {
-	EnsureFootprintFocusWidget();
-	if (FootprintFocusWidget)
-	{
-		if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-		{
-			if (APlayerController* PlayerController = Cast<APlayerController>(OwnerPawn->GetController()))
-			{
-				int32 ViewportX = 0;
-				int32 ViewportY = 0;
-				PlayerController->GetViewportSize(ViewportX, ViewportY);
-				const FVector2D CrosshairPosition(ViewportX * 0.5f, ViewportY * 0.5f);
-				const UHuntSpeciesConfig* FocusConfig = FocusedFootprintSourceActor.IsValid()
-					? (FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr)
-					: nullptr;
-				const FVector2D WidgetOffset = FocusConfig ? FocusConfig->FootprintFocusWidgetScreenOffset : FootprintFocusWidgetScreenOffset;
-				const FVector2D WidgetSize = FocusConfig ? FocusConfig->FootprintFocusWidgetSize : FootprintFocusWidgetSize;
-				FootprintFocusWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
-				FootprintFocusWidget->SetPositionInViewport(CrosshairPosition + WidgetOffset, true);
-				FootprintFocusWidget->SetDesiredSizeInViewport(FVector2D(FMath::Max(1.f, WidgetSize.X), FMath::Max(1.f, WidgetSize.Y)));
-				FootprintFocusWidget->SetRingCenter(FVector2D::ZeroVector);
-			}
-		}
-
-		FootprintFocusWidget->SetFocusState(bHasTarget, Progress);
-	}
+    EnsureFootprintFocusWidget();
+    if (!FootprintFocusWidget) return;
+    const UHuntSpeciesConfig* Config = FocusedFootprintSourceActor.IsValid() && FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()
+        ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr;
+    if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(FootprintFocusWidget->Slot))
+    {
+        const float Scale = FMath::Max(0.01f, UWidgetLayoutLibrary::GetViewportScale(this));
+        Slot->SetPosition((Config ? Config->FootprintFocusWidgetScreenOffset : FootprintFocusWidgetScreenOffset) / Scale);
+        const FVector2D Size = Config ? Config->FootprintFocusWidgetSize : FootprintFocusWidgetSize;
+        Slot->SetSize(FVector2D(FMath::Max(1.f, Size.X), FMath::Max(1.f, Size.Y)));
+    }
+    const bool bShow = Config ? Config->bShowFootprintFocusWidget : bShowFootprintFocusWidget;
+    FootprintFocusWidget->SetFocusState(bShow && bHasTarget && IsLocallyControlledHunter(), Progress);
 }
-
 void UPangeaHunterSenseComponent::ShowTracksIdentifiedMessage()
 {
 	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
@@ -638,63 +649,14 @@ void UPangeaHunterSenseComponent::ShowTracksIdentifiedMessage()
 	const UHuntSpeciesConfig* FocusConfig = FocusedFootprintSourceActor.IsValid()
 		? (FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr)
 		: nullptr;
-	const TSoftClassPtr<UUserWidget>& NotificationWidgetClass = FocusConfig ? FocusConfig->ACFNotificationsListWidgetClass : ACFNotificationsListWidgetClass;
-	const TSoftClassPtr<UUserWidget>& FallbackMessageClass = FocusConfig ? FocusConfig->FallbackOnScreenMessageWidgetClass : FallbackOnScreenMessageWidgetClass;
-	const FText MessageText = FocusConfig ? FocusConfig->TracksIdentifiedMessage : TracksIdentifiedMessage;
-	const float MessageDuration = FocusConfig ? FocusConfig->TracksIdentifiedMessageDuration : TracksIdentifiedMessageDuration;
-	if (MessageText.IsEmpty())
-	{
-		return;
-	}
-
-	if (UClass* NotificationListClass = NotificationWidgetClass.LoadSynchronous())
-	{
-		TArray<UUserWidget*> NotificationWidgets;
-		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, NotificationWidgets, NotificationListClass, false);
-		for (UUserWidget* NotificationWidget : NotificationWidgets)
-		{
-			if (!NotificationWidget)
-			{
-				continue;
-			}
-
-			if (UFunction* AddNotificationFunction = NotificationWidget->FindFunction(TEXT("AddNotification")))
-			{
-				struct FAddNotificationParams
-				{
-					FText NotificationText;
-					float Duration = 0.f;
-				};
-
-				FAddNotificationParams Params;
-				Params.NotificationText = MessageText;
-				Params.Duration = MessageDuration;
-				NotificationWidget->ProcessEvent(AddNotificationFunction, &Params);
-				return;
-			}
-		}
-	}
-
-	UClass* MessageWidgetClass = FallbackMessageClass.LoadSynchronous();
-	if (!MessageWidgetClass)
-	{
-		return;
-	}
-
-	UUserWidget* MessageWidget = CreateWidget<UUserWidget>(PlayerController, MessageWidgetClass);
-	if (!MessageWidget)
-	{
-		return;
-	}
-
-	if (FTextProperty* MessageProperty = FindFProperty<FTextProperty>(MessageWidget->GetClass(), TEXT("InMessage")))
-	{
-		MessageProperty->SetPropertyValue_InContainer(MessageWidget, MessageText);
-	}
-
-	MessageWidget->AddToViewport();
+    const FText Message = FocusConfig ? FocusConfig->TracksIdentifiedMessage : TracksIdentifiedMessage;
+    const float Duration = FocusConfig ? FocusConfig->TracksIdentifiedMessageDuration : TracksIdentifiedMessageDuration;
+    if (!Message.IsEmpty())
+    {
+        if (UANSUIPlayerSubsystem* UI = PlayerController->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>())
+            UI->BroadcastNotification(Message, FMath::Max(0.1f, Duration));
+    }
 }
-
 void UPangeaHunterSenseComponent::ResetVisualAssignments()
 {
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)

@@ -52,6 +52,8 @@ public class GF_PangeaMiningSystemRuntime : ModuleRules
 				"NavigationSystem",
 				"Slate",
 				"SlateCore",
+                "AscentUINavigationSystem",
+                "CommonUI",
 				"StateTreeModule",
 			}
 			);

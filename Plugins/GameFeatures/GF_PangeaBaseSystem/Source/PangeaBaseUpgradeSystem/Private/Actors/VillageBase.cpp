@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Actors/VillageBase.h"
@@ -11,6 +11,10 @@
 #include "Definitions/Fragments/BasePresentationFragment.h"
 #include "Interfaces/PDBaseUpgradeInterface.h"
 #include "UI/VillageUpgradeMenuWidget.h"
+#include "ANSNavPageWidget.h"
+#include "ANSUIPlayerSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 
 
 // Sets default values
@@ -69,6 +73,14 @@ void AVillageBase::BeginPlay()
 
 void AVillageBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	TArray<UUserWidget*> Widgets;
+	UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, Widgets, UVillageUpgradeMenuWidget::StaticClass(), false);
+	for (UUserWidget* Widget : Widgets)
+	{
+		UVillageUpgradeMenuWidget* Menu = Cast<UVillageUpgradeMenuWidget>(Widget);
+		if (Menu && Menu->VillageActor == this)
+			if (UANSNavPageWidget* Page = Menu->GetTypedOuter<UANSNavPageWidget>()) Page->RemoveSelf();
+	}
 	UGameFrameworkComponentManager::RemoveGameFrameworkComponentReceiver(this);
 	Super::EndPlay(EndPlayReason);
 }
@@ -144,32 +156,19 @@ bool AVillageBase::UpgradeBase(APawn* InstigatorPawn) const
 
 void AVillageBase::OpenUpgradeMenu(APawn* InteractingPawn)
 {
-	if (!UpgradeMenuClass)
-		return;
-
-	APlayerController* PC = Cast<APlayerController>(
-		InteractingPawn ? InteractingPawn->GetController() : nullptr
-	);
-	if (!PC)
-		return;
-
-	UVillageUpgradeMenuWidget* Menu = CreateWidget<UVillageUpgradeMenuWidget>(PC, UpgradeMenuClass);
-	if (!Menu)
-		return;
-
-	// Pass village & pawn to widget
-	Menu->InitializeFromVillage(this, InteractingPawn);
-
-	// Add UI
-	Menu->AddToViewport();
-
-	// Input setup
-	PC->bShowMouseCursor = true;
-	FInputModeUIOnly InputMode;
-	InputMode.SetWidgetToFocus(Menu->TakeWidget());
-	PC->SetInputMode(InputMode);
+    APlayerController* PC = Cast<APlayerController>(InteractingPawn ? InteractingPawn->GetController() : nullptr);
+    if (!PC || !PC->IsLocalController() || !PC->GetLocalPlayer()) return;
+    UANSUIPlayerSubsystem* UI = PC->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>();
+    UANSNavPageWidget* Page = UI ? Cast<UANSNavPageWidget>(UI->SpawnWidgetByTag(FGameplayTag::RequestGameplayTag(TEXT("UI.Widget.Pangea.Village")))) : nullptr;
+    UVillageUpgradeMenuWidget* Menu = Page ? Cast<UVillageUpgradeMenuWidget>(Page->GetWidgetFromName(TEXT("ScreenContent"))) : nullptr;
+    if (!Menu)
+    {
+        if (Page) Page->RemoveSelf();
+        UE_LOG(LogTemp, Error, TEXT("Pangea village page is missing its upgrade content"));
+        return;
+    }
+    Menu->InitializeFromVillage(this, InteractingPawn);
 }
-
 UPangeaUpgradeSystemComponent* AVillageBase::GetUpgradeSystem() const
 {
 	return FindComponentByClass<UPangeaUpgradeSystemComponent>();

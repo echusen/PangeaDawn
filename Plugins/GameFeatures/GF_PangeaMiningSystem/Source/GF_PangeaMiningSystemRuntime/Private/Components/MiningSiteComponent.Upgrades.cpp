@@ -4,6 +4,7 @@
 #include "DataAssets/MiningSiteDefinition.h"
 #include "GameFramework/Actor.h"
 #include "Items/ACFItem.h"
+#include "Misc/AutomationTest.h"
 
 namespace
 {
@@ -44,12 +45,52 @@ bool BuildRequiredItems(const TArray<FMiningItemQuantity>& Cost, TArray<FBaseIte
 			return false;
 		}
 
-		OutItems.Add(FBaseItem(ACFItemClass, CostEntry.Quantity));
+		// Multiple lines for the same resource are one cost, not independent checks
+		// against the same stack (which allowed purchasing with too few items).
+		FBaseItem* Existing = OutItems.FindByPredicate([ACFItemClass](const FBaseItem& Item)
+		{
+			return Item.ItemClass == ACFItemClass;
+		});
+		if (Existing)
+		{
+			if (Existing->Count > MAX_int32 - CostEntry.Quantity) return false;
+			Existing->Count += CostEntry.Quantity;
+		}
+		else
+		{
+			OutItems.Add(FBaseItem(ACFItemClass, CostEntry.Quantity));
+		}
 	}
 
 	return true;
 }
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaMiningCostTest, "Pangea.ACF.Mining.AggregatesInventoryCosts",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPangeaMiningCostTest::RunTest(const FString& Parameters)
+{
+	TArray<FBaseItem> Items;
+	FMiningItemQuantity Cost;
+	Cost.ItemClass = UACFItem::StaticClass();
+	Cost.Quantity = 3;
+	TestTrue(TEXT("Valid duplicate costs are accepted"), BuildRequiredItems({Cost, Cost}, Items));
+	TestEqual(TEXT("Duplicate classes have one combined requirement"), Items.Num(), 1);
+	if (Items.Num() == 1) TestEqual(TEXT("Both lines must be paid"), Items[0].Count, 6);
+	Cost.Quantity = MAX_int32;
+	TestFalse(TEXT("An overflowing combined cost is rejected"), BuildRequiredItems({Cost, Cost}, Items));
+	Cost.Quantity = 0;
+	TestFalse(TEXT("Zero costs are rejected"), BuildRequiredItems({Cost}, Items));
+	Cost.Quantity = 1;
+	Cost.ItemClass = UObject::StaticClass();
+	TestFalse(TEXT("Non-ACF item classes are rejected"), BuildRequiredItems({Cost}, Items));
+	TestTrue(TEXT("An empty cost is valid"), BuildRequiredItems({}, Items));
+	TestEqual(TEXT("Output is reset for an empty cost"), Items.Num(), 0);
+	return true;
+}
+#endif
 
 bool UMiningSiteComponent::EstablishSite()
 {
