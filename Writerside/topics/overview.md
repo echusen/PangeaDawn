@@ -1,6 +1,75 @@
-﻿# Pangea Dawn Systems Documentation
+# Pangea Dawn Systems Documentation
+
+**Latest 2026-10-22:** rebuilt Korro transport prototype wired and accepted in the
+separate SC_Demo area. Prototype tiers 4/5 use the Pangea Korro draft variant at
+450 cm/s. After fixing navmesh selection, CDO spawn dimensions and late duty-speed
+initialization, transport passed **12/12** and broader ACF regression **83/83**,
+zero errors (warnings remain). Vendor files stay unchanged/read-only. The human
+leads on foot; towing is kinematic, not seated driving or trailer physics.
+See the [current mining checkpoint](acf-mining-routines.md) for remaining limits.
+
+**2026-10-21:** rebuilt convoy classes verified and the Pangea ALS restore
+ordering bug fixed. Broader ACF regression passed 80/80; after creating the separate
+hybrid prototype kit, transport/kit checks passed 10/10. Four prototype assets are
+saved under `/Game/Yarin`; the existing demo profile remains legacy and unchanged.
+The cart is cosmetic, not a working dinosaur chariot, and copied travel speeds
+are unchanged. See the latest [mining checkpoint](acf-mining-routines.md) for setup,
+warnings and remaining acceptance limits. Older checkpoints below are historical.
+
+**2026-10-21 mining checkpoint:** Pangea-owned walking blendspace/moveset/AnimBP
+copies are saved and pass the focused 2/2 animation checks (95 warnings).
+Day-end unattended worker losses, persistent vacancies and paid replacement
+source are prepared but **require a closed-Editor normal rebuild and acceptance**.
+Replacement prices remain unconfigured. See the latest section of
+[Mining ACF routines](acf-mining-routines.md); later counts below are historical.
 
 Welcome to the comprehensive documentation for Pangea Dawn's core gameplay systems. This documentation covers the architecture, implementation details, and integration guides for the major systems powering the game's dinosaur management mechanics.
+
+For the source-verified UE 5.8.3 / ACF 4.5 inventory, current tests and prioritized
+upgrade work, see [ACF modernization: Phase 0 baseline](acf-modernization-baseline.md).
+The legacy reference pages predate the current fragment and Game Feature setup;
+use the baseline and current source when they disagree.
+
+[B03: breeding persistence and replication](acf-breeding-persistence.md) uses the
+selected pause-offline policy and passed the 25-test native Editor suite after rebuild.
+
+[B04: base-upgrade safety](acf-base-upgrade-safety.md) is rebuilt and verified in
+the 31-test native Editor suite, retaining separate explicit costs.
+
+[B05: mining timing](acf-mining-timing.md) is rebuilt and verified with pause-offline
+accounting: 11/11 focused mining tests and the full 40/40 native Editor suite pass
+after the serialization Live Coding correction. Release gates remain separate.
+
+[B06: mining public APIs](acf-mining-public-apis.md) is rebuilt and verified:
+16/16 focused mining tests and the full 45/45 native Editor suite pass after
+test-fixture corrections. Real navigation, packaging and multiplayer gates remain.
+
+[Mining ACF routine bridge](acf-mining-routines.md) is rebuilt and wired through
+Pangea-owned actions, setup/preview components, controller copies and skill UI.
+All vendor source, campfire-task and remaining sample edits are restored to stock;
+the plugin trees and FullSample submodule are Git-clean. **8,136 authored vendor
+files are filesystem read-only**, checked by `Scripts/Protect-PangeaVendor.ps1`.
+Pangea asset checksums were unchanged by rollback. New ACF-derived work belongs
+in Pangea-named copies/children, never originals (root `AGENTS.md`).
+The latest Pangea-only reliability slice passed **63/63 Pangea.ACF tests twice
+consecutively** (99.64 s / 102.53 s; 1,219 warnings each; 30 mining cases).
+It fixes cross-site cleanup deleting nearby foreign actors and cancels latent
+animation initialization when retiring freshly spawned NPCs. New real ALS
+in-memory active-duty round trips verify non-empty inventory, repeated restore,
+old-job cleanup, role counts and resumed work. The animation fixture protects
+its observer before warmup so player death cannot open a pausing menu mid-test;
+NPC movement/station assertions remain intact. A Pangea-owned mining routine
+controller copy is selected, with all other presentation settings unchanged.
+The earlier 60/61 timeout and 61/61 reports are historical, not current acceptance.
+Function-only changes are Live Coding verified; include them in the next normal
+C++ build before relying on a restarted Editor. Slow-looking walking animation
+tuning is explicitly deferred until last at the user's request.
+Corrected economy, authored preview settings and pause-offline policy remain.
+Historical vendor-patched 60/60 reports are superseded. Dedicated server, late
+join/relevance, latency/loss, disk/new-session active-duty save/load, persistent
+workforce/death/recruitment, physical cargo/vehicle/escort, further path/combat,
+simultaneous multi-site navigation and packaging remain gates. The worker-loss
+sampling period and recruitment pricing have not been silently chosen.
 
 ## System Overview
 

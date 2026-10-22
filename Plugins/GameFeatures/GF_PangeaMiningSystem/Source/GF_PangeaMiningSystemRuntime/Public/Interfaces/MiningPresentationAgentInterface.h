@@ -23,6 +23,7 @@ enum class EMiningPresentationState : uint8
 	Loading,
 	Unloading,
 	Hauling,
+	Retrieving, // Append only: preserve serialized values of existing states.
 };
 
 UINTERFACE(BlueprintType)
@@ -36,6 +37,13 @@ class GF_PANGEAMININGSYSTEMRUNTIME_API IMiningPresentationAgentInterface
 	GENERATED_BODY()
 
 public:
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Mining|Presentation")
+	void SetMiningTravelSpeed(EMiningPresentationRole Role, float Speed);
+
+	/** Duration of one cosmetic clip cycle; zero means use the duty's configured fallback. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Mining|Presentation")
+	float GetMiningPresentationDuration(EMiningPresentationState State);
+
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Mining|Presentation")
 	void SetMiningPresentationRole(EMiningPresentationRole Role);
 

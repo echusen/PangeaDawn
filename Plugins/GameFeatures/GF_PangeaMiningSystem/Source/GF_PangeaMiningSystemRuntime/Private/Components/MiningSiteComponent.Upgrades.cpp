@@ -115,8 +115,17 @@ bool UMiningSiteComponent::EstablishSite()
 
 	bEstablished = true;
 	CurrentLevel = 0;
-	LastProductionWorldSeconds = GetWorldSeconds();
-	LastShipmentWorldSeconds = LastProductionWorldSeconds;
+	MiningTimingVersion = 1;
+	MiningWorkforceVersion = 1;
+	WorkerVacancies = 0;
+	MiningDayElapsedSeconds = 0.0;
+	CompletedMiningDays = 0;
+	WorkerRiskSeed = FMath::Rand();
+	ProductionRemainder = 0.0;
+	ShipmentCooldownRemaining = GetConfiguredShipmentInterval();
+	LastAccountingWorldSeconds = GetWorldSeconds();
+	bClockInitialized = true;
+	bAwaitingTimingRestore = false;
 	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining site established. Owner=%s Definition=%s Level=%d StorageCapacity=%d ManualSpeed=%.2f"),
 		*GetNameSafe(GetOwner()),
 		*GetNameSafe(SiteDefinition),
@@ -129,7 +138,7 @@ bool UMiningSiteComponent::EstablishSite()
 
 bool UMiningSiteComponent::CanUpgradeSite() const
 {
-	if (!bEstablished || !SiteDefinition)
+	if (!bEstablished || bAwaitingTimingRestore || MiningTimingVersion != 1 || !SiteDefinition || bTimingOperationInProgress || bUpgradeInProgress)
 	{
 		return false;
 	}
@@ -150,9 +159,25 @@ bool UMiningSiteComponent::UpgradeSite()
 		return false;
 	}
 
+	TGuardValue<bool> Guard(bUpgradeInProgress, true);
+	return UpgradeSiteInternal();
+}
+
+bool UMiningSiteComponent::UpgradeSiteInternal()
+{
+	FMiningSiteLevelDefinition Previous, Next;
+	if (!GetCurrentLevelDefinition(Previous) || !GetNextLevelDefinition(Next)) return false;
+	{
+		TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+		AccountElapsedTime(); // Settle the OLD rate/capacity, never retroactively the new one.
+	}
 	const int32 OldLevel = CurrentLevel;
-	CurrentLevel++;
-	LastProductionWorldSeconds = GetWorldSeconds();
+	++CurrentLevel;
+	WorkerVacancies = FMath::Min(WorkerVacancies, FMath::Max(0, Next.WorkerCount)); // Upgrades never refill existing vacancies.
+	if (Previous.PrimaryOutput.ItemClass != Next.PrimaryOutput.ItemClass || Previous.PrimaryOutput.ItemTag != Next.PrimaryOutput.ItemTag)
+		ProductionRemainder = 0.0; // A fraction of one resource cannot become another.
+	ShipmentCooldownRemaining = !Previous.bShipmentUnlocked && Next.bShipmentUnlocked
+		? GetConfiguredShipmentInterval() : FMath::Min(ShipmentCooldownRemaining, GetConfiguredShipmentInterval());
 	OnSiteLevelChanged.Broadcast(OldLevel, CurrentLevel);
 	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining site upgraded. Owner=%s OldLevel=%d NewLevel=%d StorageCapacity=%d AutoPerDay=%d"),
 		*GetNameSafe(GetOwner()),
@@ -177,14 +202,15 @@ bool UMiningSiteComponent::CanPurchaseUpgrade(UObject* UpgradeContext) const
 
 bool UMiningSiteComponent::PurchaseUpgrade(UObject* UpgradeContext)
 {
-	if (!HasAuthority() || !CanPurchaseUpgrade(UpgradeContext))
+	if (!HasAuthority() || !CanUpgradeSite())
 	{
 		return false;
 	}
 
+	TGuardValue<bool> Guard(bUpgradeInProgress, true);
 	TArray<FMiningItemQuantity> Cost;
 	GetNextUpgradeCost(Cost);
-	return ConsumeUpgradeCost(UpgradeContext, Cost) && UpgradeSite();
+	return CanPayUpgradeCost(UpgradeContext, Cost) && ConsumeUpgradeCost(UpgradeContext, Cost) && UpgradeSiteInternal();
 }
 
 bool UMiningSiteComponent::CanPayUpgradeCost_Implementation(UObject* UpgradeContext, const TArray<FMiningItemQuantity>& Cost) const

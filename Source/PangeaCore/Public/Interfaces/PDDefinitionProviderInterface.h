@@ -19,4 +19,8 @@ class PANGEACORE_API IPDDefinitionProviderInterface
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Definition")
 	UPangeaCreatureDefinition* GetCreatureDefinition() const;
+
+	/** Assign before component initialization (use deferred spawning at runtime). Returns false if unsupported or too late. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, BlueprintAuthorityOnly, Category="Definition")
+	bool SetCreatureDefinition(UPangeaCreatureDefinition* Definition);
 };

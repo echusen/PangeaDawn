@@ -19,10 +19,22 @@ public class Pangea_Dawn : ModuleRules
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
-			"CommonUI"
+			"CommonUI",
+			"AscentCombatFramework",
+			"AscentCoreInterfaces",
+			"ActionsSystem",
+			"CraftingSystem"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] {
+			"CharacterController",
+			"AdvancedRPGSystem",
+			"AscentGASRuntime",
+			"InventorySystem",
+			"MountSystem",
+			"GameplayTags",
+			"GameplayAbilities"
+		});
 		DynamicallyLoadedModuleNames.Add("GF_PangeaMiningSystemRuntime");
 
 		if (Target.Type == TargetType.Editor)

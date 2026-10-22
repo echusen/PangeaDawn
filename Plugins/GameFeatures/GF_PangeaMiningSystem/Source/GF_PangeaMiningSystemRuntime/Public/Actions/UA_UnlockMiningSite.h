@@ -19,6 +19,11 @@ class GF_PANGEAMININGSYSTEMRUNTIME_API UUA_UnlockMiningSite : public UUpgradeAct
 	GENERATED_BODY()
 
 public:
+	virtual bool ValidateConfiguration_Implementation(FText& OutFailure) const override;
+	virtual bool CanExecuteUpgrade_Implementation(const FBaseUpgradeContext& Context, FText& OutFailure) const override;
+	virtual bool TryExecuteUpgrade_Implementation(const FBaseUpgradeContext& Context, FText& OutFailure) override;
+	virtual bool CanReconstructOnLoad_Implementation() const override;
+	virtual FGameplayTag GetUnlockedFacilityTag_Implementation() const override;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining")
 	FGameplayTag FacilityTag;
 
@@ -29,6 +34,5 @@ public:
 	virtual void Execute_Implementation(UObject* ContextObject) override;
 
 private:
-	void ApplyToWorld(UWorld* World) const;
 	void ApplyToActor(AActor* Actor) const;
 };

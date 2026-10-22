@@ -1,4 +1,5 @@
 #include "Components/MiningSiteComponent.h"
+#include "Components/PangeaMiningTransportComponent.h"
 
 #include "Components/ACFStorageComponent.h"
 #include "DataAssets/MiningSiteDefinition.h"
@@ -36,8 +37,10 @@ int32 UMiningSiteComponent::AddStoredItem(const FMiningItemQuantity& Item)
 		AcceptedItem.Quantity = AcceptedQuantity;
 		if (TSubclassOf<UACFItem> ItemClass = ResolveACFItemClass(AcceptedItem))
 		{
+			const int32 Before = GetStoredQuantity(AcceptedItem);
 			LinkedStorageComponent->AddItem(FBaseItem(ItemClass, AcceptedQuantity));
 			RebuildStoredItemsFromLinkedStorage();
+			const int32 ActuallyAccepted = FMath::Clamp(GetStoredQuantity(AcceptedItem) - Before, 0, AcceptedQuantity);
 			UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining storage added %d/%d units via linked chest. Owner=%s Stored=%d Capacity=%d ItemClass=%s Tag=%s"),
 				AcceptedQuantity,
 				Item.Quantity,
@@ -46,7 +49,7 @@ int32 UMiningSiteComponent::AddStoredItem(const FMiningItemQuantity& Item)
 				GetStorageCapacity(),
 				*GetNameSafe(Item.ItemClass.Get()),
 				*Item.ItemTag.ToString());
-			return AcceptedQuantity;
+			return ActuallyAccepted;
 		}
 	}
 
@@ -87,6 +90,7 @@ int32 UMiningSiteComponent::RemoveStoredItem(const FMiningItemQuantity& Item)
 	{
 		if (TSubclassOf<UACFItem> ItemClass = ResolveACFItemClass(Item))
 		{
+			const int32 Before = GetStoredQuantity(Item);
 			int32 RemainingToRemove = Item.Quantity;
 			TArray<FInventoryItem> MatchingItems;
 			LinkedStorageComponent->GetAllItemsOfClassInInventory(ItemClass, MatchingItems);
@@ -107,21 +111,19 @@ int32 UMiningSiteComponent::RemoveStoredItem(const FMiningItemQuantity& Item)
 			}
 
 			RebuildStoredItemsFromLinkedStorage();
-			return Item.Quantity - RemainingToRemove;
+			return FMath::Clamp(Before - GetStoredQuantity(Item), 0, Item.Quantity);
 		}
 	}
 
-	const int32 ExistingIndex = FindStoredItemIndex(Item);
-	if (!StoredItems.IsValidIndex(ExistingIndex))
+	int32 RemovedQuantity = 0;
+	while (RemovedQuantity < Item.Quantity)
 	{
-		return 0;
-	}
-
-	const int32 RemovedQuantity = FMath::Min(Item.Quantity, StoredItems[ExistingIndex].Quantity);
-	StoredItems[ExistingIndex].Quantity -= RemovedQuantity;
-	if (StoredItems[ExistingIndex].Quantity <= 0)
-	{
-		StoredItems.RemoveAt(ExistingIndex);
+		const int32 ExistingIndex = FindStoredItemIndex(Item);
+		if (!StoredItems.IsValidIndex(ExistingIndex)) break;
+		const int32 Amount = FMath::Min(Item.Quantity - RemovedQuantity, FMath::Max(0, StoredItems[ExistingIndex].Quantity));
+		StoredItems[ExistingIndex].Quantity -= Amount;
+		RemovedQuantity += Amount;
+		if (StoredItems[ExistingIndex].Quantity <= 0) StoredItems.RemoveAt(ExistingIndex);
 	}
 
 	OnStorageChanged.Broadcast();
@@ -130,7 +132,14 @@ int32 UMiningSiteComponent::RemoveStoredItem(const FMiningItemQuantity& Item)
 
 int32 UMiningSiteComponent::ProduceForElapsedSeconds(const float ElapsedSeconds)
 {
-	if (!HasAuthority() || !bEstablished || ElapsedSeconds <= 0.0f)
+	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress) return 0;
+	TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+	return AdvanceProduction(double(ElapsedSeconds));
+}
+
+int32 UMiningSiteComponent::ProduceSegment(const double ElapsedSeconds)
+{
+	if (!FMath::IsFinite(ElapsedSeconds) || ElapsedSeconds <= 0.0)
 	{
 		UE_LOG(LogPangeaMiningSite, Verbose, TEXT("ProduceForElapsedSeconds blocked. Owner=%s Established=%s Elapsed=%.2f"),
 			*GetNameSafe(GetOwner()),
@@ -140,7 +149,9 @@ int32 UMiningSiteComponent::ProduceForElapsedSeconds(const float ElapsedSeconds)
 	}
 
 	FMiningSiteLevelDefinition Definition;
-	if (!GetCurrentLevelDefinition(Definition) || Definition.AutomatedMineralsPerDay <= 0 || !SiteDefinition)
+	if (!GetCurrentLevelDefinition(Definition) || Definition.AutomatedMineralsPerDay <= 0 || !SiteDefinition ||
+		!FMath::IsFinite(SiteDefinition->SimulatedDaySeconds) || SiteDefinition->SimulatedDaySeconds <= 0.0f ||
+		(!Definition.PrimaryOutput.ItemClass && !Definition.PrimaryOutput.ItemTag.IsValid()))
 	{
 		UE_LOG(LogPangeaMiningSite, Verbose, TEXT("No mining automation. Owner=%s Level=%d AutoPerDay=%d"),
 			*GetNameSafe(GetOwner()),
@@ -149,8 +160,22 @@ int32 UMiningSiteComponent::ProduceForElapsedSeconds(const float ElapsedSeconds)
 		return 0;
 	}
 
-	const float DaySeconds = FMath::Max(1.0f, SiteDefinition->SimulatedDaySeconds);
-	const int32 ProducedQuantity = FMath::FloorToInt((ElapsedSeconds / DaySeconds) * Definition.AutomatedMineralsPerDay);
+	const int32 Available = GetAvailableStorage();
+	if (Available <= 0)
+	{
+		ProductionRemainder = 0.0; // No hidden backlog while full.
+		return 0;
+	}
+	const double DaySeconds = FMath::Max(1.0, double(SiteDefinition->SimulatedDaySeconds));
+	// Levels with no authored workforce retain legacy passive-production semantics.
+	const double StaffingRatio = Definition.WorkerCount > 0
+		? double(GetLivingWorkerCount()) / Definition.WorkerCount : 1.0;
+	const double Total = ProductionRemainder + (ElapsedSeconds / DaySeconds) * Definition.AutomatedMineralsPerDay * StaffingRatio;
+	if (!FMath::IsFinite(Total)) return 0;
+	// Small roundoff at exact unit boundaries must not depend on sync cadence.
+	const double WholeUnits = FMath::FloorToDouble(Total + 1.e-9);
+	const int32 ProducedQuantity = static_cast<int32>(FMath::Min(WholeUnits, double(Available)));
+	ProductionRemainder = WholeUnits >= Available ? 0.0 : FMath::Max(0.0, Total - WholeUnits);
 	if (ProducedQuantity <= 0)
 	{
 		return 0;
@@ -169,6 +194,20 @@ int32 UMiningSiteComponent::ProduceForElapsedSeconds(const float ElapsedSeconds)
 
 bool UMiningSiteComponent::TryAutoShipment()
 {
+	if (SiteDefinition && SiteDefinition->bUseHybridTransport)
+	{
+		UPangeaMiningTransportComponent* Transport = GetOwner() ? GetOwner()->FindComponentByClass<UPangeaMiningTransportComponent>() : nullptr;
+		return Transport && Transport->TryDispatch();
+	}
+	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress) return false;
+	TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+	AccountElapsedTime();
+	return DispatchAutoShipment();
+}
+
+bool UMiningSiteComponent::DispatchAutoShipment()
+{
+	if (SiteDefinition && SiteDefinition->bUseHybridTransport) return false; // Hybrid ledger owns delivery; never also instant-grant.
 	if (!HasAuthority() || !bEstablished)
 	{
 		UE_LOG(LogPangeaMiningSite, Verbose, TEXT("TryAutoShipment blocked. Owner=%s Established=%s"),
@@ -178,7 +217,9 @@ bool UMiningSiteComponent::TryAutoShipment()
 	}
 
 	FMiningSiteLevelDefinition Definition;
-	if (!GetCurrentLevelDefinition(Definition) || !Definition.bShipmentUnlocked || Definition.MaxShipmentUnits <= 0)
+	if (!GetCurrentLevelDefinition(Definition) || !Definition.bShipmentUnlocked || Definition.MaxShipmentUnits <= 0 ||
+		!FMath::IsFinite(Definition.ShipmentIntervalSeconds) || Definition.ShipmentIntervalSeconds < 0.0f ||
+		!FMath::IsFinite(Definition.ShipmentLossChance) || Definition.ShipmentLossChance < 0.0f || Definition.ShipmentLossChance > 1.0f)
 	{
 		UE_LOG(LogPangeaMiningSite, Verbose, TEXT("Shipment unavailable. Owner=%s Level=%d Unlocked=%s MaxShipment=%d"),
 			*GetNameSafe(GetOwner()),
@@ -188,24 +229,25 @@ bool UMiningSiteComponent::TryAutoShipment()
 		return false;
 	}
 
-	const double CurrentWorldSeconds = GetWorldSeconds();
-	if (LastShipmentWorldSeconds > 0.0 && CurrentWorldSeconds - LastShipmentWorldSeconds < Definition.ShipmentIntervalSeconds)
+	if (ShipmentCooldownRemaining > 0.0)
 	{
 		return false;
 	}
 
 	FMiningItemQuantity ShipmentItem = Definition.PrimaryOutput;
 	ShipmentItem.Quantity = FMath::Min(Definition.MaxShipmentUnits, GetStoredQuantity(ShipmentItem));
+	// Preserve existing empty-attempt cadence; commit before any inventory delegates.
+	ShipmentCooldownRemaining = GetConfiguredShipmentInterval();
 	if (ShipmentItem.Quantity <= 0)
 	{
-		LastShipmentWorldSeconds = CurrentWorldSeconds;
 		return false;
 	}
 
 	const int32 RemovedQuantity = RemoveStoredItem(ShipmentItem);
+	if (RemovedQuantity <= 0) return false;
+	ShipmentItem.Quantity = RemovedQuantity;
 	const bool bLost = FMath::FRand() < Definition.ShipmentLossChance;
 	const int32 DeliveredQuantity = bLost ? 0 : RemovedQuantity;
-	LastShipmentWorldSeconds = CurrentWorldSeconds;
 	OnShipmentResolved.Broadcast(ShipmentItem, DeliveredQuantity, bLost);
 	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining shipment resolved. Owner=%s Removed=%d Delivered=%d Lost=%s LossChance=%.2f"),
 		*GetNameSafe(GetOwner()),
@@ -216,23 +258,38 @@ bool UMiningSiteComponent::TryAutoShipment()
 	return RemovedQuantity > 0;
 }
 
+bool UMiningSiteComponent::ReserveTransportCargo(FMiningItemQuantity& OutCargo)
+{
+	OutCargo = FMiningItemQuantity();
+	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress || !SiteDefinition || !SiteDefinition->bUseHybridTransport) return false;
+	const UPangeaMiningTransportComponent* Transport = GetOwner()->FindComponentByClass<UPangeaMiningTransportComponent>();
+	if (!Transport || Transport->HasActiveShipment()) return false;
+	TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+	AccountElapsedTime();
+	FMiningSiteLevelDefinition Level;
+	if (!GetCurrentLevelDefinition(Level) || !Level.bShipmentUnlocked || Level.MaxShipmentUnits <= 0 || ShipmentCooldownRemaining > 0.0 ||
+		!FMath::IsFinite(Level.ShipmentIntervalSeconds) || Level.ShipmentIntervalSeconds < 0.f ||
+		!FMath::IsFinite(Level.ShipmentLossChance) || Level.ShipmentLossChance < 0.f || Level.ShipmentLossChance > 1.f ||
+		!Level.PrimaryOutput.ItemClass || !Level.PrimaryOutput.ItemClass->IsChildOf(UACFItem::StaticClass())) return false;
+	OutCargo = Level.PrimaryOutput;
+	OutCargo.Quantity = FMath::Min(Level.MaxShipmentUnits, GetStoredQuantity(OutCargo));
+	if (OutCargo.Quantity <= 0) return false;
+	ShipmentCooldownRemaining = GetConfiguredShipmentInterval();
+	OutCargo.Quantity = RemoveStoredItem(OutCargo); // Exactly one withdrawal into the ledger, never per visual actor.
+	GetOwner()->ForceNetUpdate();
+	return OutCargo.Quantity > 0;
+}
+
 void UMiningSiteComponent::SyncProductionFromWorldTime()
 {
-	if (!HasAuthority() || !bEstablished)
+	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress)
 	{
 		return;
 	}
 
-	const double CurrentWorldSeconds = GetWorldSeconds();
-	if (LastProductionWorldSeconds <= 0.0)
-	{
-		LastProductionWorldSeconds = CurrentWorldSeconds;
-		return;
-	}
-
-	ProduceForElapsedSeconds(static_cast<float>(CurrentWorldSeconds - LastProductionWorldSeconds));
-	LastProductionWorldSeconds = CurrentWorldSeconds;
-	TryAutoShipment();
+	TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+	AccountElapsedTime();
+	DispatchAutoShipment();
 	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining site synced from world time. Owner=%s Stored=%d Capacity=%d"),
 		*GetNameSafe(GetOwner()),
 		GetStoredUnits(),
@@ -241,6 +298,7 @@ void UMiningSiteComponent::SyncProductionFromWorldTime()
 
 void UMiningSiteComponent::SetLinkedStorageComponent(UACFStorageComponent* InStorageComponent)
 {
+	if (!HasAuthority()) return;
 	if (LinkedStorageComponent == InStorageComponent)
 	{
 		return;
@@ -265,7 +323,9 @@ void UMiningSiteComponent::SetLinkedStorageComponent(UACFStorageComponent* InSto
 
 	if (LinkedStorageComponent->GetInventory().IsEmpty())
 	{
-		for (const FMiningStoredItem& StoredItem : StoredItems)
+		// AddItem broadcasts synchronously and rebuilds StoredItems. Iterate a snapshot.
+		const TArray<FMiningStoredItem> SavedItems = StoredItems;
+		for (const FMiningStoredItem& StoredItem : SavedItems)
 		{
 			FMiningItemQuantity MiningItem;
 			MiningItem.ItemClass = StoredItem.ItemClass;

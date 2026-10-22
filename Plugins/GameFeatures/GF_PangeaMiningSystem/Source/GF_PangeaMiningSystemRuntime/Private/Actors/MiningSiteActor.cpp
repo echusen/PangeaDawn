@@ -1,4 +1,6 @@
 #include "Actors/MiningSiteActor.h"
+
+#include "Actors/ACFCharacter.h"
 #include "Actors/MiningScreenHost.h"
 
 #include "Components/ACFInteractionComponent.h"
@@ -7,6 +9,8 @@
 #include "Actors/MiningDiscoveryNodeActor.h"
 #include "Actors/MiningSettlementStockpileActor.h"
 #include "Components/MiningSiteComponent.h"
+#include "Components/PangeaMiningTransportComponent.h"
+#include "Components/PangeaMiningConvoyComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -20,6 +24,7 @@
 #include "GameFramework/PlayerController.h"
 #include "EngineUtils.h"
 #include "Interfaces/MiningSitePresentationCoordinatorInterface.h"
+#include "Runtime/MiningPresentationActorRetirement.h"
 #include "SmartObjectComponent.h"
 #include "TimerManager.h"
 #include "Net/UnrealNetwork.h"
@@ -81,6 +86,20 @@ AMiningSiteActor::AMiningSiteActor()
 	}
 
 	MiningSiteComponent = CreateDefaultSubobject<UMiningSiteComponent>(TEXT("MiningSiteComponent"));
+	TransportComponent = CreateDefaultSubobject<UPangeaMiningTransportComponent>(TEXT("PangeaMiningTransport"));
+	ConvoyComponent = CreateDefaultSubobject<UPangeaMiningConvoyComponent>(TEXT("PangeaMiningConvoy"));
+}
+
+void AMiningSiteActor::Serialize(FArchive& Ar)
+{
+	// ALS restores COMPONENT records before the ACTOR record. The component's
+	// loading Serialize already retired the old convoy and read the saved cargo;
+	// bAwaitingRestore stays true until ALS's final component-loaded callback.
+	// Reset only when no component record was read (legacy actor saves), never
+	// clear the newly restored escrow a second time from this actor hook.
+	if (Ar.IsSaveGame() && Ar.IsLoading() && TransportComponent && !TransportComponent->IsAwaitingRestore())
+		TransportComponent->PrepareForOwnerRestore();
+	Super::Serialize(Ar);
 }
 
 void AMiningSiteActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -100,6 +119,8 @@ void AMiningSiteActor::BeginPlay()
 		MiningSiteComponent->OnSiteLevelChanged.AddDynamic(this, &ThisClass::HandleSiteLevelChanged);
 		MiningSiteComponent->OnStorageChanged.AddDynamic(this, &ThisClass::UpdateStatusText);
 		MiningSiteComponent->OnShipmentResolved.AddDynamic(this, &ThisClass::HandleShipmentResolved);
+		MiningSiteComponent->OnMiningDayEnded.AddDynamic(this, &ThisClass::HandleMiningDayEnded);
+		MiningSiteComponent->OnWorkforceChanged.AddDynamic(this, &ThisClass::HandleWorkforceChanged);
 	}
 
 	InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleInteractionBegin);
@@ -139,6 +160,7 @@ void AMiningSiteActor::BeginPlay()
 
 void AMiningSiteActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (ConvoyComponent) ConvoyComponent->ClearPhysicalConvoy();
 	MiningScreenHost::Close(ActiveMenuWidget.Get());
 	if (UWorld* World = GetWorld())
 	{
@@ -168,6 +190,7 @@ TArray<UActorComponent*> AMiningSiteActor::GetComponentsToSave_Implementation() 
 	{
 		ComponentsToSave.Add(MiningSiteComponent);
 	}
+	if (TransportComponent) ComponentsToSave.Add(TransportComponent);
 
 	return ComponentsToSave;
 }
@@ -236,13 +259,11 @@ void AMiningSiteActor::DestroySiteChest()
 		const bool bOwnedBySite = CandidateChest->GetOwner() == this;
 		const bool bTaggedForSite = CandidateChest->ActorHasTag(ChestSiteTag);
 		const bool bMatchesChestClass = ChestClass && CandidateChest->IsA(ChestClass);
-		const bool bNearSite = FVector::DistSquared2D(CandidateChest->GetActorLocation(), GetActorLocation()) <= FMath::Square(500.0f);
-		if (bOwnedBySite || bTaggedForSite || (SpawnedSiteChest && CandidateChest == SpawnedSiteChest) || (bMatchesChestClass && bNearSite))
+		// Class and distance do not prove ownership. Nearby mines can use exactly
+		// the same chest class; never remove their storage during our restore.
+		if (bTaggedForSite || CandidateChest == SpawnedSiteChest || (bOwnedBySite && bMatchesChestClass))
 		{
-			if (!ChestClass || bMatchesChestClass)
-			{
-				ChestsToDestroy.Add(CandidateChest);
-			}
+			ChestsToDestroy.Add(CandidateChest);
 		}
 	}
 
@@ -263,16 +284,11 @@ void AMiningSiteActor::DestroySiteChest()
 
 void AMiningSiteActor::DestroyOwnedPresentationActors()
 {
-	if (!GetWorld())
+	if (!HasAuthority() || !GetWorld())
 	{
 		return;
 	}
 
-	FMiningSiteLevelDefinition LevelDefinition;
-	const bool bHasLevelDefinition = MiningSiteComponent && MiningSiteComponent->GetCurrentLevelDefinition(LevelDefinition);
-	UClass* WorkerClass = bHasLevelDefinition ? LevelDefinition.WorkerClass.LoadSynchronous() : nullptr;
-	UClass* GuardClass = bHasLevelDefinition ? LevelDefinition.GuardClass.LoadSynchronous() : nullptr;
-	UClass* CourierClass = bHasLevelDefinition ? LevelDefinition.CourierClass.LoadSynchronous() : nullptr;
 	const FName SiteTag = FName(*FString::Printf(TEXT("Mining.Site.%s"), *GetName()));
 
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
@@ -290,18 +306,15 @@ void AMiningSiteActor::DestroyOwnedPresentationActors()
 
 		const bool bMatchesSiteTag = Candidate->ActorHasTag(SiteTag);
 		const bool bOwnedBySite = Candidate->GetOwner() == this && bIsPresentationActor;
-		const bool bMatchesConfiguredClass =
-			(WorkerClass && Candidate->IsA(WorkerClass)) ||
-			(GuardClass && Candidate->IsA(GuardClass)) ||
-			(CourierClass && Candidate->IsA(CourierClass));
-		const bool bNearSite = FVector::DistSquared2D(Candidate->GetActorLocation(), GetActorLocation()) <= FMath::Square(2500.0f);
-
-		if (!(bOwnedBySite || bMatchesSiteTag || (bMatchesConfiguredClass && bNearSite) || (bIsPresentationActor && bNearSite)))
+		const bool bExplicitlyTracked = SpawnedWorkerActors.Contains(Candidate) || SpawnedGuardActors.Contains(Candidate) || SpawnedCourierActor == Candidate;
+		// Possessed pawns are controller-owned; their exact site tag / tracked
+		// reference identifies them. Proximity is never an ownership fallback.
+		if (!(bOwnedBySite || bMatchesSiteTag || bExplicitlyTracked))
 		{
 			continue;
 		}
 
-		Candidate->Destroy();
+		PangeaMiningPrivate::RetirePresentationActor(Candidate);
 	}
 
 	SpawnedWorkerActors.Reset();
@@ -566,10 +579,23 @@ void AMiningSiteActor::ClearSpawnedSiteChestInventory()
 
 void AMiningSiteActor::RefreshPresentationActors()
 {
+	// Actual ACF deaths create economic vacancies. Removing a culled presentation pawn does not.
+	// Remove the dead pawn from the active station list, but allow its death/ragdoll to finish.
+	for (int32 Index = SpawnedWorkerActors.Num() - 1; Index >= 0; --Index)
+	{
+		AActor* Worker = SpawnedWorkerActors[Index];
+		if (!IsValid(Worker) || Worker->ActorHasTag(TEXT("Mining.WorkerDeathRecorded")))
+		{
+			if (IsValid(Worker)) Worker->SetLifeSpan(10.f);
+			SpawnedWorkerActors.RemoveAt(Index);
+		}
+	}
 	if (IMiningSitePresentationCoordinatorInterface* Coordinator = Cast<IMiningSitePresentationCoordinatorInterface>(PresentationCoordinator))
 	{
 		Coordinator->RefreshPresentationActors(*this, MiningSiteComponent, SpawnedSiteChest, SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor);
 	}
+	for (AActor* Actor : SpawnedWorkerActors)
+		if (AACFCharacter* Worker = Cast<AACFCharacter>(Actor)) Worker->OnDeath.AddUniqueDynamic(this, &ThisClass::HandleWorkerDeath);
 }
 
 void AMiningSiteActor::ClearPresentationActors()
@@ -598,7 +624,7 @@ void AMiningSiteActor::ConfigureSmartObjectComponents()
 
 void AMiningSiteActor::EnsurePresentationCoordinator()
 {
-	if (PresentationCoordinator)
+	if (!HasAuthority() || PresentationCoordinator)
 	{
 		return;
 	}

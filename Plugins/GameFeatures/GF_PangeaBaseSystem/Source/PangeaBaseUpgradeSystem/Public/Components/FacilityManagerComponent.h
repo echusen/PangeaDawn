@@ -32,6 +32,10 @@ public:
 
 	virtual void BeginPlay() override;
 
+	/** Rebuild transient attached-facility references before restoring absolute unlock state. */
+	UFUNCTION(BlueprintCallable, Category="Facilities")
+	void DiscoverFacilityGroups();
+
 	/* Enable/disable a facility by tag */
 	void EnableFacility(const FGameplayTag& FacilityTag);
 	void DisableFacility(const FGameplayTag& FacilityTag);
@@ -43,9 +47,6 @@ public:
 	const TArray<FFacilityEntry>& GetAllFacilities() const { return Facilities; }
 
 protected:
-
-	/* Locate all FacilityGroups under this actor */
-	void DiscoverFacilityGroups();
 
 	/* Storage */
 	UPROPERTY()

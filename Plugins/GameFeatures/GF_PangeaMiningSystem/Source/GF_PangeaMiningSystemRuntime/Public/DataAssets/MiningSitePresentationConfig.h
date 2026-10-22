@@ -7,6 +7,7 @@
 #include "MiningSitePresentationConfig.generated.h"
 
 class AActor;
+class AACFAIController;
 class UAnimSequenceBase;
 class USmartObjectDefinition;
 
@@ -58,6 +59,20 @@ class GF_PANGEAMININGSYSTEMRUNTIME_API UMiningSitePresentationConfig : public UP
 	GENERATED_BODY()
 
 public:
+	/** Opt-in migration gate. Legacy assets retain their behavior until explicitly migrated after a full build. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Behavior")
+	bool bUseACFRoutineJobs = false;
+
+	/** Reuse an ACF routine controller with a routine component, Behavior Tree and AIState.Routine default. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Behavior", meta=(EditCondition="bUseACFRoutineJobs"))
+	TSoftClassPtr<AACFAIController> RoutineControllerClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Behavior", meta=(ClampMin="1.0", Units="s", EditCondition="bUseACFRoutineJobs"))
+	float NavigationTimeoutSeconds = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Behavior", meta=(ClampMin="0.1", Units="s", EditCondition="bUseACFRoutineJobs"))
+	float BlockedRetryDelaySeconds = 3.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Presentation")
 	FMiningPresentationRoleConfig WorkerRole;
 

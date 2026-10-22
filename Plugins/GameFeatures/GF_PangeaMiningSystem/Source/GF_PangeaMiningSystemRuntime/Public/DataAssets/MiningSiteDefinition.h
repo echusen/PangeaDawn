@@ -29,6 +29,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Mining", meta=(ClampMin="1.0"))
 	float SimulatedDaySeconds = 86400.0f;
 
+	/** Any possessed player pawn within this radius prevents the day-end unattended loss roll. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Mining|Workforce", meta=(ClampMin="1.0", Units="cm"))
+	float WorkerAttendanceRadius = 5000.0f;
+
+	/** Migration gate: leave disabled until physical courier/chariot/escort authoring is complete. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Mining|Transport")
+	bool bUseHybridTransport = false;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Mining")
 	TArray<FGameplayTag> AllowedStorageItemTags;
 

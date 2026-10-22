@@ -8,36 +8,48 @@ DEFINE_LOG_CATEGORY(LogPangeaMiningSite);
 
 UMiningSiteComponent::UMiningSiteComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.TickInterval = 1.0f;
 	SetIsReplicatedByDefault(true);
+}
+
+void UMiningSiteComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (IsTimingReady() && !bTimingOperationInProgress && !bUpgradeInProgress)
+	{
+		TGuardValue<bool> Guard(bTimingOperationInProgress, true);
+		AccountElapsedTime(); // Day/production accounting only; transport owns dispatch policy.
+	}
 }
 
 void UMiningSiteComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (HasAuthority() && bEstablished && LastProductionWorldSeconds <= 0.0)
+	if (IsTimingReady() && !bClockInitialized)
 	{
-		LastProductionWorldSeconds = GetWorldSeconds();
-		LastShipmentWorldSeconds = LastProductionWorldSeconds;
+		LastAccountingWorldSeconds = GetWorldSeconds();
+		bClockInitialized = true;
+		ShipmentCooldownRemaining = GetConfiguredShipmentInterval();
 	}
 }
 
 int32 UMiningSiteComponent::GetStorageCapacity() const
 {
 	FMiningSiteLevelDefinition Definition;
-	return GetCurrentLevelDefinition(Definition) ? Definition.StorageCapacity : 0;
+	return GetCurrentLevelDefinition(Definition) ? FMath::Max(0, Definition.StorageCapacity) : 0;
 }
 
 int32 UMiningSiteComponent::GetStoredUnits() const
 {
-	int32 StoredUnits = 0;
+	int64 StoredUnits = 0;
 	for (const FMiningStoredItem& Item : StoredItems)
 	{
 		StoredUnits += FMath::Max(0, Item.Quantity);
 	}
 
-	return StoredUnits;
+	return static_cast<int32>(FMath::Min(StoredUnits, int64(MAX_int32)));
 }
 
 int32 UMiningSiteComponent::GetAvailableStorage() const
@@ -47,8 +59,14 @@ int32 UMiningSiteComponent::GetAvailableStorage() const
 
 int32 UMiningSiteComponent::GetStoredQuantity(const FMiningItemQuantity& Item) const
 {
-	const int32 Index = FindStoredItemIndex(Item);
-	return StoredItems.IsValidIndex(Index) ? StoredItems[Index].Quantity : 0;
+	int64 Quantity = 0;
+	for (const FMiningStoredItem& StoredItem : StoredItems)
+	{
+		if ((Item.ItemClass && StoredItem.ItemClass == Item.ItemClass) ||
+			(!Item.ItemClass && Item.ItemTag.IsValid() && StoredItem.ItemTag == Item.ItemTag))
+			Quantity += FMath::Max(0, StoredItem.Quantity);
+	}
+	return static_cast<int32>(FMath::Min(Quantity, int64(MAX_int32)));
 }
 
 float UMiningSiteComponent::GetManualMiningSpeedMultiplier() const
@@ -64,7 +82,7 @@ bool UMiningSiteComponent::GetCurrentLevelDefinition(FMiningSiteLevelDefinition&
 
 bool UMiningSiteComponent::GetNextLevelDefinition(FMiningSiteLevelDefinition& OutDefinition) const
 {
-	return SiteDefinition ? SiteDefinition->GetLevelDefinition(CurrentLevel + 1, OutDefinition) : false;
+	return SiteDefinition && CurrentLevel < MAX_int32 ? SiteDefinition->GetLevelDefinition(CurrentLevel + 1, OutDefinition) : false;
 }
 
 void UMiningSiteComponent::GetNextUpgradeCost(TArray<FMiningItemQuantity>& OutCost) const
@@ -90,7 +108,7 @@ int32 UMiningSiteComponent::FindStoredItemIndex(const FMiningItemQuantity& Item)
 	{
 		const FMiningStoredItem& StoredItem = StoredItems[Index];
 		const bool bClassMatches = Item.ItemClass && StoredItem.ItemClass == Item.ItemClass;
-		const bool bTagMatches = Item.ItemTag.IsValid() && StoredItem.ItemTag == Item.ItemTag;
+		const bool bTagMatches = !Item.ItemClass && Item.ItemTag.IsValid() && StoredItem.ItemTag == Item.ItemTag;
 		if (bClassMatches || bTagMatches)
 		{
 			return Index;
@@ -137,6 +155,9 @@ void UMiningSiteComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME(UMiningSiteComponent, SiteDefinition);
 	DOREPLIFETIME(UMiningSiteComponent, CurrentLevel);
 	DOREPLIFETIME(UMiningSiteComponent, StoredItems);
-	DOREPLIFETIME(UMiningSiteComponent, LastProductionWorldSeconds);
-	DOREPLIFETIME(UMiningSiteComponent, LastShipmentWorldSeconds);
+	DOREPLIFETIME(UMiningSiteComponent, ProductionRemainder);
+	DOREPLIFETIME(UMiningSiteComponent, ShipmentCooldownRemaining);
+	DOREPLIFETIME(UMiningSiteComponent, WorkerVacancies);
+	DOREPLIFETIME(UMiningSiteComponent, MiningDayElapsedSeconds);
+	DOREPLIFETIME(UMiningSiteComponent, CompletedMiningDays);
 }

@@ -1,8 +1,15 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE instance-profile SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
 
 <instance-profile id="pd" name="Pangea Dawn Systems Documentation" start-page="overview.md">
     <toc-element topic="overview.md"/>
+    <toc-element topic="acf-modernization-baseline.md"/>
+    <toc-element topic="acf-creature-profiles.md"/>
+    <toc-element topic="acf-breeding-persistence.md"/>
+    <toc-element topic="acf-base-upgrade-safety.md"/>
+    <toc-element topic="acf-mining-timing.md"/>
+    <toc-element topic="acf-mining-public-apis.md"/>
+    <toc-element topic="acf-mining-routines.md"/>
     <toc-element topic="base-upgrade-system.md">
         <toc-element topic="base-upgrade-components.md"/>
         <toc-element topic="base-upgrade-data-assets.md"/>

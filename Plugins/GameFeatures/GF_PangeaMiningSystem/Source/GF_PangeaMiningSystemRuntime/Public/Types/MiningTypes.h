@@ -53,7 +53,7 @@ struct GF_PANGEAMININGSYSTEMRUNTIME_API FMiningSiteLevelDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Automation", meta=(ClampMin="0"))
 	int32 AutomatedMineralsPerDay = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Automation", meta=(ClampMin="1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Automation", meta=(ClampMin="0"))
 	int32 WorkerCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Automation", meta=(ClampMin="0"))
@@ -61,6 +61,10 @@ struct GF_PANGEAMININGSYSTEMRUNTIME_API FMiningSiteLevelDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Automation", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float WorkerDeathChance = 0.0f;
+
+	/** Cost to replace ONE vacant miner. Empty means recruitment is not configured, not free. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Workforce")
+	TArray<FMiningItemQuantity> WorkerRecruitmentCost;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Shipment")
 	bool bShipmentUnlocked = false;
@@ -73,6 +77,21 @@ struct GF_PANGEAMININGSYSTEMRUNTIME_API FMiningSiteLevelDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Shipment", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float ShipmentLossChance = 0.0f;
+
+	/** Virtual travel uses the same authored ground speed as the physical transport. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Transport", meta=(ClampMin="1.0", Units="cm/s"))
+	float TransportTravelSpeed = 320.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Transport", meta=(ClampMin="0"))
+	int32 TransportEscortCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Transport")
+	TSoftClassPtr<AActor> TransportChariotClass;
+
+	/** Optional ACF draft animal. It navigates independently and tows the cosmetic cart.
+	 * The human courier leads on foot; this does not enable player/AI riding. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Transport")
+	TSoftClassPtr<AActor> TransportDraftAnimalClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mining|Cost")
 	TArray<FMiningItemQuantity> UpgradeCost;

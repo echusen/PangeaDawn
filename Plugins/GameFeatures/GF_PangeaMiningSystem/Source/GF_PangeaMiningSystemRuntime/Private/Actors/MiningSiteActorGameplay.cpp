@@ -1,5 +1,7 @@
 #include "Actors/MiningSiteActor.h"
 
+#include "Actors/ACFCharacter.h"
+
 #include "Components/ACFInteractionComponent.h"
 #include "Components/ACFStorageComponent.h"
 #include "Components/MiningSiteComponent.h"
@@ -50,6 +52,13 @@ void AMiningSiteActor::HandleShipmentResolved(const FMiningItemQuantity& Request
 
 void AMiningSiteActor::OnInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
+	if (interactionType == TEXT("Mining.RecruitWorker"))
+	{
+		// Routed by the pawn-owned ACF InteractionComponent, not an RPC on the unowned site.
+		if (HasAuthority() && CanRecruitFromInteraction(Pawn))
+			MiningSiteComponent->RecruitWorker(ResolveUpgradeCostContext(Pawn));
+		return;
+	}
 	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interaction accepted. Actor=%s Interactor=%s CanUpgrade=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(Pawn),
@@ -59,6 +68,7 @@ void AMiningSiteActor::OnInteractedByPawn_Implementation(APawn* Pawn, const FStr
 
 void AMiningSiteActor::OnLocalInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
+	if (interactionType == TEXT("Mining.RecruitWorker")) return;
 	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site locally interacted. Actor=%s Pawn=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(Pawn),

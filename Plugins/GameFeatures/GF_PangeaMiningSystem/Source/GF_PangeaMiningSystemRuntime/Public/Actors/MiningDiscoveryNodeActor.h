@@ -48,7 +48,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Unlock")
 	FGameplayTag FacilityTag;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated, SaveGame, Category="Mining")
 	TObjectPtr<AMiningSiteActor> EstablishedSite;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, SaveGame, Category="Mining")

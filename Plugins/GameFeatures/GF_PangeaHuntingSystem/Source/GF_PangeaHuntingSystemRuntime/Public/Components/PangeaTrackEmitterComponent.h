@@ -59,8 +59,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hunting|Config", SaveGame)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category="Hunting|Config", SaveGame)
 	TObjectPtr<UHuntSpeciesConfig> HuntSpeciesConfig = nullptr;
 
 	UPROPERTY(ReplicatedUsing=OnRep_TrackPoints, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
@@ -129,6 +130,7 @@ private:
 	EHuntClueType DetermineClueType(float CurrentTimeSeconds) const;
 	FString ResolveSourceCreatureName() const;
 	void SpawnSpecialClueActor(const FHuntTrackPoint& TrackPoint);
+	TArray<TWeakObjectPtr<APangeaHuntClueActor>> SpawnedClues;
 	const FHuntSpecialClueConfig* FindAdditionalClueConfig(EHuntClueType ClueType) const;
 	float GetTrackLifetimeForClueType(EHuntClueType ClueType) const;
 	EHuntClueType DetermineAdditionalClueType(float CurrentTimeSeconds) const;

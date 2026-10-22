@@ -24,6 +24,20 @@ public class MiningSystemEditor : ModuleRules
                 "Slate",
                 "SlateCore",
                 "UnrealEd",
+                "LevelEditor",
+                "AIFramework",
+                "AscentCombatFramework",
+                "InventorySystem",
+                "ActionsSystem",
+                "AscentSaveSystem",
+                "GameplayAbilities",
+                "CharacterController",
+                "AscentTeams",
+                "AIModule",
+                "NavigationSystem",
+                "GameplayTasks",
+                "SmartObjectsModule",
+                "GameplayTags",
             }
         );
     }

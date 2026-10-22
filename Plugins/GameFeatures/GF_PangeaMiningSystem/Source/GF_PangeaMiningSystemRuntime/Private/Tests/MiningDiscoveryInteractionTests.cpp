@@ -1,6 +1,8 @@
 #include "Actors/MiningDiscoveryNodeActor.h"
 #include "Actors/MiningSiteActor.h"
 #include "Actors/VillageBase.h"
+#include "Actors/FacilityGroup.h"
+#include "Components/FacilityManagerComponent.h"
 #include "Components/ACFInteractionComponent.h"
 #include "Components/UpgradeSystemComponent.h"
 #include "DataAssets/BaseUpgradeDefinition.h"
@@ -25,6 +27,9 @@ bool FPangeaMiningDiscoveryInteractionTest::RunTest(const FString& Parameters)
         TEXT("/Game/_Game/MiningSystem/DA_MiningSite_Iron_Test.DA_MiningSite_Iron_Test"));
     if (!TestNotNull(TEXT("Configured village definition"), VillageDefinition) ||
         !TestNotNull(TEXT("Configured mining site definition"), SiteDefinition)) return false;
+    TArray<FText> ConfigurationErrors;
+    VillageDefinition->GetConfigurationErrors(ConfigurationErrors);
+    if (!TestTrue(TEXT("Migrated village definition has valid checked actions"), ConfigurationErrors.IsEmpty())) return false;
 
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (!TestNotNull(TEXT("Isolated test world"), World)) return false;
@@ -45,6 +50,18 @@ bool FPangeaMiningDiscoveryInteractionTest::RunTest(const FString& Parameters)
     Village->AddInstanceComponent(Upgrades);
     Upgrades->UpgradeDefinition = VillageDefinition;
 
+    // Real checked actions require a concrete target, not the old silent missing-manager no-op.
+    UPangeaFacilityManagerComponent* Facilities = NewObject<UPangeaFacilityManagerComponent>(Village);
+    Village->AddInstanceComponent(Facilities);
+    AFacilityGroup* Blacksmith = World->SpawnActor<AFacilityGroup>();
+    if (!TestNotNull(TEXT("Concrete blacksmith facility"), Blacksmith)) return false;
+    Blacksmith->FacilityTag = FGameplayTag::RequestGameplayTag(TEXT("Test.Village.Blacksmith"));
+    Blacksmith->AttachToActor(Village, FAttachmentTransformRules::KeepRelativeTransform);
+    Facilities->DiscoverFacilityGroups();
+    TArray<FGameplayTag> AdvertisedUnlocks;
+    Upgrades->GetFacilitiesUnlockedAtLevel(2, AdvertisedUnlocks);
+    TestTrue(TEXT("Mining action advertises its logical unlock without a phantom facility action"), AdvertisedUnlocks.Contains(Node->FacilityTag));
+
     UACFInteractionComponent* Interaction = NewObject<UACFInteractionComponent>(Pawn);
     Pawn->AddInstanceComponent(Interaction);
     Interaction->RegisterComponent();
@@ -58,8 +75,10 @@ bool FPangeaMiningDiscoveryInteractionTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Locked discovery has no establish prompt"), Node->GetInteractableName_Implementation().IsEmpty());
 
     Upgrades->OnLevelIncreased(1, Pawn);
+    TestEqual(TEXT("First checked level commits"), Upgrades->CurrentLevel, 1);
     TestFalse(TEXT("Blacksmith milestone does not unlock the mine"), Node->bUnlocked);
     Upgrades->OnLevelIncreased(2, Pawn);
+    TestEqual(TEXT("Second checked level commits"), Upgrades->CurrentLevel, 2);
     TestTrue(TEXT("Mine milestone executes the matching unlock action"), Node->bUnlocked);
     TestTrue(TEXT("Discovery exposes the ACF interactable interface"), Node->GetClass()->ImplementsInterface(UACFInteractableInterface::StaticClass()));
     TestTrue(TEXT("ACF interface permits the unlocked discovery"), IACFInteractableInterface::Execute_CanBeInteracted(Node, Pawn));

@@ -95,7 +95,8 @@ APangeaEggActor* UPangeaBreedingFarmComponent::TryBreed(UPangeaBreedableComponen
         return nullptr;
     const FParentSnapshot MaleSnapshot = Male->BuildParentSnapshot();
     const FParentSnapshot FemaleSnapshot = Female->BuildParentSnapshot();
-    if (MaleSnapshot.SpeciesID.IsNone() || MaleSnapshot.SpeciesID != FemaleSnapshot.SpeciesID)
+    if (MaleSnapshot.SpeciesID.IsNone() || MaleSnapshot.SpeciesID != FemaleSnapshot.SpeciesID ||
+        !MaleSnapshot.CreatureId.IsValid() || !FemaleSnapshot.CreatureId.IsValid() || MaleSnapshot.CreatureId == FemaleSnapshot.CreatureId)
         return nullptr;
 
     UPangeaCreatureDefinition* CreatureDefinition = UPangeaBreedingLibrary::GetCreatureDefinitionFromBreedable(Female);
@@ -200,6 +201,7 @@ APangeaEggActor* UPangeaBreedingFarmComponent::SpawnEgg(UPangeaBreedableComponen
     if (Egg)
     {
         Egg->InitializeEgg(Male->BuildParentSnapshot(), Female->BuildParentSnapshot(), StrategyToUse, CreatureDefinition);
+        if (!Egg->IsInitialized()) { Egg->Destroy(); return nullptr; }
     }
 
     return Egg;

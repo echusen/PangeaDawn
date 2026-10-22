@@ -119,6 +119,16 @@ void UPangeaTrackEmitterComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	Owner->ForceNetUpdate();
 }
 
+void UPangeaTrackEmitterComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Feature deactivation must remove this emitter's transient clues too, not
+	// leave interactable clue actors alive until their independent lifespan expires.
+	for (const TWeakObjectPtr<APangeaHuntClueActor>& Clue : SpawnedClues)
+		if (Clue.IsValid()) Clue->Destroy();
+	SpawnedClues.Empty();
+	Super::EndPlay(EndPlayReason);
+}
+
 void UPangeaTrackEmitterComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -540,6 +550,8 @@ void UPangeaTrackEmitterComponent::SpawnSpecialClueActor(const FHuntTrackPoint& 
 	if (APangeaHuntClueActor* ClueActor = World->SpawnActor<APangeaHuntClueActor>(ClueActorClass, TrackPoint.Location, TrackPoint.Rotation, SpawnParameters))
 	{
 		ClueActor->InitializeClue(TrackPoint, ResolveSourceCreatureName());
+		SpawnedClues.RemoveAll([](const TWeakObjectPtr<APangeaHuntClueActor>& Clue) { return !Clue.IsValid(); });
+		SpawnedClues.Add(ClueActor);
 
 		if (TrackPoint.ClueType == EHuntClueType::Blood && HuntSpeciesConfig)
 		{

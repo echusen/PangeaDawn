@@ -41,6 +41,9 @@ private:
 	void OnUpgradeClicked();
 
 	UFUNCTION()
+	void OnRecruitWorkerClicked();
+
+	UFUNCTION()
 	void OnSyncProductionClicked();
 
 	UFUNCTION()
@@ -78,6 +81,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> UpgradeButtonText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> RecruitWorkerButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> RecruitWorkerButtonText;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> SyncProductionButton;

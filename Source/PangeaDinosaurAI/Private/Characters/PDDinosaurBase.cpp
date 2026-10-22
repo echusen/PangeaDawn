@@ -16,16 +16,20 @@
 #include "Interfaces/PDBreedableInterface.h"
 #include "Interfaces/PDTameableInterface.h"
 #include "Components/GameFrameworkComponentManager.h"
+#include "Components/PangeaCharacterInitializerComponent.h"
+#include "Components/PangeaGASStatisticsComponent.h"
 #include "Engine/DataTable.h"
 #include "GameplayTagContainer.h"
 #include "UObject/UnrealType.h"
+#include "Net/UnrealNetwork.h"
 
 
 APDDinosaurBase::APDDinosaurBase(const FObjectInitializer& ObjectInitializer)
 	: Super(
 		ObjectInitializer
 			.SetDefaultSubobjectClass<UACFQuadrupedMovementComponent>(ACharacter::CharacterMovementComponentName)
-			.SetDefaultSubobjectClass<UACFGASStatisticsComponent>(TEXT("Statistic Component")))
+			.SetDefaultSubobjectClass<UPangeaCharacterInitializerComponent>(TEXT("Character Initializer"))
+			.SetDefaultSubobjectClass<UPangeaGASStatisticsComponent>(TEXT("Statistic Component")))
 			
 {
 	MountComponent = CreateDefaultSubobject<UACFMountComponent>(TEXT("ACF Mount Component"));
@@ -43,6 +47,7 @@ APDDinosaurBase::APDDinosaurBase(const FObjectInitializer& ObjectInitializer)
 
 void APDDinosaurBase::PreInitializeComponents()
 {
+	if (HasAuthority() && !IsTemplate() && !CreatureId.IsValid()) CreatureId = FGuid::NewGuid();
 	EnsureDefaultCombatStatRow(false);
 	Super::PreInitializeComponents();
 	UGameFrameworkComponentManager::AddGameFrameworkComponentReceiver(this);
@@ -52,7 +57,10 @@ void APDDinosaurBase::BeginPlay()
 {
 	Super::BeginPlay();
 	EnsureDefaultCombatStatRow(true);
-	ConfigureCombatCollision();
+	// ACF profile fragments may deliberately override collision. Only legacy creatures
+	// need the old post-BeginPlay correction; constructor defaults still apply to all.
+	if (!GetInitializerComponent() || !GetInitializerComponent()->GetCharacterDataAsset())
+		ConfigureCombatCollision();
 	SetCanBeDamaged(true);
 	
 	UGameFrameworkComponentManager::SendGameFrameworkComponentExtensionEvent(
@@ -177,6 +185,24 @@ UPangeaCreatureDefinition* APDDinosaurBase::GetCreatureDefinition_Implementation
 	return CreatureDefinition;
 }
 
+bool APDDinosaurBase::SetCreatureDefinition_Implementation(UPangeaCreatureDefinition* Definition)
+{
+	// This is spawn configuration, not an API to reset a living/saved creature.
+	if (!HasAuthority() || IsTemplate() || IsActorInitialized() || HasActorBegunPlay() || !Definition ||
+		(GetInitializerComponent() && GetInitializerComponent()->HasBeenInitialized())) return false;
+	const UClass* SpawnClass = Definition->CreatureClass.LoadSynchronous();
+	if (!SpawnClass || !IsA(SpawnClass)) return false;
+	CreatureDefinition = Definition;
+	return true;
+}
+
+void APDDinosaurBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(APDDinosaurBase, CreatureDefinition);
+	DOREPLIFETIME(APDDinosaurBase, CreatureId);
+}
+
 #pragma endregion
 
 #pragma region Private Movement Functions
@@ -207,7 +233,11 @@ void APDDinosaurBase::OnLoaded_Implementation()
 	{
 		return;
 	}
-
+	if (HasAuthority())
+	{
+		if (!CreatureId.IsValid()) CreatureId = FGuid::NewGuid(); // Legacy records have no historical identity to restore.
+		ForceNetUpdate();
+	}
 	if (UActorComponent* TamingComponent = FindComponentByInterface(UPDTameableInterface::StaticClass()))
 	{
 		IPDTameableInterface* Tameable = Cast<IPDTameableInterface>(TamingComponent);
@@ -230,6 +260,15 @@ void APDDinosaurBase::ChangeVelocityState()
 
 void APDDinosaurBase::EnsureDefaultCombatStatRow(bool bReinitializeIfAssigned)
 {
+	// A configured profile owns baseline attributes. Do not inject sample data or
+	// run an additional stat initialization before/after ACF's profile lifecycle.
+	if (UACFCharacterInitializerComponent* Initializer = GetInitializerComponent())
+	{
+		if (Initializer->GetAutoInitDataAsset() || Initializer->GetCharacterDataAsset()) return;
+		if (const UPangeaCharacterInitializerComponent* PangeaInitializer = Cast<UPangeaCharacterInitializerComponent>(Initializer))
+			if (PangeaInitializer->GetEffectiveCharacterProfile()) return;
+	}
+
 	UACFGASStatisticsComponent* StatisticsComponent = FindComponentByClass<UACFGASStatisticsComponent>();
 	if (!StatisticsComponent)
 	{
@@ -256,6 +295,7 @@ void APDDinosaurBase::EnsureDefaultCombatStatRow(bool bReinitializeIfAssigned)
 
 	CharacterRow->DataTable = DefaultAttributesTable;
 	CharacterRow->RowName = TEXT("MMEnemy");
+	UE_LOG(LogTemp, Warning, TEXT("%s is using the legacy FullSample/MMEnemy stat fallback. Configure an ACF Character Profile to migrate it."), *GetNameSafe(this));
 
 	if (bReinitializeIfAssigned)
 	{

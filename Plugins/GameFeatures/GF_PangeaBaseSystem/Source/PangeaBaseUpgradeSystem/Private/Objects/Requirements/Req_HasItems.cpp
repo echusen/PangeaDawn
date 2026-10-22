@@ -23,8 +23,8 @@ bool UReq_HasItems::IsRequirementMet_Implementation(UObject* ContextObject) cons
 
 	for (const FRequiredACFItem& Req : RequiredItems)
 	{
-		if (!Req.ItemClass)
-			continue;
+		if (!Req.ItemClass || Req.Count <= 0)
+			return false;
 
 		const int32 Count = Inv->GetTotalCountOfItemsByClass(Req.ItemClass);
 

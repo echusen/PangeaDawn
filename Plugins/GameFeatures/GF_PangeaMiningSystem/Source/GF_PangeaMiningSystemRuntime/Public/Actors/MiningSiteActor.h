@@ -16,6 +16,9 @@ class USmartObjectComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class AACFCharacter;
+class UPangeaMiningTransportComponent;
+class UPangeaMiningConvoyComponent;
 struct FMiningSiteLevelDefinition;
 struct FTimerHandle;
 
@@ -26,6 +29,7 @@ class GF_PANGEAMININGSYSTEMRUNTIME_API AMiningSiteActor : public AActor, public 
 
 public:
 	AMiningSiteActor();
+	virtual void Serialize(FArchive& Ar) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual TArray<UActorComponent*> GetComponentsToSave_Implementation() const override;
@@ -36,6 +40,11 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
 	TObjectPtr<UMiningSiteComponent> MiningSiteComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining|Transport")
+	TObjectPtr<UPangeaMiningTransportComponent> TransportComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining|Transport")
+	TObjectPtr<UPangeaMiningConvoyComponent> ConvoyComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining|AI")
 	TObjectPtr<UActorComponent> PresentationCoordinator;
@@ -62,6 +71,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Mining")
 	bool CanUpgradeFromInteraction(APawn* InteractingPawn) const;
+
+	UFUNCTION(BlueprintPure, Category="Mining|Workforce")
+	bool CanRecruitFromInteraction(APawn* InteractingPawn) const;
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Mining")
 	void ServerPurchaseNextUpgrade(APawn* InteractingPawn);
@@ -111,6 +123,15 @@ protected:
 
 	UFUNCTION()
 	void HandleShipmentResolved(const FMiningItemQuantity& RequestedShipment, int32 DeliveredQuantity, bool bLost);
+
+	UFUNCTION()
+	void HandleWorkerDeath(AACFCharacter* Worker);
+
+	UFUNCTION()
+	void HandleMiningDayEnded(int64 CompletedDay, int32 LostWorkers);
+
+	UFUNCTION()
+	void HandleWorkforceChanged();
 
 private:
 	TObjectPtr<USphereComponent> InteractionSphere;

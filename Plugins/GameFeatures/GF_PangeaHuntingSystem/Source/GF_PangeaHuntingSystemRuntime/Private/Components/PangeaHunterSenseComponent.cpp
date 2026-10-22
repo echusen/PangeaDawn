@@ -94,6 +94,14 @@ void UPangeaHunterSenseComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 		FootprintFocusWidget = nullptr;
 	}
 
+	// Game Feature deactivation destroys this component while its owning pawn lives.
+	// These visuals are outered to that pawn, so they do not disappear with us automatically.
+	for (FPangeaHuntVisualSlot& Slot : VisualPool)
+		if (IsValid(Slot.VisualComponent)) Slot.VisualComponent->DestroyComponent();
+	VisualPool.Empty();
+	FocusedFootprintSourceActor.Reset();
+	NearestVisibleFootprintSourceActor.Reset();
+
 	Super::EndPlay(EndPlayReason);
 }
 

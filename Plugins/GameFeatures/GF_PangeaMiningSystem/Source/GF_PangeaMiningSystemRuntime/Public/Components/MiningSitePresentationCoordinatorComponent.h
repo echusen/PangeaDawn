@@ -10,7 +10,8 @@
 
 class AActor;
 class AMiningSiteActor;
-class UAITask_UseGameplayInteraction;
+class UMiningSmartObjectInteractionTask;
+class UMiningRoutineJobComponent;
 class UMiningSiteComponent;
 class USmartObjectComponent;
 
@@ -21,6 +22,14 @@ class GF_PANGEAMININGSYSTEMRUNTIME_API UMiningSitePresentationCoordinatorCompone
 
 public:
 	UMiningSitePresentationCoordinatorComponent();
+
+	/** Presentation only: never grants resources or chooses the NPC's AI state. */
+	UFUNCTION(BlueprintCallable, Category="Presentation")
+	void ApplyRoutinePresentation(AActor* Actor, EMiningPresentationRole Role, EMiningPresentationState State, const FVector& Focus) const;
+	UFUNCTION(BlueprintCallable, Category="Presentation")
+	float GetRoutinePresentationDuration(AActor* Actor, EMiningPresentationState State, float Fallback) const;
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Presentation")
+	void ApplyRoutineTravelSpeed(AActor* Actor, EMiningPresentationRole Role, float Speed) const;
 
 	void RefreshPresentationActors(
 		AMiningSiteActor& SiteActor,
@@ -88,10 +97,20 @@ public:
 	float PresentationFacingInterpSpeed = 6.0f;
 
 private:
+	friend class UPangeaMiningConvoyComponent;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	void CancelAllSmartObjectTasks();
+	bool bClearingSmartObjectTasks = false;
+	TArray<TWeakObjectPtr<UMiningRoutineJobComponent>> RoutineJobs;
+	AActor* SpawnConfiguredPresentationActor(AMiningSiteActor& SiteActor, UClass* ActorClass, const FVector& Location);
+	void ConfigureRoutineJob(AMiningSiteActor& SiteActor, AActor* Actor, EMiningPresentationRole Role, USmartObjectComponent* Station, const FVector& Primary, const FVector& Secondary);
+	void ReleaseRoutineAssignment(AActor* Actor);
+
 	TMap<TWeakObjectPtr<AActor>, bool> PresentationRoutePhaseMap;
 	TMap<TWeakObjectPtr<AActor>, FVector> PresentationMoveTargetMap;
 	TMap<TWeakObjectPtr<AActor>, FSmartObjectClaimHandle> PresentationClaimHandleMap;
-	TMap<TWeakObjectPtr<AActor>, TObjectPtr<UAITask_UseGameplayInteraction>> PresentationSmartObjectTaskMap;
+	UPROPERTY(Transient)
+	TMap<TWeakObjectPtr<AActor>, TObjectPtr<UMiningSmartObjectInteractionTask>> PresentationSmartObjectTaskMap;
 	TMap<TWeakObjectPtr<AActor>, FString> PresentationSmartObjectLastStatusMap;
 	TMap<TWeakObjectPtr<AActor>, float> PresentationSmartObjectStartTimeMap;
 	TMap<TWeakObjectPtr<AActor>, float> PresentationHoldUntilTimeMap;

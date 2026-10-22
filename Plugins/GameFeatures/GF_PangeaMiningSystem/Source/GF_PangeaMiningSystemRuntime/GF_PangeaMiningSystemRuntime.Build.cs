@@ -7,6 +7,12 @@ public class GF_PangeaMiningSystemRuntime : ModuleRules
 	public GF_PangeaMiningSystemRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("StateTreeEditorModule"); // Transient compiled interaction fixtures only.
+			PrivateDependencyModuleNames.Add("PropertyBindingUtils"); // StateTree compiler fixture descriptor destruction.
+			PrivateDependencyModuleNames.Add("AscentTeams"); // Isolated ACF possession fixtures supply GameState team configuration.
+		}
 		
 		PublicIncludePaths.AddRange(
 			new string[] {
@@ -14,12 +20,6 @@ public class GF_PangeaMiningSystemRuntime : ModuleRules
 			}
 			);
 
-		PrivateIncludePaths.AddRange(
-			new string[]
-			{
-				System.IO.Path.Combine(EngineDirectory, "Plugins/Runtime/GameplayInteractions/Source/GameplayInteractionsModule/Private"),
-			}
-			);
 				
 		
 		PublicDependencyModuleNames.AddRange(
@@ -33,6 +33,7 @@ public class GF_PangeaMiningSystemRuntime : ModuleRules
 				"PangeaCore",
 				"PangeaBaseUpgradeSystem",
 				"AscentCombatFramework",
+				"AIFramework",
 				"AscentSaveSystem",
 				"AscentCoreInterfaces",
 				"InventorySystem",

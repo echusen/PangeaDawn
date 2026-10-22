@@ -16,6 +16,7 @@ public class PangeaBaseUpgradeSystem : ModuleRules
                 "AscentCoreInterfaces",
                 "ModularGameplay",
                 "UMG",
+				"InventorySystem", // Public item-grant and explicit cost types.
             }
         );
 
@@ -30,7 +31,6 @@ public class PangeaBaseUpgradeSystem : ModuleRules
                 "GameplayTasks",
                 "AIModule",
                 "AscentCombatFramework",
-                "InventorySystem",
                 "AscentQuestSystem",
                 "AscentMapsSystem",
                 "AscentSaveSystem",

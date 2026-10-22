@@ -2,7 +2,7 @@
 
 #include "Actors/MiningSettlementStockpileActor.h"
 #include "Actors/MiningSiteActor.h"
-#include "AI/AITask_UseGameplayInteraction.h"
+#include "Tasks/MiningSmartObjectInteractionTask.h"
 #include "Components/MiningSiteComponent.h"
 #include "DataAssets/MiningSitePresentationConfig.h"
 #include "SmartObjectComponent.h"
@@ -23,7 +23,25 @@ void UMiningSitePresentationCoordinatorComponent::UpdatePresentationActorRoute(
 		return;
 	}
 
+	const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+	if (Config && Config->bUseACFRoutineJobs)
+	{
+		for (int32 Index = 0; Index < ActorArray.Num(); ++Index)
+		{
+			FVector Primary, Secondary;
+			if (!IsValid(ActorArray[Index])) continue;
+			if (!TryGetConfiguredStationTargets(SiteActor, SiteActor.MiningSiteComponent, Role, Index, Primary, Secondary))
+			{
+				ReleaseRoutineAssignment(ActorArray[Index]);
+				EmitValidationWarning(SiteActor, TEXT("ACF duty station markers missing; assignment stopped."));
+				continue;
+			}
+			ConfigureRoutineJob(SiteActor, ActorArray[Index], Role, SmartObjectComponents.IsValidIndex(Index) ? SmartObjectComponents[Index].Get() : nullptr, Primary, Secondary);
+		}
+		return; // Sole movement owner is now the per-controller ACF duty, including failures.
+	}
 	const bool bUseFullFidelity = IsFullFidelityPresentationRelevant(SiteActor);
+	for (AActor* Actor : ActorArray) ReleaseRoutineAssignment(Actor);
 	const float AngleStep = DesiredCount > 1 ? 40.0f : 0.0f;
 	for (int32 Index = 0; Index < DesiredCount; ++Index)
 	{
@@ -54,7 +72,7 @@ void UMiningSitePresentationCoordinatorComponent::UpdatePresentationActorRoute(
 		USmartObjectComponent* SmartObjectComponent = SmartObjectComponents.IsValidIndex(Index) ? SmartObjectComponents[Index].Get() : nullptr;
 		const bool bMovingToSecondary = PresentationRoutePhaseMap.FindRef(Actor);
 		const FVector CurrentTarget = bMovingToSecondary ? SecondaryTarget : PrimaryTarget;
-		const TObjectPtr<UAITask_UseGameplayInteraction>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor);
+		const TObjectPtr<UMiningSmartObjectInteractionTask>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor);
 		const bool bHasActiveInteraction = ExistingTask && ExistingTask->Get() && !ExistingTask->Get()->IsFinished();
 		const bool bHoldActive = HasPresentationHoldActive(Actor);
 		const bool bHasStartedTargetHold = PresentationTargetHoldStartedMap.FindRef(Actor);
@@ -164,6 +182,7 @@ void UMiningSitePresentationCoordinatorComponent::UpdateCourierPresentationRoute
 	const FMiningPresentationRoleConfig* CourierConfig = GetRoleConfig(SiteActor.MiningSiteComponent, EMiningPresentationRole::Courier);
 	if (!CourierConfig || !CourierConfig->Stations.IsValidIndex(0))
 	{
+		ReleaseRoutineAssignment(SpawnedCourierActor);
 		EmitValidationWarning(SiteActor, TEXT("Courier station is not configured correctly."));
 		return;
 	}
@@ -171,6 +190,7 @@ void UMiningSitePresentationCoordinatorComponent::UpdateCourierPresentationRoute
 	const FMiningPresentationStation& CourierStation = CourierConfig->Stations[0];
 	if (CourierStation.PrimaryMarkerName.IsNone() || !TryGetRouteMarkerLocation(SiteActor, CourierStation.PrimaryMarkerName.ToString(), PrimaryTarget))
 	{
+		ReleaseRoutineAssignment(SpawnedCourierActor);
 		EmitValidationWarning(SiteActor, TEXT("Courier primary station marker is missing or invalid."));
 		return;
 	}
@@ -181,11 +201,19 @@ void UMiningSitePresentationCoordinatorComponent::UpdateCourierPresentationRoute
 	}
 	else if (CourierStation.SecondaryMarkerName.IsNone() || !TryGetRouteMarkerLocation(SiteActor, CourierStation.SecondaryMarkerName.ToString(), SecondaryTarget))
 	{
+		ReleaseRoutineAssignment(SpawnedCourierActor);
 		EmitValidationWarning(SiteActor, TEXT("Courier secondary station marker is missing or invalid."));
 		return;
 	}
 
+	const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+	if (Config && Config->bUseACFRoutineJobs)
+	{
+		ConfigureRoutineJob(SiteActor, SpawnedCourierActor, EMiningPresentationRole::Courier, nullptr, PrimaryTarget, SecondaryTarget);
+		return;
+	}
 	const bool bMovingToSecondary = PresentationRoutePhaseMap.FindRef(SpawnedCourierActor);
+	ReleaseRoutineAssignment(SpawnedCourierActor);
 	const FVector CurrentTarget = bMovingToSecondary ? SecondaryTarget : PrimaryTarget;
 	const bool bHoldActive = HasPresentationHoldActive(SpawnedCourierActor);
 	const bool bHasStartedTargetHold = PresentationTargetHoldStartedMap.FindRef(SpawnedCourierActor);

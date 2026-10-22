@@ -7,6 +7,7 @@ public class GF_PangeaHuntingSystemRuntime : ModuleRules
 	public GF_PangeaHuntingSystemRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		if (Target.bBuildEditor) PrivateDependencyModuleNames.Add("UnrealEd"); // Feature lifecycle regression tests.
 
 		PublicDependencyModuleNames.AddRange(
 			new[]

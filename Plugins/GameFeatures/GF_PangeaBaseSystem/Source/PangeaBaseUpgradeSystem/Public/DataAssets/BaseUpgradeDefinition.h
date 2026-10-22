@@ -19,6 +19,13 @@ public:
 	UPROPERTY(EditAnywhere, Instanced, BlueprintReadOnly, Category="Upgrade")
 	TArray<TObjectPtr<UBaseUpgradeFragment>> Fragments;
 
+	UFUNCTION(BlueprintCallable, Category="Validation")
+	void GetConfigurationErrors(TArray<FText>& OutErrors) const;
+
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+#endif
+
 	UFUNCTION(BlueprintPure, Category="Upgrade")
 	UBaseUpgradeFragment* GetFragmentByClass(TSubclassOf<UBaseUpgradeFragment> FragmentClass) const;
 

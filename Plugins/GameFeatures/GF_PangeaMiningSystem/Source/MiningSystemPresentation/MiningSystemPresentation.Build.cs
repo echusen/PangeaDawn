@@ -6,12 +6,6 @@ public class MiningSystemPresentation : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PrivateIncludePaths.AddRange(
-            new string[]
-            {
-                System.IO.Path.Combine(EngineDirectory, "Plugins/Runtime/GameplayInteractions/Source/GameplayInteractionsModule/Private"),
-            }
-        );
 
         PublicDependencyModuleNames.AddRange(
             new string[]

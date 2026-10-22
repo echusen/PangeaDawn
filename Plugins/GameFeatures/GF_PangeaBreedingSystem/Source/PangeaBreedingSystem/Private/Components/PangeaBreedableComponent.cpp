@@ -12,11 +12,23 @@
 #include "Definitions/PangeaBreedingFragment.h"
 #include "Definitions/PangeaCreatureDefinition.h"
 #include "Interfaces/PDDefinitionProviderInterface.h"
+#include "Interfaces/PDCreatureIdentityInterface.h"
+#include "Data/ACFCharacterInitializerComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 UPangeaBreedableComponent::UPangeaBreedableComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
+}
+
+void UPangeaBreedableComponent::Serialize(FArchive& Ar)
+{
+    if (Ar.IsLoading() && Ar.IsSaveGame()) BreedingStateVersion = 0;
+    Super::Serialize(Ar);
 }
 
 bool UPangeaBreedableComponent::IsFertile_Implementation() const
@@ -26,25 +38,35 @@ bool UPangeaBreedableComponent::IsFertile_Implementation() const
 
 bool UPangeaBreedableComponent::SetFertile_Implementation(const bool bNewFertile)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return IsFertile_Implementation();
     bIsFertile = bNewFertile;
+    OnRep_Fertility();
+    GetOwner()->ForceNetUpdate();
     return bIsFertile;
 }
 
 void UPangeaBreedableComponent::SetGender(const ECreatureGender NewGender)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
     Gender = NewGender;
+    GetOwner()->ForceNetUpdate();
 }
 
 void UPangeaBreedableComponent::BeginPlay()
 {
     Super::BeginPlay();
 
+    EnsureFallbackIdentity();
     AssignGenderFromDefinition(false);
 
     // Injected components can begin before ACF finishes initializing GAS attributes.
     // Reapply the saved inherited modifier after the character-data initialization.
     if (AACFCharacter* Character = Cast<AACFCharacter>(GetOwner()))
+    {
         Character->OnCharacterFullyInitialized.AddUniqueDynamic(this, &UPangeaBreedableComponent::ApplyInheritedStatProfile);
+        if (UACFCharacterInitializerComponent* Initializer = Character->GetInitializerComponent())
+            Initializer->OnAppearanceChanged.AddUniqueDynamic(this, &UPangeaBreedableComponent::HandleAppearanceChanged);
+    }
 
     if (!ACFAttributes && GetOwner())
     {
@@ -71,10 +93,12 @@ void UPangeaBreedableComponent::BeginPlay()
             }
         }
     }
+    ApplyInheritedAppearance();
 }
 
 ECreatureGender UPangeaBreedableComponent::AssignGenderFromDefinition(const bool bForceReassign)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return Gender;
     if (!bForceReassign && Gender != ECreatureGender::Unspecified)
     {
         return Gender;
@@ -84,6 +108,7 @@ ECreatureGender UPangeaBreedableComponent::AssignGenderFromDefinition(const bool
     if (!Definition)
     {
         Gender = Gender == ECreatureGender::Unspecified ? GetRandomGender() : Gender;
+        GetOwner()->ForceNetUpdate();
         return Gender;
     }
 
@@ -101,48 +126,36 @@ ECreatureGender UPangeaBreedableComponent::AssignGenderFromDefinition(const bool
         break;
     }
 
+    GetOwner()->ForceNetUpdate();
     return Gender;
 }
 
 void UPangeaBreedableComponent::StartFertilityCooldown(float CooldownDuration)
 {
-    if (CooldownDuration <= 0.f || bIsOnFertilityCooldown)
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !GetWorld() || !FMath::IsFinite(CooldownDuration) ||
+        CooldownDuration <= 0.f || bIsOnFertilityCooldown)
     {
         return;
     }
 
     bIsOnFertilityCooldown = true;
     FertilityCooldownRemaining = CooldownDuration;
-    OnFertilityStateChanged.Broadcast(false);
-
-    GetWorld()->GetTimerManager().SetTimer(
-        FertilityCooldownTimerHandle,
-        this,
-        &UPangeaBreedableComponent::EndFertilityCooldown,
-        CooldownDuration,
-        false
-    );
-
-    GetWorld()->GetTimerManager().SetTimer(
-        FertilityTickTimerHandle,
-        this,
-        &UPangeaBreedableComponent::UpdateFertilityCooldown,
-        1.0f,
-        true
-    );
+    ResumeFertilityCooldown();
+    GetOwner()->ForceNetUpdate();
 
     UE_LOG(LogTemp, Warning, TEXT("%s: fertility cooldown started (%.1f s)"), *GetOwner()->GetName(), CooldownDuration);
 }
 
 void UPangeaBreedableComponent::UpdateFertilityCooldown()
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !GetWorld()) return;
     if (!bIsOnFertilityCooldown)
     {
         GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
         return;
     }
 
-    FertilityCooldownRemaining = FMath::Max(0.f, FertilityCooldownRemaining - 1.f);
+    FertilityCooldownRemaining = GetFertilityCooldownRemaining();
     OnFertilityCooldownTick.Broadcast(FertilityCooldownRemaining);
 
     if (FertilityCooldownRemaining <= 0.f)
@@ -153,11 +166,16 @@ void UPangeaBreedableComponent::UpdateFertilityCooldown()
 
 void UPangeaBreedableComponent::EndFertilityCooldown()
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
     bIsOnFertilityCooldown = false;
     FertilityCooldownRemaining = 0.0f;
-    GetWorld()->GetTimerManager().ClearTimer(FertilityCooldownTimerHandle);
-    GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
-    OnFertilityStateChanged.Broadcast(bIsFertile);
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(FertilityCooldownTimerHandle);
+        GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
+    }
+    OnRep_Fertility();
+    GetOwner()->ForceNetUpdate();
 
     UE_LOG(LogTemp, Warning, TEXT("%s: fertility cooldown ended"), *GetOwner()->GetName());
 }
@@ -170,7 +188,7 @@ FParentSnapshot UPangeaBreedableComponent::BuildParentSnapshot() const
         Snapshot.SpeciesID = Definition->SpeciesId;
     }
 
-    Snapshot.CreatureId = FGuid::NewGuid();
+    Snapshot.CreatureId = GetCreatureId();
     Snapshot.Traits = GeneticTraits;
     Snapshot.ParentActor = GetOwner();
     Snapshot.VisualData = CollectMaterialGenetics();
@@ -247,7 +265,7 @@ FParentSnapshot UPangeaBreedableComponent::BuildParentSnapshot() const
 
 APangeaEggActor* UPangeaBreedableComponent::BreedWith(UPangeaBreedableComponent* OtherParent, UPangeaBreedingFarmComponent* Farm)
 {
-    if (!IsValid(OtherParent) || !IsValid(Farm) || OtherParent == this ||
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(OtherParent) || !IsValid(Farm) || OtherParent == this ||
         !IPDBreedableInterface::Execute_IsFertile(this) || !IPDBreedableInterface::Execute_IsFertile(OtherParent))
     {
         return nullptr;
@@ -274,9 +292,13 @@ void UPangeaBreedableComponent::PullAttributesIntoTraits_Implementation(FGenetic
 {
 }
 
-void UPangeaBreedableComponent::SetInheritedStatProfile(const FPangeaInheritedStatProfile& NewProfile, const bool bApplyImmediately)
+void UPangeaBreedableComponent::SetInheritedStatProfile(const FPangeaInheritedStatProfile& NewProfile, const bool bApplyImmediately,
+    TSubclassOf<UGameplayEffect> ApplicationEffect)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
     InheritedStatProfile = NewProfile;
+    InheritedStatsApplicationEffect = ApplicationEffect;
+    GetOwner()->ForceNetUpdate();
 
     if (bApplyImmediately)
     {
@@ -286,6 +308,14 @@ void UPangeaBreedableComponent::SetInheritedStatProfile(const FPangeaInheritedSt
 
 void UPangeaBreedableComponent::ApplyInheritedStatProfile()
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+
+    UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
+    if (InheritedStatsEffectHandle.IsValid() && ASC && InheritedStatProfile.IsEmpty())
+    {
+        ASC->RemoveActiveGameplayEffect(InheritedStatsEffectHandle);
+        InheritedStatsEffectHandle.Invalidate();
+    }
     if (InheritedStatProfile.IsEmpty())
     {
         return;
@@ -296,10 +326,17 @@ void UPangeaBreedableComponent::ApplyInheritedStatProfile()
         ACFAttributes = GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>();
     }
 
-    UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
     const UPangeaBreedingFragment* BreedingFragment = GetBreedingFragment();
-    if (!ASC || !BreedingFragment || !BreedingFragment->InheritedStatsGameplayEffect)
+    TSubclassOf<UGameplayEffect> Effect = InheritedStatsApplicationEffect;
+    if (!Effect && BreedingFragment) Effect = BreedingFragment->InheritedStatsGameplayEffect;
+    if (!ASC || !Effect)
     {
+        return;
+    }
+
+    if (Effect.GetDefaultObject()->DurationPolicy != EGameplayEffectDurationType::Infinite)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Inherited stats on %s require an Infinite GameplayEffect; instant effects cannot be safely reapplied after load."), *GetNameSafe(GetOwner()));
         return;
     }
 
@@ -311,7 +348,7 @@ void UPangeaBreedableComponent::ApplyInheritedStatProfile()
 
     FAttributesSetModifier Modifier;
     Modifier.GEModifierType = EGEType::ESetByCallerFromConfig;
-    Modifier.GameplayEffectModifier = BreedingFragment->InheritedStatsGameplayEffect;
+    Modifier.GameplayEffectModifier = Effect;
 
     for (const FPangeaInheritedStatValue& Value : InheritedStatProfile.Values)
     {
@@ -342,7 +379,157 @@ void UPangeaBreedableComponent::ApplyInheritedStatProfile()
         Modifier.PrimaryAttributesMod.Num(),
         Modifier.AttributesMod.Num(),
         Modifier.StatisticsMod.Num(),
-        *GetNameSafe(BreedingFragment->InheritedStatsGameplayEffect));
+        *GetNameSafe(Effect.Get()));
+}
+
+void UPangeaBreedableComponent::OnComponentLoaded()
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(FertilityCooldownTimerHandle);
+        GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
+    }
+    if (BreedingStateVersion > 1)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unsupported breeding save version %d on %s; state was not reinitialized."), BreedingStateVersion, *GetNameSafe(GetOwner()));
+        return;
+    }
+    if (BreedingStateVersion == 0)
+        UE_LOG(LogTemp, Warning, TEXT("Legacy breeding record on %s: unsaved historical gender/cooldown/identity cannot be recovered; retaining available defaults."), *GetNameSafe(GetOwner()));
+    BreedingStateVersion = 1;
+    EnsureFallbackIdentity();
+    AssignGenderFromDefinition(false);
+    ResumeFertilityCooldown();
+    // ACF normalizes current resources when maxima change. On load those currents
+    // are saved absolute values, not ratios against the fresh actor's baseline.
+    UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
+    TArray<TPair<FGameplayAttribute, float>> SavedResources;
+    if (ASC && GetOwner() && GetOwner()->HasAuthority())
+        for (const FPangeaInheritedStatValue& Value : InheritedStatProfile.Values)
+        {
+            FStatisticsConfig Config;
+            if (Value.StatType == EPangeaInheritedStatType::Statistic &&
+                UARSFunctionLibrary::TryGetStatisticFromSetByCallerTag(Value.StatTag, Config) &&
+                ASC->HasAttributeSetForAttribute(Config.CurrentStatAttribute))
+                SavedResources.Emplace(Config.CurrentStatAttribute, ASC->GetNumericAttribute(Config.CurrentStatAttribute));
+        }
+    ApplyInheritedStatProfile();
+    for (const TPair<FGameplayAttribute, float>& Resource : SavedResources)
+        ASC->SetNumericAttributeBase(Resource.Key, Resource.Value); // AttributeSet performs its normal clamping.
+    ApplyInheritedAppearance();
+    GetOwner()->ForceNetUpdate();
+}
+
+void UPangeaBreedableComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (AACFCharacter* Character = Cast<AACFCharacter>(GetOwner()))
+    {
+        Character->OnCharacterFullyInitialized.RemoveDynamic(this, &UPangeaBreedableComponent::ApplyInheritedStatProfile);
+        if (UACFCharacterInitializerComponent* Initializer = Character->GetInitializerComponent())
+            Initializer->OnAppearanceChanged.RemoveDynamic(this, &UPangeaBreedableComponent::HandleAppearanceChanged);
+    }
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(FertilityCooldownTimerHandle);
+        GetWorld()->GetTimerManager().ClearTimer(FertilityTickTimerHandle);
+    }
+    if (InheritedStatsEffectHandle.IsValid())
+        if (UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent()) ASC->RemoveActiveGameplayEffect(InheritedStatsEffectHandle);
+    InheritedStatsEffectHandle.Invalidate();
+    Super::EndPlay(EndPlayReason);
+}
+
+void UPangeaBreedableComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(UPangeaBreedableComponent, Gender);
+    DOREPLIFETIME(UPangeaBreedableComponent, bIsFertile);
+    DOREPLIFETIME(UPangeaBreedableComponent, bIsOnFertilityCooldown);
+    DOREPLIFETIME(UPangeaBreedableComponent, FertilityCooldownRemaining);
+    DOREPLIFETIME(UPangeaBreedableComponent, GeneticTraits);
+    DOREPLIFETIME(UPangeaBreedableComponent, InheritedStatProfile);
+    DOREPLIFETIME(UPangeaBreedableComponent, InheritedAppearance);
+    DOREPLIFETIME(UPangeaBreedableComponent, ParentAId);
+    DOREPLIFETIME(UPangeaBreedableComponent, ParentBId);
+    DOREPLIFETIME(UPangeaBreedableComponent, FallbackCreatureId);
+}
+
+FGuid UPangeaBreedableComponent::GetCreatureId() const
+{
+    if (const IPDCreatureIdentityInterface* Identity = Cast<IPDCreatureIdentityInterface>(GetOwner()))
+        return Identity->GetCreatureId_Implementation();
+    return FallbackCreatureId;
+}
+
+void UPangeaBreedableComponent::EnsureFallbackIdentity()
+{
+    if (GetOwner() && GetOwner()->HasAuthority() && !Cast<IPDCreatureIdentityInterface>(GetOwner()) && !FallbackCreatureId.IsValid())
+        FallbackCreatureId = FGuid::NewGuid();
+}
+
+float UPangeaBreedableComponent::GetFertilityCooldownRemaining() const
+{
+    if (GetOwner() && GetOwner()->HasAuthority() && GetWorld() && GetWorld()->GetTimerManager().TimerExists(FertilityCooldownTimerHandle))
+        return FMath::Max(0.f, GetWorld()->GetTimerManager().GetTimerRemaining(FertilityCooldownTimerHandle));
+    return bIsOnFertilityCooldown && FMath::IsFinite(FertilityCooldownRemaining) ? FMath::Max(0.f, FertilityCooldownRemaining) : 0.f;
+}
+
+void UPangeaBreedableComponent::ResumeFertilityCooldown()
+{
+    if (!GetWorld() || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    FTimerManager& Timers = GetWorld()->GetTimerManager();
+    Timers.ClearTimer(FertilityCooldownTimerHandle);
+    Timers.ClearTimer(FertilityTickTimerHandle);
+    if (bIsOnFertilityCooldown && FMath::IsFinite(FertilityCooldownRemaining) && FertilityCooldownRemaining > 0.f)
+    {
+        Timers.SetTimer(FertilityCooldownTimerHandle, this, &UPangeaBreedableComponent::EndFertilityCooldown, FertilityCooldownRemaining, false);
+        Timers.SetTimer(FertilityTickTimerHandle, this, &UPangeaBreedableComponent::UpdateFertilityCooldown, 1.f, true);
+    }
+    else { bIsOnFertilityCooldown = false; FertilityCooldownRemaining = 0.f; }
+    OnRep_Fertility();
+}
+
+void UPangeaBreedableComponent::OnComponentSaved()
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority() || BreedingStateVersion > 1) return;
+    EnsureFallbackIdentity();
+    FertilityCooldownRemaining = GetFertilityCooldownRemaining();
+    BreedingStateVersion = 1;
+}
+
+void UPangeaBreedableComponent::OnRep_Fertility()
+{
+    OnFertilityStateChanged.Broadcast(IsFertile_Implementation());
+    OnFertilityCooldownTick.Broadcast(FertilityCooldownRemaining);
+}
+
+void UPangeaBreedableComponent::SetBirthState(const FGeneticTraitSet& Traits, ECreatureGender InGender,
+    const FPangeaInheritedAppearance& Appearance, FGuid InParentAId, FGuid InParentBId)
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    GeneticTraits = Traits;
+    Gender = InGender;
+    InheritedAppearance = Appearance;
+    ParentAId = InParentAId;
+    ParentBId = InParentBId;
+    ApplyInheritedAppearance();
+    GetOwner()->ForceNetUpdate();
+}
+
+void UPangeaBreedableComponent::OnRep_InheritedAppearance() { ApplyInheritedAppearance(); }
+void UPangeaBreedableComponent::HandleAppearanceChanged(UACFCharacterDataAsset* Profile) { ApplyInheritedAppearance(); }
+
+void UPangeaBreedableComponent::ApplyInheritedAppearance()
+{
+    if (InheritedAppearance.IsEmpty() || !GetOwner()) return;
+    USkeletalMeshComponent* Mesh = GetOwner()->FindComponentByClass<USkeletalMeshComponent>();
+    if (!Mesh || InheritedAppearance.MaterialSlot < 0 || InheritedAppearance.MaterialSlot >= Mesh->GetNumMaterials()) return;
+    UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(InheritedAppearance.MaterialSlot));
+    if (!MID) MID = Mesh->CreateAndSetMaterialInstanceDynamic(InheritedAppearance.MaterialSlot);
+    if (!MID) return;
+    for (const FPangeaInheritedColor& Color : InheritedAppearance.Colors) MID->SetVectorParameterValue(Color.Parameter, Color.Value);
+    for (const FPangeaInheritedScalar& Scalar : InheritedAppearance.Scalars) MID->SetScalarParameterValue(Scalar.Parameter, Scalar.Value);
 }
 
 TMap<FName, FLinearColor> UPangeaBreedableComponent::CollectMaterialGenetics() const

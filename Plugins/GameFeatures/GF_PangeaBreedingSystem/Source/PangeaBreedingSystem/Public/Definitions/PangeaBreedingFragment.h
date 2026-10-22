@@ -56,13 +56,13 @@ struct FPangeaInheritedStatValue
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Breeding|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
 	FGameplayTag StatTag;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Breeding|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
 	EPangeaInheritedStatType StatType = EPangeaInheritedStatType::Statistic;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Breeding|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
 	float Value = 0.f;
 };
 
@@ -71,7 +71,7 @@ struct FPangeaInheritedStatProfile
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Breeding|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
 	TArray<FPangeaInheritedStatValue> Values;
 
 	bool IsEmpty() const

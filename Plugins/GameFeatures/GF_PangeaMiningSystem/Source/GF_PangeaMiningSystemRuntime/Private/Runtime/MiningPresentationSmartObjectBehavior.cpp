@@ -1,9 +1,10 @@
 #include "Components/MiningSitePresentationCoordinatorComponent.h"
 
 #include "Actors/MiningSiteActor.h"
-#include "AI/AITask_UseGameplayInteraction.h"
+#include "Tasks/MiningSmartObjectInteractionTask.h"
 #include "AIController.h"
 #include "Components/MiningSiteComponent.h"
+#include "Components/MiningRoutineJobComponent.h"
 #include "SmartObjectComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -21,7 +22,7 @@ bool UMiningSitePresentationCoordinatorComponent::HasSmartObjectInteractionTimed
 		return false;
 	}
 
-	const TObjectPtr<UAITask_UseGameplayInteraction>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor);
+	const TObjectPtr<UMiningSmartObjectInteractionTask>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor);
 	if (!ExistingTask || !ExistingTask->Get() || ExistingTask->Get()->IsFinished())
 	{
 		return false;
@@ -58,13 +59,13 @@ bool UMiningSitePresentationCoordinatorComponent::TryStartSmartObjectBehavior(AM
 		UE_LOG(LogPangeaMiningPresentationSmartObject, Log, TEXT("Mining site GI status. Site=%s Actor=%s Status=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(Actor), *NewStatus);
 	};
 
-	if (!Actor || !SmartObjectComponent || !SmartObjectComponent->IsSmartObjectEnabled())
+	if (bClearingSmartObjectTasks || !SiteActor.HasAuthority() || !Actor || !SmartObjectComponent || !SmartObjectComponent->IsSmartObjectEnabled())
 	{
 		SetSmartObjectStatus(TEXT("SmartObject disabled"));
 		return false;
 	}
 
-	if (TObjectPtr<UAITask_UseGameplayInteraction>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor))
+	if (TObjectPtr<UMiningSmartObjectInteractionTask>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor))
 	{
 		if (ExistingTask->Get() && !ExistingTask->Get()->IsFinished())
 		{
@@ -193,7 +194,7 @@ bool UMiningSitePresentationCoordinatorComponent::TryStartSmartObjectBehavior(AM
 		return false;
 	}
 
-	UAITask_UseGameplayInteraction* SmartObjectTask = UAITask_UseGameplayInteraction::MoveToAndUseSmartObjectWithGameplayInteraction(AIController, ClaimHandle, true);
+	UMiningSmartObjectInteractionTask* SmartObjectTask = UMiningSmartObjectInteractionTask::MoveToAndUseClaimedSlot(AIController, ClaimHandle, true, true);
 	if (!SmartObjectTask)
 	{
 		USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsFree(this, ClaimHandle);
@@ -201,11 +202,11 @@ bool UMiningSitePresentationCoordinatorComponent::TryStartSmartObjectBehavior(AM
 		return false;
 	}
 
-	SmartObjectTask->ReadyForActivation();
 	PresentationClaimHandleMap.Add(Actor, ClaimHandle);
 	PresentationSmartObjectTaskMap.Add(Actor, SmartObjectTask);
 	PresentationSmartObjectStartTimeMap.Add(Actor, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
 	PresentationMoveTargetMap.Remove(Actor);
+	SmartObjectTask->ReadyForActivation();
 	SetSmartObjectStatus(*FString::Printf(TEXT("GameplayInteraction started slot=%d results=%d total_slots=%d"), ChosenSlotIndex, RequestSlots.Num(), AllSlots.Num()));
 	return true;
 }
@@ -217,17 +218,18 @@ void UMiningSitePresentationCoordinatorComponent::ReleaseSmartObjectForActor(AAc
 		return;
 	}
 
-	bool bTaskCanceled = false;
-	if (TObjectPtr<UAITask_UseGameplayInteraction>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor))
+	// Once a task accepted a claim it owns cleanup, including synchronous completion.
+	// A finished/GC-cleared task entry is not permission to release its old claim again.
+	const bool bTaskOwnedClaim = PresentationSmartObjectTaskMap.Contains(Actor);
+	if (TObjectPtr<UMiningSmartObjectInteractionTask>* ExistingTask = PresentationSmartObjectTaskMap.Find(Actor))
 	{
 		if (ExistingTask->Get() && !ExistingTask->Get()->IsFinished())
 		{
 			ExistingTask->Get()->ExternalCancel();
-			bTaskCanceled = true;
 		}
 	}
 
-	if (!bTaskCanceled)
+	if (!bTaskOwnedClaim)
 	{
 		if (const FSmartObjectClaimHandle* ExistingClaim = PresentationClaimHandleMap.Find(Actor))
 		{
@@ -243,4 +245,30 @@ void UMiningSitePresentationCoordinatorComponent::ReleaseSmartObjectForActor(AAc
 	PresentationSmartObjectLastStatusMap.Remove(Actor);
 	PresentationSmartObjectStartTimeMap.Remove(Actor);
 	PresentationHoldUntilTimeMap.Remove(Actor);
+}
+
+void UMiningSitePresentationCoordinatorComponent::CancelAllSmartObjectTasks()
+{
+	for (const TWeakObjectPtr<UMiningRoutineJobComponent>& Job : RoutineJobs)
+		if (Job.IsValid()) Job->ReleaseAssignment();
+	RoutineJobs.Reset();
+	TGuardValue<bool> Guard(bClearingSmartObjectTasks, true);
+	TArray<TObjectPtr<UMiningSmartObjectInteractionTask>> Tasks;
+	PresentationSmartObjectTaskMap.GenerateValueArray(Tasks);
+	PresentationSmartObjectTaskMap.Reset();
+	// Tasks own their accepted claims, even when the actor key is already invalid.
+	for (UMiningSmartObjectInteractionTask* Task : Tasks)
+	{
+		if (IsValid(Task) && !Task->IsFinished()) Task->ExternalCancel();
+	}
+	PresentationClaimHandleMap.Reset();
+	PresentationSmartObjectStartTimeMap.Reset();
+	PresentationSmartObjectLastStatusMap.Reset();
+	PresentationHoldUntilTimeMap.Reset();
+}
+
+void UMiningSitePresentationCoordinatorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	CancelAllSmartObjectTasks();
+	Super::EndPlay(EndPlayReason);
 }

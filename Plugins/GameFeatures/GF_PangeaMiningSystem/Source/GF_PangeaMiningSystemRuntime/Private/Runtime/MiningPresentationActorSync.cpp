@@ -7,6 +7,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+#include "Runtime/MiningPresentationActorRetirement.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningPresentationActorSync, Log, All);
 
@@ -31,6 +32,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 	{
 		if (AActor* ExistingActor = ActorArray.Pop())
 		{
+			ReleaseRoutineAssignment(ExistingActor);
 			ReleaseSmartObjectForActor(ExistingActor);
 			PresentationRoutePhaseMap.Remove(ExistingActor);
 			PresentationMoveTargetMap.Remove(ExistingActor);
@@ -38,7 +40,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 			PresentationSmartObjectStartTimeMap.Remove(ExistingActor);
 			PresentationTargetHoldStartedMap.Remove(ExistingActor);
 			ApplyAgentPresentation(ExistingActor, Role, EMiningPresentationState::Idle);
-			ExistingActor->Destroy();
+			PangeaMiningPrivate::RetirePresentationActor(ExistingActor);
 		}
 	}
 
@@ -59,18 +61,15 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 		const float AngleStep = DesiredCount > 1 ? 40.0f : 0.0f;
 		const FVector SpawnLocation = GetPresentationSlotLocation(SiteActor, Radius, AngleOffsetDegrees + (SpawnIndex * AngleStep));
 
-		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.Owner = &SiteActor;
-		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		SpawnParameters.ObjectFlags |= RF_Transient;
-
-		AActor* SpawnedActor = SiteActor.GetWorld()->SpawnActor<AActor>(LoadedClass, SpawnLocation, SiteActor.GetActorRotation(), SpawnParameters);
+		AActor* SpawnedActor = SpawnConfiguredPresentationActor(SiteActor, LoadedClass, SpawnLocation);
 		if (!SpawnedActor)
 		{
 			break;
 		}
 
-		TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(SpawnedActor);
+		const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+		TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents;
+		if (!Config || !Config->bUseACFRoutineJobs) SpawnedActor->GetComponents(PrimitiveComponents);
 		for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 		{
 			if (!PrimitiveComponent)
@@ -124,6 +123,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 	{
 		if (SpawnedCourierActor)
 		{
+			ReleaseRoutineAssignment(SpawnedCourierActor);
 			ReleaseSmartObjectForActor(SpawnedCourierActor);
 			PresentationRoutePhaseMap.Remove(SpawnedCourierActor);
 			PresentationMoveTargetMap.Remove(SpawnedCourierActor);
@@ -131,7 +131,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 			PresentationSmartObjectStartTimeMap.Remove(SpawnedCourierActor);
 			PresentationTargetHoldStartedMap.Remove(SpawnedCourierActor);
 			ApplyAgentPresentation(SpawnedCourierActor, EMiningPresentationRole::Courier, EMiningPresentationState::Idle);
-			SpawnedCourierActor->Destroy();
+			PangeaMiningPrivate::RetirePresentationActor(SpawnedCourierActor);
 			SpawnedCourierActor = nullptr;
 		}
 		return;
@@ -154,6 +154,9 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 	for (TActorIterator<AActor> It(SiteActor.GetWorld(), LoadedClass); It; ++It)
 	{
 		AActor* Candidate = *It;
+		const UMiningSitePresentationConfig* CurrentConfig = GetPresentationConfig(SiteActor.MiningSiteComponent);
+		// Hybrid actors are site-owned. Never adopt/destroy another site's courier.
+		if (CurrentConfig && CurrentConfig->bUseACFRoutineJobs) continue;
 		if (!Candidate || Candidate->IsPendingKillPending())
 		{
 			continue;
@@ -179,6 +182,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 
 	for (AActor* DuplicateCourier : DuplicateCourierActors)
 	{
+		ReleaseRoutineAssignment(DuplicateCourier);
 		ReleaseSmartObjectForActor(DuplicateCourier);
 		PresentationRoutePhaseMap.Remove(DuplicateCourier);
 		PresentationMoveTargetMap.Remove(DuplicateCourier);
@@ -186,7 +190,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 		PresentationSmartObjectStartTimeMap.Remove(DuplicateCourier);
 		PresentationTargetHoldStartedMap.Remove(DuplicateCourier);
 		ApplyAgentPresentation(DuplicateCourier, EMiningPresentationRole::Courier, EMiningPresentationState::Idle);
-		DuplicateCourier->Destroy();
+		PangeaMiningPrivate::RetirePresentationActor(DuplicateCourier);
 	}
 
 	if (AdoptedCourierActor)
@@ -216,18 +220,15 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 		return;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = &SiteActor;
-	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	SpawnParameters.ObjectFlags |= RF_Transient;
-
-	SpawnedCourierActor = SiteActor.GetWorld()->SpawnActor<AActor>(LoadedClass, GetPresentationSlotLocation(SiteActor, Distance, AngleOffsetDegrees), SiteActor.GetActorRotation(), SpawnParameters);
+	SpawnedCourierActor = SpawnConfiguredPresentationActor(SiteActor, LoadedClass, GetPresentationSlotLocation(SiteActor, Distance, AngleOffsetDegrees));
 	if (!SpawnedCourierActor)
 	{
 		return;
 	}
 
-	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(SpawnedCourierActor);
+	const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents;
+	if (!Config || !Config->bUseACFRoutineJobs) SpawnedCourierActor->GetComponents(PrimitiveComponents);
 	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
 		if (!PrimitiveComponent)

@@ -2,9 +2,11 @@
 
 #include "Actors/MiningSiteActor.h"
 #include "Components/MiningSiteComponent.h"
+#include "Components/PangeaMiningTransportComponent.h"
 #include "DataAssets/MiningSitePresentationConfig.h"
 #include "SmartObjectComponent.h"
 #include "SmartObjectSubsystem.h"
+#include "Runtime/MiningPresentationActorRetirement.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningPresentationCoordinator, Log, All);
 
@@ -43,9 +45,12 @@ void UMiningSitePresentationCoordinatorComponent::RefreshPresentationActors(
 	}
 
 	const bool bPresentationRelevant = IsPresentationRelevant(SiteActor);
-	const int32 DesiredWorkerCount = bPresentationRelevant ? FMath::Max(0, LevelDefinition.WorkerCount) : 0;
+	const int32 DesiredWorkerCount = bPresentationRelevant ? MiningSiteComponent->GetLivingWorkerCount() : 0;
 	const int32 DesiredGuardCount = bPresentationRelevant ? FMath::Max(0, LevelDefinition.GuardCount) : 0;
-	const bool bShouldShowCourier = bPresentationRelevant && LevelDefinition.bShipmentUnlocked && !LevelDefinition.CourierClass.IsNull();
+	// The convoy broker owns the hybrid courier for the whole journey, including
+	// when players are near the settlement rather than the mining camp.
+	const bool bHybrid = SiteActor.TransportComponent && SiteActor.TransportComponent->IsHybridEnabled();
+	const bool bShouldShowCourier = !bHybrid && bPresentationRelevant && LevelDefinition.bShipmentUnlocked && !LevelDefinition.CourierClass.IsNull();
 	ValidatePresentationSetup(SiteActor, MiningSiteComponent, DesiredWorkerCount, DesiredGuardCount, bShouldShowCourier);
 
 	const FMiningPresentationRoleConfig* WorkerConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Worker);
@@ -82,13 +87,14 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 	TArray<TObjectPtr<AActor>>& SpawnedGuardActors,
 	TObjectPtr<AActor>& SpawnedCourierActor)
 {
+	CancelAllSmartObjectTasks();
 	for (AActor* Actor : SpawnedWorkerActors)
 	{
 		ReleaseSmartObjectForActor(Actor);
 		if (Actor)
 		{
 			ApplyAgentPresentation(Actor, EMiningPresentationRole::Worker, EMiningPresentationState::Idle);
-			Actor->Destroy();
+			PangeaMiningPrivate::RetirePresentationActor(Actor);
 		}
 	}
 
@@ -98,7 +104,7 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 		if (Actor)
 		{
 			ApplyAgentPresentation(Actor, EMiningPresentationRole::Guard, EMiningPresentationState::Idle);
-			Actor->Destroy();
+			PangeaMiningPrivate::RetirePresentationActor(Actor);
 		}
 	}
 
@@ -109,7 +115,7 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 	{
 		ReleaseSmartObjectForActor(SpawnedCourierActor);
 		ApplyAgentPresentation(SpawnedCourierActor, EMiningPresentationRole::Courier, EMiningPresentationState::Idle);
-		SpawnedCourierActor->Destroy();
+		PangeaMiningPrivate::RetirePresentationActor(SpawnedCourierActor);
 		SpawnedCourierActor = nullptr;
 	}
 
@@ -131,7 +137,7 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 	TArray<TObjectPtr<USmartObjectComponent>>& WorkerSmartObjectComponents,
 	TArray<TObjectPtr<USmartObjectComponent>>& GuardSmartObjectComponents) const
 {
-	if (!MiningSiteComponent || !MiningSiteComponent->SiteDefinition)
+	if (!SiteActor.HasAuthority() || !MiningSiteComponent || !MiningSiteComponent->SiteDefinition)
 	{
 		return;
 	}

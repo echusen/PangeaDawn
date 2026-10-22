@@ -30,6 +30,25 @@ class PANGEABASEUPGRADESYSTEM_API UPangeaUpgradeSystemComponent : public UActorC
 
 public:
 	UPangeaUpgradeSystemComponent();
+	virtual void Serialize(FArchive& Ar) override;
+
+	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	FPangeaUpgradeResult CheckNextUpgrade(UObject* PlayerContext) const;
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Upgrade")
+	FPangeaUpgradeResult TryUpgradeChecked(UObject* PlayerContext);
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="Upgrade")
+	FPangeaUpgradeResult LastUpgradeResult;
+
+	/** Stops retries after an ambiguous partial side effect or a save made inside a command.
+	 * Restore a coherent backup / use an audited migration; never clear blindly and retry. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, SaveGame, Category="Save")
+	bool bUpgradeNeedsRecovery = false;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, SaveGame, Category="Save")
+	TSet<FString> SuccessfulActionReceipts;
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, SaveGame, Category="Save")
+	FString PendingOperation;
+	UFUNCTION(BlueprintCallable, Category="Save")
+	void OnComponentLoaded();
 	
 	//Save
 	UFUNCTION(BlueprintCallable)
@@ -113,6 +132,8 @@ private:
 	/** Helper: find level definition for an absolute level number */
 	bool FindLevelDefinition(int32 Level, FUpgradeLevelDefinition& OutLevel) const;
 
-	/** Helper: execute all milestones belonging to a level (if requirements are met) */
-	void ExecuteMilestonesForLevel(int32 Level, const FBaseUpgradeContext& UpgradeContext);
+	FString GetActionKey(const FUpgradeMilestoneDefinition& Milestone, const UUpgradeAction* Action) const;
+	bool RestoreCompletedState(UObject* PlayerContext);
+	bool bCommandInProgress = false;
+	FPangeaUpgradeResult CheckNextUpgradeInternal(UObject* PlayerContext) const;
 };

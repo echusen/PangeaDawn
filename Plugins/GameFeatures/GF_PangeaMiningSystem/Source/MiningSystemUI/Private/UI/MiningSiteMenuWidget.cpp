@@ -1,5 +1,8 @@
 #include "UI/MiningSiteMenuWidget.h"
 
+#include "Components/ACFInteractionComponent.h"
+#include "GameFramework/Pawn.h"
+
 #include "Actors/MiningSiteActor.h"
 #include "Components/Button.h"
 #include "Components/Border.h"
@@ -112,6 +115,8 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 	CostText = AddText(TEXT("CostText"), 18);
 
 	AddButton(TEXT("UpgradeButton"), TEXT("UpgradeButtonText"), FText::FromString(TEXT("Upgrade")), UpgradeButton, UpgradeButtonText);
+	AddButton(TEXT("RecruitWorkerButton"), TEXT("RecruitWorkerButtonText"), FText::FromString(TEXT("Recruit One Miner")), RecruitWorkerButton, RecruitWorkerButtonText);
+	RecruitWorkerButton->OnClicked.AddDynamic(this, &ThisClass::OnRecruitWorkerClicked);
 	AddButton(TEXT("SyncProductionButton"), TEXT("SyncProductionButtonText"), FText::FromString(TEXT("Sync Production")), SyncProductionButton, SyncProductionButtonText);
 	AddButton(TEXT("AdvanceDayButton"), TEXT("AdvanceDayButtonText"), FText::FromString(TEXT("Advance Day")), AdvanceDayButton, AdvanceDayButtonText);
 	AddButton(TEXT("CloseButton"), TEXT("CloseButtonText"), FText::FromString(TEXT("Close")), CloseButton, CloseButtonText);
@@ -154,6 +159,16 @@ void UMiningSiteMenuWidget::RefreshUI()
 	StatusText->SetText(BuildStatusText());
 	CostText->SetText(BuildCostText());
 	UpdateActionLabels();
+	if (RecruitWorkerButtonText)
+	{
+		FMiningSiteLevelDefinition Level;
+		TArray<FString> Costs;
+		if (SiteComponent && SiteComponent->GetCurrentLevelDefinition(Level))
+			for (const FMiningItemQuantity& Item : Level.WorkerRecruitmentCost)
+				Costs.Add(FString::Printf(TEXT("%s x%d"), *GetNameSafe(Item.ItemClass.Get()), Item.Quantity));
+		RecruitWorkerButtonText->SetText(FText::FromString(Costs.IsEmpty() ? TEXT("Recruitment cost not configured") :
+			FString::Printf(TEXT("Recruit One Miner: %s"), *FString::Join(Costs, TEXT(", ")))));
+	}
 
 	if (UpgradeButton)
 	{
@@ -165,6 +180,9 @@ void UMiningSiteMenuWidget::RefreshUI()
 	{
 		SyncProductionButton->SetIsEnabled(SiteActor != nullptr);
 	}
+	if (RecruitWorkerButton)
+		RecruitWorkerButton->SetIsEnabled(IsValid(SiteActor) && IsValid(InteractingPawn) &&
+			InteractingPawn->FindComponentByClass<UACFInteractionComponent>() && SiteActor->CanRecruitFromInteraction(InteractingPawn));
 
 	if (AdvanceDayButton)
 	{
@@ -183,14 +201,14 @@ FText UMiningSiteMenuWidget::BuildStatusText() const
 	FMiningSiteLevelDefinition CurrentLevel;
 	const bool bHasLevel = SiteComponent->GetCurrentLevelDefinition(CurrentLevel);
 	const int32 AutoPerDay = bHasLevel ? CurrentLevel.AutomatedMineralsPerDay : 0;
-	const int32 WorkerCount = bHasLevel ? CurrentLevel.WorkerCount : 0;
+	const int32 WorkerCount = SiteComponent->GetLivingWorkerCount();
 	const int32 GuardCount = bHasLevel ? CurrentLevel.GuardCount : 0;
 	const int32 CourierCount = bHasLevel && CurrentLevel.bShipmentUnlocked && !CurrentLevel.CourierClass.IsNull() ? 1 : 0;
 	const int32 ShipmentLossPercent = bHasLevel ? FMath::RoundToInt(CurrentLevel.ShipmentLossChance * 100.0f) : 0;
 	const int32 WorkerDeathPercent = bHasLevel ? FMath::RoundToInt(CurrentLevel.WorkerDeathChance * 100.0f) : 0;
 
 	return FText::Format(
-		FText::FromString(TEXT("Stored: {0}/{1}\nManual Speed: {2}x\nAuto Production: {3}/day\nWorkers: {4}  Guards: {5}  Couriers: {6}\nShipment Loss: {7}%  Worker Death: {8}%")),
+		FText::FromString(TEXT("Stored: {0}/{1}\nManual Speed: {2}x\nFull-Crew Production: {3}/day (scales with living miners)\nLiving Workers: {4}  Guards: {5}  Couriers: {6}\nShipment Loss: {7}%  Day-End Death Chance: {8}% per living miner, unattended only\nVacancies: {9}  Completed Mining Days: {10}")),
 		FText::AsNumber(SiteComponent->GetStoredUnits()),
 		FText::AsNumber(SiteComponent->GetStorageCapacity()),
 		FText::AsNumber(SiteComponent->GetManualMiningSpeedMultiplier()),
@@ -199,7 +217,9 @@ FText UMiningSiteMenuWidget::BuildStatusText() const
 		FText::AsNumber(GuardCount),
 		FText::AsNumber(CourierCount),
 		FText::AsNumber(ShipmentLossPercent),
-		FText::AsNumber(WorkerDeathPercent));
+		FText::AsNumber(WorkerDeathPercent),
+		FText::AsNumber(SiteComponent->GetWorkerVacancies()),
+		FText::AsNumber(SiteComponent->GetCompletedMiningDays()));
 }
 
 FText UMiningSiteMenuWidget::BuildCostText() const
@@ -315,6 +335,17 @@ void UMiningSiteMenuWidget::OnUpgradeClicked()
 		SiteActor->ServerPurchaseNextUpgrade(InteractingPawn);
 	}
 
+	RefreshUI();
+}
+
+void UMiningSiteMenuWidget::OnRecruitWorkerClicked()
+{
+	if (!IsValid(SiteActor) || !IsValid(InteractingPawn)) return;
+	if (UACFInteractionComponent* Interaction = InteractingPawn->FindComponentByClass<UACFInteractionComponent>())
+	{
+		Interaction->SetCurrentBestInteractable(SiteActor);
+		Interaction->Interact(TEXT("Mining.RecruitWorker")); // Owned-pawn RPC; server validates cost/vacancy/range.
+	}
 	RefreshUI();
 }
 

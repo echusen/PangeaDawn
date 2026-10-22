@@ -123,7 +123,7 @@ EMiningPresentationState UMiningSitePresentationCoordinatorComponent::GetActiveS
 
 void UMiningSitePresentationCoordinatorComponent::ApplyAgentPresentation(AActor* Actor, EMiningPresentationRole Role, EMiningPresentationState State, const FVector* FocusLocation) const
 {
-	if (!Actor)
+	if (!Actor || !Actor->HasAuthority())
 	{
 		return;
 	}
@@ -161,7 +161,7 @@ void UMiningSitePresentationCoordinatorComponent::ApplyAgentPresentation(AActor*
 
 void UMiningSitePresentationCoordinatorComponent::EnsurePresentationAgentComponent(AActor* Actor) const
 {
-	if (!Actor)
+	if (!Actor || !Actor->HasAuthority())
 	{
 		return;
 	}
@@ -191,6 +191,7 @@ void UMiningSitePresentationCoordinatorComponent::EnsurePresentationAgentCompone
 	UActorComponent* NewComponent = Actor->AddComponentByClass(AgentComponentClass, false, FTransform::Identity, false);
 	if (NewComponent)
 	{
+		NewComponent->SetIsReplicated(true);
 		NewComponent->RegisterComponent();
 	}
 }

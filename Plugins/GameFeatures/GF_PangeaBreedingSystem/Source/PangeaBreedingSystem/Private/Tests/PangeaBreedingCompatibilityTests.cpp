@@ -1,6 +1,8 @@
 #include "Components/PangeaBreedableComponent.h"
 #include "Components/PangeaBreedingFarmComponent.h"
 #include "Misc/AutomationTest.h"
+#include "Engine/World.h"
+#include "Misc/ScopeExit.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaBreedingSafetyTest, "Pangea.ACF.Breeding.FertilityAndInvalidParents",
@@ -8,7 +10,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaBreedingSafetyTest, "Pangea.ACF.Breeding
 
 bool FPangeaBreedingSafetyTest::RunTest(const FString& Parameters)
 {
-    UPangeaBreedableComponent* Parent = NewObject<UPangeaBreedableComponent>();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Authority fixture world"), World)) return false;
+    ON_SCOPE_EXIT { World->DestroyWorld(false); };
+    AActor* Owner = World->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("Authority fixture owner"), Owner)) return false;
+    UPangeaBreedableComponent* Parent = NewObject<UPangeaBreedableComponent>(Owner);
+    Owner->AddInstanceComponent(Parent);
     TestTrue(TEXT("Default parent is fertile"), IPDBreedableInterface::Execute_IsFertile(Parent));
     Parent->bIsOnFertilityCooldown = true;
     TestFalse(TEXT("Cooldown prevents fertility"), IPDBreedableInterface::Execute_IsFertile(Parent));

@@ -5,6 +5,7 @@
 #include "Components/ACFInteractionComponent.h"
 #include "Components/ACFInventoryComponent.h"
 #include "Components/ACFStorageComponent.h"
+#include "Components/PangeaMiningTransportStorageComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -43,7 +44,7 @@ AMiningSettlementStockpileActor::AMiningSettlementStockpileActor()
 	CourierUnloadMarker->SetupAttachment(SceneRoot);
 	CourierUnloadMarker->SetRelativeLocation(FVector(120.0f, 0.0f, 0.0f));
 
-	StorageComponent = CreateDefaultSubobject<UACFStorageComponent>(TEXT("StorageComponent"));
+	StorageComponent = CreateDefaultSubobject<UPangeaMiningTransportStorageComponent>(TEXT("StorageComponent"));
 	if (StorageComponent != nullptr)
 	{
 		StorageComponent->SetMaxInventorySlots(1000);

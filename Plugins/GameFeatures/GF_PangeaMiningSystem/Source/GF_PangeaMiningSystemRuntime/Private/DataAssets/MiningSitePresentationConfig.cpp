@@ -1,6 +1,7 @@
 #include "DataAssets/MiningSitePresentationConfig.h"
 
 #include "Misc/DataValidation.h"
+#include "ACFAIController.h"
 
 const FMiningPresentationRoleConfig* UMiningSitePresentationConfig::FindRoleConfig(const EMiningPresentationRole Role) const
 {
@@ -21,6 +22,21 @@ const FMiningPresentationRoleConfig* UMiningSitePresentationConfig::FindRoleConf
 EDataValidationResult UMiningSitePresentationConfig::IsDataValid(FDataValidationContext& Context) const
 {
 	EDataValidationResult Result = EDataValidationResult::Valid;
+	if (bUseACFRoutineJobs)
+	{
+		if (!FMath::IsFinite(NavigationTimeoutSeconds) || NavigationTimeoutSeconds < 1.0f || !FMath::IsFinite(BlockedRetryDelaySeconds) || BlockedRetryDelaySeconds < 0.1f)
+		{
+			Context.AddError(FText::FromString(TEXT("Routine navigation timeout must be >= 1s and retry delay >= 0.1s (finite values).")));
+			Result = EDataValidationResult::Invalid;
+		}
+		const UClass* ControllerClass = RoutineControllerClass.LoadSynchronous();
+		const AACFAIController* Defaults = ControllerClass ? Cast<AACFAIController>(ControllerClass->GetDefaultObject()) : nullptr;
+		if (!Defaults || !Defaults->GetBehaviorTree() || !Defaults->GetDefaultAIState().MatchesTagExact(FGameplayTag::RequestGameplayTag(TEXT("AIState.Routine"))))
+		{
+			Context.AddError(FText::FromString(TEXT("Routine jobs need an ACF controller with BehaviorTree and AIState.Routine default.")));
+			Result = EDataValidationResult::Invalid;
+		}
+	}
 
 	const auto ValidateRole =
 		[&Context, &Result](const FMiningPresentationRoleConfig& RoleConfig, const EMiningPresentationRole ExpectedRole, const TCHAR* RoleName)

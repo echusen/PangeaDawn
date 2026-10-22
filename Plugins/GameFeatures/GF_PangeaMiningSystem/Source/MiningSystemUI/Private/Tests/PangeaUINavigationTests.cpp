@@ -170,7 +170,8 @@ bool FPangeaMiningWorldInteractionTest::RunTest(const FString& Parameters)
     if (!TestNotNull(TEXT("Real player ACF interaction component"), Interaction)) return false;
     AMiningDiscoveryNodeActor* Node = nullptr;
     UPangeaUpgradeSystemComponent* Upgrades = nullptr;
-    for (TActorIterator<AMiningDiscoveryNodeActor> It(World); It; ++It) { Node = *It; break; }
+    for (TActorIterator<AMiningDiscoveryNodeActor> It(World); It; ++It)
+        if (!It->ActorHasTag(TEXT("Pangea.Mining.Prototype"))) { Node = *It; break; }
     for (TActorIterator<AVillageBase> It(World); It; ++It)
         if ((Upgrades = It->FindComponentByClass<UPangeaUpgradeSystemComponent>())) break;
     if (!TestNotNull(TEXT("Map mining discovery node"), Node) ||

@@ -32,6 +32,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Definition")
 	UPangeaDefinitionFragment* GetFragmentByClass(TSubclassOf<UPangeaDefinitionFragment> FragmentClass) const;
 
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+#endif
+
 	template <typename T>
 	T* GetFragment() const
 	{

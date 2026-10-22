@@ -11,6 +11,26 @@ class UAnimInstance;
 class UAnimMontage;
 class UAnimSequenceBase;
 class UCharacterMovementComponent;
+class UACFCharacterDataAsset;
+
+/** Persistent cosmetic state, reconstructed for newly relevant clients without replaying AI tasks. */
+USTRUCT()
+struct FMiningAgentPresentationSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	EMiningPresentationRole Role = EMiningPresentationRole::Worker;
+
+	UPROPERTY()
+	EMiningPresentationState State = EMiningPresentationState::Idle;
+
+	UPROPERTY()
+	FVector FocusLocation = FVector::ZeroVector;
+
+	UPROPERTY()
+	bool bHasFocus = false;
+};
 
 UCLASS(ClassGroup=(Pangea), BlueprintType, Blueprintable, meta=(BlueprintSpawnableComponent))
 class MININGSYSTEMPRESENTATION_API UMiningPresentationAgentComponent : public UActorComponent, public IMiningPresentationAgentInterface
@@ -19,6 +39,9 @@ class MININGSYSTEMPRESENTATION_API UMiningPresentationAgentComponent : public UA
 
 public:
 	UMiningPresentationAgentComponent();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Mining|Presentation")
 	void SetTravelSpeedOverride(EMiningPresentationRole Role, float TravelSpeed);
 
 	UFUNCTION(BlueprintPure, Category="Mining|Presentation")
@@ -33,15 +56,27 @@ public:
 	UFUNCTION(BlueprintPure, Category="Mining|Presentation")
 	FVector GetPresentationFocusLocation() const { return CurrentFocusLocation; }
 
+	UFUNCTION(BlueprintPure, Category="Mining|Presentation|Diagnostics")
+	UAnimSequenceBase* GetActivePresentationAnimation() const { return ActivePresentationAnimation.Get(); }
+
 	virtual void SetMiningPresentationRole_Implementation(EMiningPresentationRole Role) override;
+	virtual void SetMiningTravelSpeed_Implementation(EMiningPresentationRole Role, float Speed) override { SetTravelSpeedOverride(Role, Speed); }
 	virtual void SetMiningPresentationState_Implementation(EMiningPresentationState State) override;
 	virtual void SetMiningPresentationFocus_Implementation(const FVector& WorldLocation) override;
+	virtual float GetMiningPresentationDuration_Implementation(EMiningPresentationState State) override;
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Presentation|Animation")
 	TSoftObjectPtr<UAnimSequenceBase> WorkerWorkLoopAnimation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Presentation|Animation")
+	TSoftObjectPtr<UAnimSequenceBase> RetrievalAnimation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Presentation|Animation")
+	TSoftObjectPtr<UAnimSequenceBase> DepositAnimation;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Presentation|Animation")
 	TSoftObjectPtr<UAnimSequenceBase> GuardHoldLoopAnimation;
@@ -98,17 +133,36 @@ protected:
 	bool bHasFocus = false;
 
 private:
+	UPROPERTY(ReplicatedUsing=OnRep_PresentationSnapshot, Transient)
+	FMiningAgentPresentationSnapshot PresentationSnapshot;
+
+	UFUNCTION()
+	void OnRep_PresentationSnapshot();
+
+	UFUNCTION()
+	void HandleAppearanceChanged(UACFCharacterDataAsset* CharacterData);
+
+	void PublishPresentationSnapshot();
+	bool CanAuthorPresentation() const;
+
 	TWeakObjectPtr<ACharacter> CachedCharacterOwner;
 	TWeakObjectPtr<UCharacterMovementComponent> CachedMovementComponent;
 	TWeakObjectPtr<UAnimInstance> CachedAnimInstance;
+	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActivePresentationMontage;
+	TWeakObjectPtr<UAnimSequenceBase> ActivePresentationAnimation;
+	EMiningPresentationState ActiveAnimationState = EMiningPresentationState::Idle;
+	EMiningPresentationRole ActiveAnimationRole = EMiningPresentationRole::Worker;
 	float DefaultMaxWalkSpeed = 0.0f;
+	float AppliedTravelSpeed = 0.0f;
+	bool bOwnsTravelSpeed = false;
 	TEnumAsByte<ERootMotionMode::Type> SavedRootMotionMode;
 	bool bHasSavedRootMotionMode = false;
 
 	void CacheOwnerReferences();
 	void ApplyMovementForState();
 	void ApplyAnimationForState();
+	TSoftObjectPtr<UAnimSequenceBase> SelectPresentationAnimation(EMiningPresentationState State, float& OutRate, int32& OutLoopCount) const;
 	bool PlayLoopingPresentationAnimation(TSoftObjectPtr<UAnimSequenceBase>& AnimationAsset, float PlayRate, int32 LoopCount);
 	void StopPresentationAnimation();
 	float GetTravelSpeedForRole() const;

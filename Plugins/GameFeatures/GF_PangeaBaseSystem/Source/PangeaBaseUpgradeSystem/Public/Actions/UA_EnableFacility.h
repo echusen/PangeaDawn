@@ -21,6 +21,11 @@ class PANGEABASEUPGRADESYSTEM_API UUA_EnableFacility : public UUpgradeAction
 	GENERATED_BODY()
 
 public:
+	virtual bool ValidateConfiguration_Implementation(FText& OutFailure) const override;
+	virtual bool CanExecuteUpgrade_Implementation(const FBaseUpgradeContext& Context, FText& OutFailure) const override;
+	virtual bool TryExecuteUpgrade_Implementation(const FBaseUpgradeContext& Context, FText& OutFailure) override;
+	virtual bool CanReconstructOnLoad_Implementation() const override;
+	virtual FGameplayTag GetUnlockedFacilityTag_Implementation() const override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Facility")
 	FText FacilityDisplayName;

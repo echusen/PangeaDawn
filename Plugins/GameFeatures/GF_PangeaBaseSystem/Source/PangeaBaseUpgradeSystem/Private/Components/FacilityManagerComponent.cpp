@@ -51,6 +51,7 @@ bool UPangeaFacilityManagerComponent::IsFacilityEnabled(const FGameplayTag& Faci
 
 void UPangeaFacilityManagerComponent::EnableFacility(const FGameplayTag& FacilityTag)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
     for (auto& Entry : Facilities)
     {
         if (Entry.FacilityTag == FacilityTag)
@@ -70,6 +71,7 @@ void UPangeaFacilityManagerComponent::EnableFacility(const FGameplayTag& Facilit
 
 void UPangeaFacilityManagerComponent::DisableFacility(const FGameplayTag& FacilityTag)
 {
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
     for (auto& Entry : Facilities)
     {
         if (Entry.FacilityTag == FacilityTag)
