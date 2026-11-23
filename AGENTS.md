@@ -1,7 +1,7 @@
 # Project ownership and vendor boundaries
 
 - Vendor ACF source **and assets are READ ONLY**. This includes the entire
-  `Plugins/ACFUAsce5ab7c1439afbV5/` tree, `Plugins/ACFUltimate/`, and other
+  `Plugins/ACFUAsceb6d4445a7304V7/` tree, `Plugins/ACFUltimate/`, and other
   vendor ACF installations. Do not patch, reparent, resave or otherwise modify
   vendor files/assets. Reading, compiling and linking unmodified vendor code
   is allowed. Do not reapply historical vendor patches from `Saved/`.

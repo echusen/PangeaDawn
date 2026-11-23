@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $vendorRoots = @(
-    'Plugins/ACFUAsce5ab7c1439afbV5',
+    'Plugins/ACFUAsceb6d4445a7304V7',
     'Plugins/ACFUltimate',
     'Content/FullSample',
     'Content/AnimationLibrary'

@@ -10,6 +10,7 @@
     <toc-element topic="acf-mining-timing.md"/>
     <toc-element topic="acf-mining-public-apis.md"/>
     <toc-element topic="acf-mining-routines.md"/>
+    <toc-element topic="opening-chapter-gaps.md"/>
     <toc-element topic="base-upgrade-system.md">
         <toc-element topic="base-upgrade-components.md"/>
         <toc-element topic="base-upgrade-data-assets.md"/>

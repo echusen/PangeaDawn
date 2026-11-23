@@ -23,7 +23,8 @@ public class Pangea_Dawn : ModuleRules
 			"AscentCombatFramework",
 			"AscentCoreInterfaces",
 			"ActionsSystem",
-			"CraftingSystem"
+			"CraftingSystem",
+			"AscentQuestSystem"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {
