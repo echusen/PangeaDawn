@@ -15,8 +15,10 @@ void UMiningSiteComponent::Serialize(FArchive& Ar)
 		Ar.ArNoDelta = true;
 		Super::Serialize(Ar);
 		Ar.ArNoDelta = bWasNoDelta;
+
 		return;
 	}
+
 	if (Ar.IsSaveGame() && Ar.IsLoading())
 	{
 		// Missing tags in legacy records must not retain a previous load's state.
@@ -31,6 +33,7 @@ void UMiningSiteComponent::Serialize(FArchive& Ar)
 		bClockInitialized = false;
 		bAwaitingTimingRestore = true;
 	}
+
 	Super::Serialize(Ar);
 }
 
@@ -42,25 +45,35 @@ bool UMiningSiteComponent::IsTimingReady() const
 double UMiningSiteComponent::GetConfiguredShipmentInterval() const
 {
 	FMiningSiteLevelDefinition Definition;
-	return GetCurrentLevelDefinition(Definition) && Definition.bShipmentUnlocked &&
-		FMath::IsFinite(Definition.ShipmentIntervalSeconds)
-		? FMath::Max(0.0, double(Definition.ShipmentIntervalSeconds)) : 0.0;
+	return GetCurrentLevelDefinition(Definition) && Definition.bShipmentUnlocked && FMath::IsFinite(Definition.ShipmentIntervalSeconds)
+		? FMath::Max(0.0, double(Definition.ShipmentIntervalSeconds))
+		: 0.0;
 }
 
 double UMiningSiteComponent::GetShipmentCooldownRemaining() const
 {
 	// Clients receive a snapshot, not a timestamp in the server's clock domain.
-	if (!HasAuthority() || !bClockInitialized || bAwaitingTimingRestore) return ShipmentCooldownRemaining;
+	if (!HasAuthority() || !bClockInitialized || bAwaitingTimingRestore)
+	{
+		return ShipmentCooldownRemaining;
+	}
+
 	const double Now = GetWorldSeconds();
 	const double Elapsed = FMath::IsFinite(Now) ? FMath::Max(0.0, Now - LastAccountingWorldSeconds) : 0.0;
+
 	return FMath::Max(0.0, ShipmentCooldownRemaining - Elapsed);
 }
 
 void UMiningSiteComponent::AccountElapsedTime()
 {
 	const double Now = GetWorldSeconds();
-	if (!FMath::IsFinite(Now)) return;
+	if (!FMath::IsFinite(Now))
+	{
+		return;
+	}
+
 	const double Elapsed = bClockInitialized ? FMath::Max(0.0, Now - LastAccountingWorldSeconds) : 0.0;
+
 	// Commit the clock/cooldown before storage delegates can call back into us.
 	LastAccountingWorldSeconds = Now;
 	bClockInitialized = true;
@@ -70,26 +83,42 @@ void UMiningSiteComponent::AccountElapsedTime()
 
 void UMiningSiteComponent::OnComponentSaved()
 {
-	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress) return;
+	if (!IsTimingReady() || bTimingOperationInProgress || bUpgradeInProgress)
+	{
+		return;
+	}
+
 	TGuardValue<bool> Guard(bTimingOperationInProgress, true);
 	AccountElapsedTime(); // Settle due online day-end losses too; never dispatch a shipment during save.
 }
 
 void UMiningSiteComponent::OnComponentLoaded()
 {
-	if (!HasAuthority() || !bAwaitingTimingRestore) return; // Repeated callbacks are no-ops.
+	if (!HasAuthority() || !bAwaitingTimingRestore)
+	{
+		return; // Repeated callbacks are no-ops.
+	}
+
 	if (MiningTimingVersion > 1 || MiningTimingVersion < 0)
 	{
-		UE_LOG(LogPangeaMiningSite, Error, TEXT("Unsupported mining timing version %d on %s; automation remains paused."),
-			MiningTimingVersion, *GetNameSafe(GetOwner()));
+		UE_LOG(LogPangeaMiningSite,
+			Error,
+			TEXT("Unsupported mining timing version %d on %s; automation remains paused."),
+			MiningTimingVersion,
+			*GetNameSafe(GetOwner()));
 		return;
 	}
+
 	if (MiningWorkforceVersion < 0 || MiningWorkforceVersion > 1)
 	{
-		UE_LOG(LogPangeaMiningSite, Error, TEXT("Unsupported mining workforce version %d on %s; automation remains paused."),
-			MiningWorkforceVersion, *GetNameSafe(GetOwner()));
+		UE_LOG(LogPangeaMiningSite,
+			Error,
+			TEXT("Unsupported mining workforce version %d on %s; automation remains paused."),
+			MiningWorkforceVersion,
+			*GetNameSafe(GetOwner()));
 		return;
 	}
+
 	if (MiningWorkforceVersion == 0)
 	{
 		// Pre-workforce saves had no losses: migrate to a full crew and a fresh ONLINE day.
@@ -98,26 +127,29 @@ void UMiningSiteComponent::OnComponentLoaded()
 		CompletedMiningDays = 0;
 		WorkerRiskSeed = FMath::Rand();
 	}
+
 	MiningWorkforceVersion = 1;
 	FMiningSiteLevelDefinition LoadedLevel;
 	WorkerVacancies = GetCurrentLevelDefinition(LoadedLevel) ? FMath::Clamp(WorkerVacancies, 0, FMath::Max(0, LoadedLevel.WorkerCount)) : 0;
 	CompletedMiningDays = FMath::Max(int64(0), CompletedMiningDays);
-	const double DayLength = SiteDefinition ? double(SiteDefinition->SimulatedDaySeconds) : 0.0;
-	MiningDayElapsedSeconds = FMath::IsFinite(MiningDayElapsedSeconds) && MiningDayElapsedSeconds >= 0.0 && MiningDayElapsedSeconds < DayLength
-		? MiningDayElapsedSeconds : 0.0;
+	const double DayLength = SiteDefinition != nullptr ? double(SiteDefinition->SimulatedDaySeconds) : 0.0;
+	MiningDayElapsedSeconds =
+		FMath::IsFinite(MiningDayElapsedSeconds) && MiningDayElapsedSeconds >= 0.0 && MiningDayElapsedSeconds < DayLength ? MiningDayElapsedSeconds : 0.0;
 	if (MiningTimingVersion == 0)
 	{
 		// Old saves contain no fractional output or portable cooldown. Do not invent
 		// offline production, nor mistake a previous session's timestamp for this one.
 		ProductionRemainder = 0.0;
 		ShipmentCooldownRemaining = GetConfiguredShipmentInterval();
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("Legacy mining timing on %s: resuming with zero fractional output and a full shipment cooldown."),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("Legacy mining timing on %s: resuming with zero fractional output and a full shipment cooldown."),
 			*GetNameSafe(GetOwner()));
 	}
-	ProductionRemainder = FMath::IsFinite(ProductionRemainder) && ProductionRemainder >= 0.0 && ProductionRemainder < 1.0
-		? ProductionRemainder : 0.0;
-	ShipmentCooldownRemaining = FMath::IsFinite(ShipmentCooldownRemaining)
-		? FMath::Clamp(ShipmentCooldownRemaining, 0.0, GetConfiguredShipmentInterval()) : GetConfiguredShipmentInterval();
+
+	ProductionRemainder = FMath::IsFinite(ProductionRemainder) && ProductionRemainder >= 0.0 && ProductionRemainder < 1.0 ? ProductionRemainder : 0.0;
+	ShipmentCooldownRemaining = FMath::IsFinite(ShipmentCooldownRemaining) ? FMath::Clamp(ShipmentCooldownRemaining, 0.0, GetConfiguredShipmentInterval())
+																		   : GetConfiguredShipmentInterval();
 	MiningTimingVersion = 1;
 	LastAccountingWorldSeconds = GetWorldSeconds();
 	bClockInitialized = FMath::IsFinite(LastAccountingWorldSeconds);

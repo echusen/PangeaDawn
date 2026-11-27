@@ -1,34 +1,34 @@
 #include "Actors/MiningSiteActor.h"
 
-#include "Actors/ACFCharacter.h"
-#include "Actors/MiningScreenHost.h"
-
-#include "Components/ACFInteractionComponent.h"
-#include "Components/ACFInventoryComponent.h"
-#include "Components/ACFStorageComponent.h"
-#include "Actors/MiningDiscoveryNodeActor.h"
-#include "Actors/MiningSettlementStockpileActor.h"
-#include "Components/MiningSiteComponent.h"
-#include "Components/PangeaMiningTransportComponent.h"
-#include "Components/PangeaMiningConvoyComponent.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
-#include "Components/PrimitiveComponent.h"
-#include "Components/CapsuleComponent.h"
-#include "Components/SceneComponent.h"
-#include "DataAssets/MiningSiteDefinition.h"
-#include "Blueprint/UserWidget.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "EngineUtils.h"
-#include "Interfaces/MiningSitePresentationCoordinatorInterface.h"
-#include "Runtime/MiningPresentationActorRetirement.h"
+#include "Net/UnrealNetwork.h"
 #include "SmartObjectComponent.h"
 #include "TimerManager.h"
-#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+
+#include "Actors/ACFCharacter.h"
+#include "Actors/MiningDiscoveryNodeActor.h"
+#include "Actors/MiningScreenHost.h"
+#include "Actors/MiningSettlementStockpileActor.h"
+#include "Components/ACFInteractionComponent.h"
+#include "Components/ACFInventoryComponent.h"
+#include "Components/ACFStorageComponent.h"
+#include "Components/MiningSiteComponent.h"
+#include "Components/PangeaMiningConvoyComponent.h"
+#include "Components/PangeaMiningTransportComponent.h"
+#include "DataAssets/MiningSiteDefinition.h"
+#include "Interfaces/MiningSitePresentationCoordinatorInterface.h"
+#include "Runtime/MiningPresentationActorRetirement.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningSiteActor, Log, All);
 
@@ -61,25 +61,27 @@ AMiningSiteActor::AMiningSiteActor()
 	StatusText->SetWorldSize(28.0f);
 	StatusText->SetText(FText::FromString(TEXT("Mining Site")));
 
-	UStaticMeshComponent* FireMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DebugCampfireMesh"));
+	UStaticMeshComponent* const FireMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DebugCampfireMesh"));
 	FireMesh->SetupAttachment(SceneRoot);
 	FireMesh->SetRelativeLocation(FVector(-100.0f, 80.0f, 0.0f));
 	FireMesh->SetRelativeScale3D(FVector(1.0f));
 	FireMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
-	UStaticMeshComponent* WorkstationMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DebugWorkstationMesh"));
+	UStaticMeshComponent* const WorkstationMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DebugWorkstationMesh"));
 	WorkstationMesh->SetupAttachment(SceneRoot);
 	WorkstationMesh->SetRelativeLocation(FVector(-120.0f, -90.0f, 0.0f));
 	WorkstationMesh->SetRelativeScale3D(FVector(0.6f));
 	WorkstationMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> FireAsset(TEXT("/Game/Environment/Oppidam/Decoration/SM_Oppi_Deco_fire_camp_AB.SM_Oppi_Deco_fire_camp_AB"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> FireAsset(
+		TEXT("/Game/Environment/Oppidam/Decoration/SM_Oppi_Deco_fire_camp_AB.SM_Oppi_Deco_fire_camp_AB"));
 	if (FireAsset.Succeeded())
 	{
 		FireMesh->SetStaticMesh(FireAsset.Object);
 	}
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> WorkstationAsset(TEXT("/Game/FullSample/Assets/Environment/Meshes/Crops/SM_Stone_03.SM_Stone_03"));
+
 	if (WorkstationAsset.Succeeded())
 	{
 		WorkstationMesh->SetStaticMesh(WorkstationAsset.Object);
@@ -97,8 +99,11 @@ void AMiningSiteActor::Serialize(FArchive& Ar)
 	// bAwaitingRestore stays true until ALS's final component-loaded callback.
 	// Reset only when no component record was read (legacy actor saves), never
 	// clear the newly restored escrow a second time from this actor hook.
-	if (Ar.IsSaveGame() && Ar.IsLoading() && TransportComponent && !TransportComponent->IsAwaitingRestore())
+	if (Ar.IsSaveGame() && Ar.IsLoading() && TransportComponent != nullptr && !TransportComponent->IsAwaitingRestore())
+	{
 		TransportComponent->PrepareForOwnerRestore();
+	}
+
 	Super::Serialize(Ar);
 }
 
@@ -112,9 +117,13 @@ void AMiningSiteActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void AMiningSiteActor::BeginPlay()
 {
 	Super::BeginPlay();
-	if (StatusText) StatusText->SetVisibility(false);
 
-	if (MiningSiteComponent)
+	if (StatusText != nullptr)
+	{
+		StatusText->SetVisibility(false);
+	}
+
+	if (MiningSiteComponent != nullptr)
 	{
 		MiningSiteComponent->OnSiteLevelChanged.AddDynamic(this, &ThisClass::HandleSiteLevelChanged);
 		MiningSiteComponent->OnStorageChanged.AddDynamic(this, &ThisClass::UpdateStatusText);
@@ -127,14 +136,16 @@ void AMiningSiteActor::BeginPlay()
 	InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HandleInteractionEnd);
 	RefreshLocalInteractionRegistration();
 
-	UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("Mining site actor BeginPlay. Actor=%s HasAuthority=%s Component=%s Definition=%s Settlement=%s Established=%s Level=%d Location=%s"),
+	UE_LOG(LogPangeaMiningSiteActor,
+		Log,
+		TEXT("Mining site actor BeginPlay. Actor=%s HasAuthority=%s Component=%s Definition=%s Settlement=%s Established=%s Level=%d Location=%s"),
 		*GetNameSafe(this),
 		HasAuthority() ? TEXT("true") : TEXT("false"),
 		*GetNameSafe(MiningSiteComponent),
-		MiningSiteComponent ? *GetNameSafe(MiningSiteComponent->SiteDefinition) : TEXT("None"),
+		MiningSiteComponent != nullptr ? *GetNameSafe(MiningSiteComponent->SiteDefinition) : TEXT("None"),
 		*GetNameSafe(SettlementResourceActor),
-		MiningSiteComponent && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
-		MiningSiteComponent ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
+		MiningSiteComponent != nullptr && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
+		MiningSiteComponent != nullptr ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
 		*GetActorLocation().ToString());
 
 	RefreshLevelVisuals();
@@ -150,9 +161,9 @@ void AMiningSiteActor::BeginPlay()
 
 	if (HasAuthority())
 	{
-		const IMiningSitePresentationCoordinatorInterface* Coordinator = Cast<IMiningSitePresentationCoordinatorInterface>(PresentationCoordinator);
-		const float RefreshInterval = Coordinator ? Coordinator->GetPresentationRefreshInterval() : 1.0f;
-		const float MovementInterval = Coordinator ? Coordinator->GetPresentationMovementInterval() : 0.033f;
+		const IMiningSitePresentationCoordinatorInterface* const Coordinator = Cast<IMiningSitePresentationCoordinatorInterface>(PresentationCoordinator);
+		const float RefreshInterval = Coordinator != nullptr ? Coordinator->GetPresentationRefreshInterval() : 1.0f;
+		const float MovementInterval = Coordinator != nullptr ? Coordinator->GetPresentationMovementInterval() : 0.033f;
 		GetWorldTimerManager().SetTimer(PresentationRefreshTimerHandle, this, &ThisClass::RefreshPresentationActors, RefreshInterval, true);
 		GetWorldTimerManager().SetTimer(PresentationMovementTimerHandle, this, &ThisClass::UpdatePresentationActorMovement, MovementInterval, true);
 	}
@@ -160,8 +171,13 @@ void AMiningSiteActor::BeginPlay()
 
 void AMiningSiteActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (ConvoyComponent) ConvoyComponent->ClearPhysicalConvoy();
+	if (ConvoyComponent != nullptr)
+	{
+		ConvoyComponent->ClearPhysicalConvoy();
+	}
+
 	MiningScreenHost::Close(ActiveMenuWidget.Get());
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PresentationRefreshTimerHandle);
@@ -186,21 +202,27 @@ TArray<UActorComponent*> AMiningSiteActor::GetComponentsToSave_Implementation() 
 {
 	TArray<UActorComponent*> ComponentsToSave;
 
-	if (MiningSiteComponent)
+	if (MiningSiteComponent != nullptr)
 	{
 		ComponentsToSave.Add(MiningSiteComponent);
 	}
-	if (TransportComponent) ComponentsToSave.Add(TransportComponent);
+
+	if (TransportComponent != nullptr)
+	{
+		ComponentsToSave.Add(TransportComponent);
+	}
 
 	return ComponentsToSave;
 }
 
 void AMiningSiteActor::OnLoaded_Implementation()
 {
-	UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Mining site OnLoaded start. Actor=%s Established=%s Level=%d ExistingChest=%s"),
+	UE_LOG(LogPangeaMiningSiteActor,
+		Warning,
+		TEXT("Mining site OnLoaded start. Actor=%s Established=%s Level=%d ExistingChest=%s"),
 		*GetNameSafe(this),
-		MiningSiteComponent && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
-		MiningSiteComponent ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
+		MiningSiteComponent != nullptr && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
+		MiningSiteComponent != nullptr ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
 		*GetNameSafe(SpawnedSiteChest));
 
 	RefreshLocalInteractionRegistration();
@@ -216,49 +238,53 @@ void AMiningSiteActor::OnLoaded_Implementation()
 	UpdatePresentationActorMovement();
 	UpdateStatusText();
 
-	UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Mining site OnLoaded end. Actor=%s Chest=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(SpawnedSiteChest));
+	UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Mining site OnLoaded end. Actor=%s Chest=%s"), *GetNameSafe(this), *GetNameSafe(SpawnedSiteChest));
 }
 
 void AMiningSiteActor::DestroySiteChest()
 {
-	UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("DestroySiteChest called. Actor=%s ExistingChest=%s World=%s"),
+	UE_LOG(LogPangeaMiningSiteActor,
+		Warning,
+		TEXT("DestroySiteChest called. Actor=%s ExistingChest=%s World=%s"),
 		*GetNameSafe(this),
 		*GetNameSafe(SpawnedSiteChest),
 		*GetNameSafe(GetWorld()));
 
-	if (!GetWorld())
+	if (GetWorld() == nullptr)
 	{
 		SpawnedSiteChestInteractionSphere = nullptr;
 		SpawnedSiteChest = nullptr;
+
 		return;
 	}
 
-	if (MiningSiteComponent)
+	if (MiningSiteComponent != nullptr)
 	{
 		MiningSiteComponent->SetLinkedStorageComponent(nullptr);
 	}
 
 	UClass* ChestClass = nullptr;
-	if (MiningSiteComponent && MiningSiteComponent->SiteDefinition && !MiningSiteComponent->SiteDefinition->SiteChestActorClass.IsNull())
+
+	if (MiningSiteComponent != nullptr && MiningSiteComponent->SiteDefinition != nullptr && !MiningSiteComponent->SiteDefinition->SiteChestActorClass.IsNull())
 	{
 		ChestClass = MiningSiteComponent->SiteDefinition->SiteChestActorClass.LoadSynchronous();
 	}
 
 	const FName ChestSiteTag = FName(*FString::Printf(TEXT("Mining.SiteChest.%s"), *GetName()));
 	TArray<AActor*> ChestsToDestroy;
+
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
-		AActor* CandidateChest = *It;
-		if (!CandidateChest || CandidateChest == this)
+		AActor* const CandidateChest = *It;
+		if (CandidateChest == nullptr || CandidateChest == this)
 		{
 			continue;
 		}
 
 		const bool bOwnedBySite = CandidateChest->GetOwner() == this;
 		const bool bTaggedForSite = CandidateChest->ActorHasTag(ChestSiteTag);
-		const bool bMatchesChestClass = ChestClass && CandidateChest->IsA(ChestClass);
+		const bool bMatchesChestClass = ChestClass != nullptr && CandidateChest->IsA(ChestClass);
+
 		// Class and distance do not prove ownership. Nearby mines can use exactly
 		// the same chest class; never remove their storage during our restore.
 		if (bTaggedForSite || CandidateChest == SpawnedSiteChest || (bOwnedBySite && bMatchesChestClass))
@@ -269,9 +295,11 @@ void AMiningSiteActor::DestroySiteChest()
 
 	for (AActor* ChestActor : ChestsToDestroy)
 	{
-		if (ChestActor)
+		if (ChestActor != nullptr)
 		{
-			UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("DestroySiteChest removing chest actor. Site=%s Chest=%s"),
+			UE_LOG(LogPangeaMiningSiteActor,
+				Warning,
+				TEXT("DestroySiteChest removing chest actor. Site=%s Chest=%s"),
 				*GetNameSafe(this),
 				*GetNameSafe(ChestActor));
 			ChestActor->Destroy();
@@ -284,7 +312,7 @@ void AMiningSiteActor::DestroySiteChest()
 
 void AMiningSiteActor::DestroyOwnedPresentationActors()
 {
-	if (!HasAuthority() || !GetWorld())
+	if (!HasAuthority() || GetWorld() == nullptr)
 	{
 		return;
 	}
@@ -293,20 +321,19 @@ void AMiningSiteActor::DestroyOwnedPresentationActors()
 
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
-		AActor* Candidate = *It;
-		if (!Candidate || Candidate == this)
+		AActor* const Candidate = *It;
+		if (Candidate == nullptr || Candidate == this)
 		{
 			continue;
 		}
 
 		const bool bIsPresentationActor =
-			Candidate->ActorHasTag(TEXT("Mining.Worker")) ||
-			Candidate->ActorHasTag(TEXT("Mining.Guard")) ||
-			Candidate->ActorHasTag(TEXT("Mining.Courier"));
+			Candidate->ActorHasTag(TEXT("Mining.Worker")) || Candidate->ActorHasTag(TEXT("Mining.Guard")) || Candidate->ActorHasTag(TEXT("Mining.Courier"));
 
 		const bool bMatchesSiteTag = Candidate->ActorHasTag(SiteTag);
 		const bool bOwnedBySite = Candidate->GetOwner() == this && bIsPresentationActor;
 		const bool bExplicitlyTracked = SpawnedWorkerActors.Contains(Candidate) || SpawnedGuardActors.Contains(Candidate) || SpawnedCourierActor == Candidate;
+
 		// Possessed pawns are controller-owned; their exact site tag / tracked
 		// reference identifies them. Proximity is never an ownership fallback.
 		if (!(bOwnedBySite || bMatchesSiteTag || bExplicitlyTracked))
@@ -324,15 +351,15 @@ void AMiningSiteActor::DestroyOwnedPresentationActors()
 
 void AMiningSiteActor::ResolveSettlementResourceActor()
 {
-	if (!GetWorld())
+	if (GetWorld() == nullptr)
 	{
 		return;
 	}
 
 	for (TActorIterator<AMiningDiscoveryNodeActor> It(GetWorld()); It; ++It)
 	{
-		AMiningDiscoveryNodeActor* DiscoveryNode = *It;
-		if (!DiscoveryNode || DiscoveryNode->EstablishedSite != this || !DiscoveryNode->SettlementResourceActor)
+		AMiningDiscoveryNodeActor* const DiscoveryNode = *It;
+		if (DiscoveryNode == nullptr || DiscoveryNode->EstablishedSite != this || DiscoveryNode->SettlementResourceActor == nullptr)
 		{
 			continue;
 		}
@@ -341,17 +368,18 @@ void AMiningSiteActor::ResolveSettlementResourceActor()
 		return;
 	}
 
-	if (SettlementResourceActor && IsValid(SettlementResourceActor))
+	if (SettlementResourceActor != nullptr && IsValid(SettlementResourceActor))
 	{
 		return;
 	}
 
 	AMiningSettlementStockpileActor* NearestStockpile = nullptr;
 	double BestDistanceSq = TNumericLimits<double>::Max();
+
 	for (TActorIterator<AMiningSettlementStockpileActor> It(GetWorld()); It; ++It)
 	{
-		AMiningSettlementStockpileActor* Stockpile = *It;
-		if (!Stockpile)
+		AMiningSettlementStockpileActor* const Stockpile = *It;
+		if (Stockpile == nullptr)
 		{
 			continue;
 		}
@@ -364,7 +392,7 @@ void AMiningSiteActor::ResolveSettlementResourceActor()
 		}
 	}
 
-	if (NearestStockpile)
+	if (NearestStockpile != nullptr)
 	{
 		SettlementResourceActor = NearestStockpile;
 	}
@@ -372,35 +400,38 @@ void AMiningSiteActor::ResolveSettlementResourceActor()
 
 void AMiningSiteActor::RefreshLevelVisuals()
 {
-	if (!HasAuthority() || !MiningSiteComponent || !MiningSiteComponent->IsEstablished())
+	if (!HasAuthority() || MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished())
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("RefreshLevelVisuals skipped. Actor=%s HasAuthority=%s Component=%s Established=%s"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Log,
+			TEXT("RefreshLevelVisuals skipped. Actor=%s HasAuthority=%s Component=%s Established=%s"),
 			*GetNameSafe(this),
 			HasAuthority() ? TEXT("true") : TEXT("false"),
 			*GetNameSafe(MiningSiteComponent),
-			MiningSiteComponent && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"));
+			MiningSiteComponent != nullptr && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"));
 		return;
 	}
 
-	if (SpawnedLevelVisuals)
+	if (SpawnedLevelVisuals != nullptr)
 	{
 		SpawnedLevelVisuals->Destroy();
 		SpawnedLevelVisuals = nullptr;
 	}
 
 	FMiningSiteLevelDefinition LevelDefinition;
+
 	if (!MiningSiteComponent->GetCurrentLevelDefinition(LevelDefinition) || LevelDefinition.VisualSetClass.IsNull())
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("No visual set configured. Actor=%s Level=%d"),
-			*GetNameSafe(this),
-			MiningSiteComponent->GetCurrentLevel());
+		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("No visual set configured. Actor=%s Level=%d"), *GetNameSafe(this), MiningSiteComponent->GetCurrentLevel());
 		return;
 	}
 
-	UClass* VisualClass = LevelDefinition.VisualSetClass.LoadSynchronous();
-	if (!VisualClass)
+	UClass* const VisualClass = LevelDefinition.VisualSetClass.LoadSynchronous();
+	if (VisualClass == nullptr)
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Failed to load visual set. Actor=%s Level=%d"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Warning,
+			TEXT("Failed to load visual set. Actor=%s Level=%d"),
 			*GetNameSafe(this),
 			MiningSiteComponent->GetCurrentLevel());
 		return;
@@ -411,10 +442,12 @@ void AMiningSiteActor::RefreshLevelVisuals()
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	SpawnedLevelVisuals = GetWorld()->SpawnActor<AActor>(VisualClass, GetActorTransform(), SpawnParameters);
-	if (SpawnedLevelVisuals)
+	if (SpawnedLevelVisuals != nullptr)
 	{
 		SpawnedLevelVisuals->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("Spawned mining visual set. Actor=%s Visual=%s Level=%d"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Log,
+			TEXT("Spawned mining visual set. Actor=%s Visual=%s Level=%d"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedLevelVisuals),
 			MiningSiteComponent->GetCurrentLevel());
@@ -425,14 +458,16 @@ void AMiningSiteActor::RefreshLevelVisuals()
 
 void AMiningSiteActor::RefreshSiteChest()
 {
-	UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("RefreshSiteChest called. Actor=%s Established=%s Level=%d ExistingChest=%s World=%s"),
+	UE_LOG(LogPangeaMiningSiteActor,
+		Warning,
+		TEXT("RefreshSiteChest called. Actor=%s Established=%s Level=%d ExistingChest=%s World=%s"),
 		*GetNameSafe(this),
-		MiningSiteComponent && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
-		MiningSiteComponent ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
+		MiningSiteComponent != nullptr && MiningSiteComponent->IsEstablished() ? TEXT("true") : TEXT("false"),
+		MiningSiteComponent != nullptr ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE,
 		*GetNameSafe(SpawnedSiteChest),
 		*GetNameSafe(GetWorld()));
 
-	if (!MiningSiteComponent || !MiningSiteComponent->IsEstablished() || !MiningSiteComponent->SiteDefinition)
+	if (MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished() || MiningSiteComponent->SiteDefinition == nullptr)
 	{
 		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("RefreshSiteChest early-out missing site state. Actor=%s"), *GetNameSafe(this));
 		return;
@@ -440,18 +475,22 @@ void AMiningSiteActor::RefreshSiteChest()
 
 	if (MiningSiteComponent->SiteDefinition->SiteChestActorClass.IsNull())
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("RefreshSiteChest early-out no chest class. Actor=%s Definition=%s"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Warning,
+			TEXT("RefreshSiteChest early-out no chest class. Actor=%s Definition=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(MiningSiteComponent->SiteDefinition));
 		return;
 	}
 
-	UClass* ChestClass = MiningSiteComponent->SiteDefinition->SiteChestActorClass.LoadSynchronous();
+	UClass* const ChestClass = MiningSiteComponent->SiteDefinition->SiteChestActorClass.LoadSynchronous();
 	const FTransform RelativeTransform = MiningSiteComponent->SiteDefinition->SiteChestRelativeTransform;
 
-	if (!ChestClass)
+	if (ChestClass == nullptr)
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Failed to load site chest class. Actor=%s Definition=%s"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Warning,
+			TEXT("Failed to load site chest class. Actor=%s Definition=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(MiningSiteComponent->SiteDefinition));
 		return;
@@ -459,11 +498,14 @@ void AMiningSiteActor::RefreshSiteChest()
 
 	if (IsValid(SpawnedSiteChest) && SpawnedSiteChest->IsA(ChestClass))
 	{
-		if (MiningSiteComponent)
+		if (MiningSiteComponent != nullptr)
 		{
 			MiningSiteComponent->SetLinkedStorageComponent(SpawnedSiteChest->FindComponentByClass<UACFStorageComponent>());
 		}
-		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("RefreshSiteChest reusing existing chest. Actor=%s Chest=%s"),
+
+		UE_LOG(LogPangeaMiningSiteActor,
+			Warning,
+			TEXT("RefreshSiteChest reusing existing chest. Actor=%s Chest=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedSiteChest));
 		return;
@@ -474,9 +516,7 @@ void AMiningSiteActor::RefreshSiteChest()
 		DestroySiteChest();
 	}
 
-	const FTransform SpawnTransform = SiteChestMarker
-		? SiteChestMarker->GetComponentTransform()
-		: RelativeTransform * GetActorTransform();
+	const FTransform SpawnTransform = SiteChestMarker != nullptr ? SiteChestMarker->GetComponentTransform() : RelativeTransform * GetActorTransform();
 	const FName ChestSiteTag = FName(*FString::Printf(TEXT("Mining.SiteChest.%s"), *GetName()));
 
 	FActorSpawnParameters SpawnParameters;
@@ -485,7 +525,7 @@ void AMiningSiteActor::RefreshSiteChest()
 	SpawnParameters.ObjectFlags |= RF_Transient;
 
 	SpawnedSiteChest = GetWorld()->SpawnActor<AActor>(ChestClass, SpawnTransform, SpawnParameters);
-	if (SpawnedSiteChest)
+	if (SpawnedSiteChest != nullptr)
 	{
 		SpawnedSiteChest->SetReplicates(true);
 		SpawnedSiteChest->SetReplicateMovement(true);
@@ -496,10 +536,11 @@ void AMiningSiteActor::RefreshSiteChest()
 
 		TArray<UStaticMeshComponent*> ExistingStaticMeshComponents;
 		SpawnedSiteChest->GetComponents<UStaticMeshComponent>(ExistingStaticMeshComponents);
+
 		if (ExistingStaticMeshComponents.IsEmpty())
 		{
-			UStaticMeshComponent* ChestVisualMesh = NewObject<UStaticMeshComponent>(SpawnedSiteChest, TEXT("MiningSiteChestVisualMesh"));
-			if (ChestVisualMesh)
+			UStaticMeshComponent* const ChestVisualMesh = NewObject<UStaticMeshComponent>(SpawnedSiteChest, TEXT("MiningSiteChestVisualMesh"));
+			if (ChestVisualMesh != nullptr)
 			{
 				ChestVisualMesh->SetupAttachment(SpawnedSiteChest->GetRootComponent());
 				ChestVisualMesh->SetRelativeLocation(FVector::ZeroVector);
@@ -507,7 +548,8 @@ void AMiningSiteActor::RefreshSiteChest()
 				ChestVisualMesh->SetRelativeScale3D(FVector(0.9f));
 				ChestVisualMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
-				if (UStaticMesh* ChestMeshAsset = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Environment/Oppidam/Decoration/SM_Oppi_Deco_Chest_AD.SM_Oppi_Deco_Chest_AD")))
+				if (UStaticMesh* ChestMeshAsset =
+						LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Environment/Oppidam/Decoration/SM_Oppi_Deco_Chest_AD.SM_Oppi_Deco_Chest_AD")))
 				{
 					ChestVisualMesh->SetStaticMesh(ChestMeshAsset);
 				}
@@ -516,14 +558,14 @@ void AMiningSiteActor::RefreshSiteChest()
 			}
 		}
 
-		if (MiningSiteComponent)
+		if (MiningSiteComponent != nullptr)
 		{
 			ClearSpawnedSiteChestInventory();
 			MiningSiteComponent->SetLinkedStorageComponent(SpawnedSiteChest->FindComponentByClass<UACFStorageComponent>());
 		}
 
 		SpawnedSiteChestInteractionSphere = NewObject<USphereComponent>(SpawnedSiteChest, TEXT("MiningSiteChestInteractionSphere"));
-		if (SpawnedSiteChestInteractionSphere)
+		if (SpawnedSiteChestInteractionSphere != nullptr)
 		{
 			SpawnedSiteChestInteractionSphere->SetupAttachment(SpawnedSiteChest->GetRootComponent());
 			SpawnedSiteChestInteractionSphere->SetSphereRadius(140.0f);
@@ -535,13 +577,17 @@ void AMiningSiteActor::RefreshSiteChest()
 			SpawnedSiteChestInteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HandleSiteChestInteractionEnd);
 		}
 
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("Spawned mining site chest. Actor=%s Chest=%s ChestClass=%s"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Log,
+			TEXT("Spawned mining site chest. Actor=%s Chest=%s ChestClass=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedSiteChest),
 			*GetNameSafe(ChestClass));
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("Mining site chest transform. Actor=%s MarkerUsed=%s ChestLocation=%s RelativeFallback=%s"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Log,
+			TEXT("Mining site chest transform. Actor=%s MarkerUsed=%s ChestLocation=%s RelativeFallback=%s"),
 			*GetNameSafe(this),
-			SiteChestMarker ? TEXT("true") : TEXT("false"),
+			SiteChestMarker != nullptr ? TEXT("true") : TEXT("false"),
 			*SpawnedSiteChest->GetActorLocation().ToString(),
 			*RelativeTransform.GetLocation().ToString());
 	}
@@ -549,14 +595,15 @@ void AMiningSiteActor::RefreshSiteChest()
 
 void AMiningSiteActor::ClearSpawnedSiteChestInventory()
 {
-	UACFStorageComponent* StorageComponent = SpawnedSiteChest ? SpawnedSiteChest->FindComponentByClass<UACFStorageComponent>() : nullptr;
-	if (!StorageComponent)
+	UACFStorageComponent* const StorageComponent = SpawnedSiteChest != nullptr ? SpawnedSiteChest->FindComponentByClass<UACFStorageComponent>() : nullptr;
+	if (StorageComponent == nullptr)
 	{
 		return;
 	}
 
 	const TArray<FInventoryItem> ExistingItems = StorageComponent->GetInventory();
 	int32 ClearedUnits = 0;
+
 	for (const FInventoryItem& ExistingItem : ExistingItems)
 	{
 		if (ExistingItem.Count <= 0)
@@ -570,7 +617,9 @@ void AMiningSiteActor::ClearSpawnedSiteChestInventory()
 
 	if (ClearedUnits > 0)
 	{
-		UE_LOG(LogPangeaMiningSiteActor, Log, TEXT("Cleared inherited mining chest contents. Actor=%s Chest=%s ClearedUnits=%d"),
+		UE_LOG(LogPangeaMiningSiteActor,
+			Log,
+			TEXT("Cleared inherited mining chest contents. Actor=%s Chest=%s ClearedUnits=%d"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedSiteChest),
 			ClearedUnits);
@@ -583,19 +632,30 @@ void AMiningSiteActor::RefreshPresentationActors()
 	// Remove the dead pawn from the active station list, but allow its death/ragdoll to finish.
 	for (int32 Index = SpawnedWorkerActors.Num() - 1; Index >= 0; --Index)
 	{
-		AActor* Worker = SpawnedWorkerActors[Index];
+		AActor* const Worker = SpawnedWorkerActors[Index];
 		if (!IsValid(Worker) || Worker->ActorHasTag(TEXT("Mining.WorkerDeathRecorded")))
 		{
-			if (IsValid(Worker)) Worker->SetLifeSpan(10.f);
+			if (IsValid(Worker))
+			{
+				Worker->SetLifeSpan(10.f);
+			}
+
 			SpawnedWorkerActors.RemoveAt(Index);
 		}
 	}
+
 	if (IMiningSitePresentationCoordinatorInterface* Coordinator = Cast<IMiningSitePresentationCoordinatorInterface>(PresentationCoordinator))
 	{
 		Coordinator->RefreshPresentationActors(*this, MiningSiteComponent, SpawnedSiteChest, SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor);
 	}
+
 	for (AActor* Actor : SpawnedWorkerActors)
-		if (AACFCharacter* Worker = Cast<AACFCharacter>(Actor)) Worker->OnDeath.AddUniqueDynamic(this, &ThisClass::HandleWorkerDeath);
+	{
+		if (AACFCharacter* Worker = Cast<AACFCharacter>(Actor))
+		{
+			Worker->OnDeath.AddUniqueDynamic(this, &ThisClass::HandleWorkerDeath);
+		}
+	}
 }
 
 void AMiningSiteActor::ClearPresentationActors()
@@ -610,7 +670,14 @@ void AMiningSiteActor::UpdatePresentationActorMovement()
 {
 	if (IMiningSitePresentationCoordinatorInterface* Coordinator = Cast<IMiningSitePresentationCoordinatorInterface>(PresentationCoordinator))
 	{
-		Coordinator->UpdatePresentationActorMovement(*this, MiningSiteComponent, SpawnedSiteChest, SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor, WorkerSmartObjectComponents, GuardSmartObjectComponents);
+		Coordinator->UpdatePresentationActorMovement(*this,
+			MiningSiteComponent,
+			SpawnedSiteChest,
+			SpawnedWorkerActors,
+			SpawnedGuardActors,
+			SpawnedCourierActor,
+			WorkerSmartObjectComponents,
+			GuardSmartObjectComponents);
 	}
 }
 
@@ -624,20 +691,21 @@ void AMiningSiteActor::ConfigureSmartObjectComponents()
 
 void AMiningSiteActor::EnsurePresentationCoordinator()
 {
-	if (!HasAuthority() || PresentationCoordinator)
+	if (!HasAuthority() || PresentationCoordinator != nullptr)
 	{
 		return;
 	}
 
-	UClass* CoordinatorClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/GF_PangeaMiningSystemRuntime.MiningSitePresentationCoordinatorComponent"));
-	if (!CoordinatorClass)
+	UClass* const CoordinatorClass =
+		LoadClass<UActorComponent>(nullptr, TEXT("/Script/GF_PangeaMiningSystemRuntime.MiningSitePresentationCoordinatorComponent"));
+	if (CoordinatorClass == nullptr)
 	{
 		UE_LOG(LogPangeaMiningSiteActor, Warning, TEXT("Failed to load presentation coordinator class. Actor=%s"), *GetNameSafe(this));
 		return;
 	}
 
 	PresentationCoordinator = NewObject<UActorComponent>(this, CoordinatorClass, TEXT("PresentationCoordinator"));
-	if (!PresentationCoordinator)
+	if (PresentationCoordinator == nullptr)
 	{
 		return;
 	}

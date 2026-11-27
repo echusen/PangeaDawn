@@ -1,14 +1,12 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Components/FacilitySlotComponent.h"
 #include "Components/StaticMeshComponent.h"
-
 
 UFacilitySlotComponent::UFacilitySlotComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	
+
 #if WITH_EDITORONLY_DATA
 
 	// Actor preview (NPC / Interactable)
@@ -38,11 +36,22 @@ UFacilitySlotComponent::UFacilitySlotComponent()
 void UFacilitySlotComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 #if WITH_EDITORONLY_DATA
-	if (EditorActorPreview) EditorActorPreview->DestroyComponent();
-	if (EditorStaticPreview) EditorStaticPreview->DestroyComponent();
-	if (EditorSkeletalPreview) EditorSkeletalPreview->DestroyComponent();
+	if (EditorActorPreview != nullptr)
+	{
+		EditorActorPreview->DestroyComponent();
+	}
+
+	if (EditorStaticPreview != nullptr)
+	{
+		EditorStaticPreview->DestroyComponent();
+	}
+
+	if (EditorSkeletalPreview != nullptr)
+	{
+		EditorSkeletalPreview->DestroyComponent();
+	}
 #endif
 }
 
@@ -53,18 +62,30 @@ void UFacilitySlotComponent::PostEditChangeProperty(FPropertyChangedEvent& Prope
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	// Hide all first
-	if (EditorActorPreview) EditorActorPreview->SetVisibility(false);
-	if (EditorStaticPreview) EditorStaticPreview->SetVisibility(false);
-	if (EditorSkeletalPreview) EditorSkeletalPreview->SetVisibility(false);
+	if (EditorActorPreview != nullptr)
+	{
+		EditorActorPreview->SetVisibility(false);
+	}
+
+	if (EditorStaticPreview != nullptr)
+	{
+		EditorStaticPreview->SetVisibility(false);
+	}
+
+	if (EditorSkeletalPreview != nullptr)
+	{
+		EditorSkeletalPreview->SetVisibility(false);
+	}
 
 	// NPC / Interactable / Custom = Use ActorClass
 	if (SlotType != EFacilitySlotType::Decoration && ActorClass)
 	{
-		if (EditorActorPreview)
+		if (EditorActorPreview != nullptr)
 		{
 			EditorActorPreview->SetChildActorClass(ActorClass);
 			EditorActorPreview->SetVisibility(true);
 		}
+
 		return;
 	}
 
@@ -73,26 +94,27 @@ void UFacilitySlotComponent::PostEditChangeProperty(FPropertyChangedEvent& Prope
 	{
 		if (UStaticMesh* StaticMesh = Cast<UStaticMesh>(DecorationAsset))
 		{
-			if (EditorStaticPreview)
+			if (EditorStaticPreview != nullptr)
 			{
 				EditorStaticPreview->SetStaticMesh(StaticMesh);
 				EditorStaticPreview->SetVisibility(true);
 			}
+
 			return;
 		}
 
 		// Decoration = Skeletal Mesh?
 		if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(DecorationAsset))
 		{
-			if (EditorSkeletalPreview)
+			if (EditorSkeletalPreview != nullptr)
 			{
 				EditorSkeletalPreview->SetSkeletalMesh(SkelMesh);
 				EditorSkeletalPreview->SetVisibility(true);
 			}
+
 			return;
 		}
 	}
 }
 
 #endif
-

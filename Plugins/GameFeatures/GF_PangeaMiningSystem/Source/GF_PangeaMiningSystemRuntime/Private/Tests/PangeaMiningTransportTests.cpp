@@ -1,13 +1,13 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
-#include "ALSSaveTypes.h"
-#include "Actors/MiningSiteActor.h"
 #include "Actors/ACFCharacter.h"
+#include "Actors/MiningSiteActor.h"
+#include "ALSSaveTypes.h"
 #include "Components/ACFStorageComponent.h"
 #include "Components/MiningSiteComponent.h"
-#include "Components/PangeaMiningTransportComponent.h"
 #include "Components/PangeaMiningConvoyComponent.h"
+#include "Components/PangeaMiningTransportComponent.h"
 #include "Components/PangeaMiningTransportStorageComponent.h"
 #include "Components/SceneComponent.h"
 #include "DataAssets/MiningSiteDefinition.h"
@@ -19,8 +19,9 @@
 #include "Serialization/MemoryReader.h"
 #include "Serialization/MemoryWriter.h"
 
-namespace
+namespace PangeaMiningTransportTestsHelpers
 {
+/** Isolated preview world with an established hybrid-transport mining site holding ten units and a linked destination stockpile, stepped manually by the transport tests. */
 struct FTransportFixture
 {
 	UWorld* World = UWorld::CreateWorld(EWorldType::EditorPreview, false);
@@ -30,10 +31,18 @@ struct FTransportFixture
 	UACFStorageComponent* Destination = nullptr;
 	FTransportFixture(float Risk = 0.f)
 	{
-		if (!World || !GEngine) return;
+		if (World == nullptr || !GEngine)
+		{
+			return;
+		}
+
 		GEngine->CreateNewWorldContext(EWorldType::EditorPreview).SetCurrentWorld(World);
 		Actor = World->SpawnActor<AMiningSiteActor>();
-		if (!Actor) return;
+		if (Actor == nullptr)
+		{
+			return;
+		}
+
 		Site = Actor->MiningSiteComponent;
 		Transport = Actor->TransportComponent;
 		Site->SiteDefinition = NewObject<UMiningSiteDefinition>(Site);
@@ -63,22 +72,43 @@ struct FTransportFixture
 		Destination->SetMaxInventoryWeight(10000.f);
 		Actor->SettlementResourceActor = Stockpile;
 	}
+
 	~FTransportFixture()
 	{
-		if (GEngine && World) GEngine->DestroyWorldContext(World);
-		if (World) World->DestroyWorld(false);
-	}
-	void Step(float Seconds) { Transport->TickComponent(Seconds, LEVELTICK_All, nullptr); }
-	int32 Delivered() const { return Destination->GetTotalCountOfItemsByClass(UACFItem::StaticClass()); }
-};
-}
+		if (GEngine && World != nullptr)
+		{
+			GEngine->DestroyWorldContext(World);
+		}
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningEscrowTest, "Pangea.ACF.Mining.Transport.EscrowAndArrival",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+		if (World != nullptr)
+		{
+			World->DestroyWorld(false);
+		}
+	}
+
+	void Step(float Seconds)
+	{
+		Transport->TickComponent(Seconds, LEVELTICK_All, nullptr);
+	}
+
+	int32 Delivered() const
+	{
+		return Destination->GetTotalCountOfItemsByClass(UACFItem::StaticClass());
+	}
+};
+} // namespace PangeaMiningTransportTestsHelpers
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningEscrowTest, "Pangea.ACF.Mining.Transport.EscrowAndArrival", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningEscrowTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	TestTrue(TEXT("Dispatch succeeds through the single mining entry point"), F.Site->TryAutoShipment());
 	TestEqual(TEXT("Exactly one source withdrawal"), F.Site->GetStoredUnits(), 5);
 	TestEqual(TEXT("Cargo held in escrow"), F.Transport->GetShipment().Cargo.Quantity, 5);
@@ -91,15 +121,22 @@ bool FMiningEscrowTest::RunTest(const FString& Parameters)
 	F.Step(0.f);
 	TestEqual(TEXT("Repeated same-time update cannot duplicate cargo"), F.Delivered(), 5);
 	TestTrue(TEXT("Courier returns before another shipment"), F.Transport->GetShipment().Phase == EPangeaMiningShipmentPhase::Returning);
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningDestinationAcceptanceTest, "Pangea.ACF.Mining.Transport.RejectedCargoStaysInEscrow",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningDestinationAcceptanceTest,
+	"Pangea.ACF.Mining.Transport.RejectedCargoStaysInEscrow",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningDestinationAcceptanceTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Destination->SetMaxInventoryWeight(0.f);
 	TestTrue(TEXT("Dispatch"), F.Transport->TryDispatch());
 	F.Step(10.f);
@@ -109,15 +146,21 @@ bool FMiningDestinationAcceptanceTest::RunTest(const FString& Parameters)
 	F.Step(1.f);
 	TestEqual(TEXT("Retry delivers only actual retained cargo"), F.Delivered(), 5);
 	TestEqual(TEXT("Source + destination + escrow conserved"), F.Site->GetStoredUnits() + F.Delivered() + F.Transport->GetShipment().Cargo.Quantity, 10);
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportSnapshotTest, "Pangea.ACF.Mining.Transport.PauseOfflineSnapshot",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningTransportSnapshotTest, "Pangea.ACF.Mining.Transport.PauseOfflineSnapshot", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTransportSnapshotTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Transport->TryDispatch();
 	F.Step(5.f);
 	const FPangeaMiningShipment Saved = F.Transport->GetShipment();
@@ -137,19 +180,30 @@ bool FMiningTransportSnapshotTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("No delivery on load"), F.Delivered(), 0);
 	F.Step(5.f);
 	TestEqual(TEXT("Remaining online journey delivers exactly once"), F.Delivered(), 5);
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningMaterializationGateTest, "Pangea.ACF.Mining.Transport.VisibleTripNeedsPhysicalCourier",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningMaterializationGateTest,
+	"Pangea.ACF.Mining.Transport.VisibleTripNeedsPhysicalCourier",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningMaterializationGateTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Transport->TryDispatch();
 	APlayerController* PC = F.World->SpawnActor<APlayerController>();
 	APawn* Pawn = F.World->SpawnActor<APawn>();
-	if (!TestNotNull(TEXT("Observer"), PC) || !TestNotNull(TEXT("Observer pawn"), Pawn)) return false;
+	if (!TestNotNull(TEXT("Observer"), PC) || !TestNotNull(TEXT("Observer pawn"), Pawn))
+	{
+		return false;
+	}
+
 	F.World->AddController(PC);
 	PC->Possess(Pawn);
 	TestTrue(TEXT("Nearby player requests physical presentation"), F.Transport->ShouldMaterializeCourier());
@@ -158,15 +212,22 @@ bool FMiningMaterializationGateTest::RunTest(const FString& Parameters)
 	PC->UnPossess();
 	F.Step(10.f);
 	TestEqual(TEXT("Offscreen travel can resume from retained ledger"), F.Delivered(), 5);
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportRosterSnapshotTest, "Pangea.ACF.Mining.Transport.ManifestRosterSnapshot",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportRosterSnapshotTest,
+	"Pangea.ACF.Mining.Transport.ManifestRosterSnapshot",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTransportRosterSnapshotTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Site->SiteDefinition->Levels[0].TransportEscortCount = 2;
 	F.Site->SiteDefinition->Levels[0].CourierClass = AACFCharacter::StaticClass();
 	F.Site->SiteDefinition->Levels[0].TransportChariotClass = AActor::StaticClass();
@@ -191,36 +252,53 @@ bool FMiningTransportRosterSnapshotTest::RunTest(const FString& Parameters)
 	FALSSaveGameArchive Load(Reader, true);
 	F.Transport->Serialize(Load);
 	F.Transport->OnComponentLoaded();
-	TestTrue(TEXT("Lost slot survives load; rematerialization cannot resurrect it"), F.Transport->GetShipment().LostEscortSlots == TArray<int32>{1});
+	TestTrue(TEXT("Lost slot survives load; rematerialization cannot resurrect it"), F.Transport->GetShipment().LostEscortSlots == TArray<int32>{ 1 });
 	TestEqual(TEXT("Death/load never grants cargo"), F.Delivered(), 0);
 	TestTrue(TEXT("Draft animal configuration survives ALS archive"), F.Transport->GetShipment().DraftAnimalClass.Get() == AACFCharacter::StaticClass());
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningDraftRequiresCartTest, "Pangea.ACF.Mining.Transport.DraftRequiresCart",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningDraftRequiresCartTest, "Pangea.ACF.Mining.Transport.DraftRequiresCart", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningDraftRequiresCartTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Site->SiteDefinition->Levels[0].TransportDraftAnimalClass = AACFCharacter::StaticClass();
 	TestFalse(TEXT("Draft animal without cart cannot withdraw cargo"), F.Transport->TryDispatch());
 	TestEqual(TEXT("Invalid convoy leaves source inventory intact"), F.Site->GetStoredUnits(), 10);
 	TestFalse(TEXT("No invalid manifest"), F.Transport->HasActiveShipment());
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportVisibilitySweepTest, "Pangea.ACF.Mining.Transport.VisibilityCrossingStopsLongFrame",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportVisibilitySweepTest,
+	"Pangea.ACF.Mining.Transport.VisibilityCrossingStopsLongFrame",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTransportVisibilitySweepTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Transport->MaterializationRadius = 100.f;
 	F.Transport->TryDispatch();
 	APlayerController* PC = F.World->SpawnActor<APlayerController>();
 	APawn* Pawn = F.World->SpawnActor<APawn>();
-	if (!PC || !Pawn) return false;
+	if (PC == nullptr || Pawn == nullptr)
+	{
+		return false;
+	}
+
 	USceneComponent* Root = NewObject<USceneComponent>(Pawn);
 	Pawn->AddInstanceComponent(Root);
 	Pawn->SetRootComponent(Root);
@@ -236,19 +314,30 @@ bool FMiningTransportVisibilitySweepTest::RunTest(const FString& Parameters)
 	PC->UnPossess();
 	F.Step(20.f);
 	TestEqual(TEXT("Unobserved remaining route can complete"), F.Delivered(), 5);
+
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportBrokerFailureTest, "Pangea.ACF.Mining.Transport.MissingPresentationRetainsEscrow",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportBrokerFailureTest,
+	"Pangea.ACF.Mining.Transport.MissingPresentationRetainsEscrow",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTransportBrokerFailureTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Convoy"), F.Actor ? F.Actor->ConvoyComponent.Get() : nullptr)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Convoy"), F.Actor != nullptr ? F.Actor->ConvoyComponent.Get() : nullptr))
+	{
+		return false;
+	}
+
 	F.Transport->TryDispatch();
 	APlayerController* PC = F.World->SpawnActor<APlayerController>();
 	APawn* Pawn = F.World->SpawnActor<APawn>();
-	if (!PC || !Pawn) return false;
+	if (PC == nullptr || Pawn == nullptr)
+	{
+		return false;
+	}
+
 	F.World->AddController(PC);
 	PC->Possess(Pawn);
 	F.Actor->ConvoyComponent->TickComponent(.25f, LEVELTICK_All, nullptr);
@@ -259,26 +348,40 @@ bool FMiningTransportBrokerFailureTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Repeated rollback/cull retains escrow"), F.Transport->GetShipment().Cargo.Quantity, 5);
 	TestEqual(TEXT("No destination grant"), F.Delivered(), 0);
 	TestEqual(TEXT("Exactly one source withdrawal"), F.Site->GetStoredUnits(), 5);
+
 	return true;
 }
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportActorRestoreOrderTest, "Pangea.ACF.Mining.Transport.ComponentBeforeActorRestoreOrder",
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTransportActorRestoreOrderTest,
+	"Pangea.ACF.Mining.Transport.ComponentBeforeActorRestoreOrder",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTransportActorRestoreOrderTest::RunTest(const FString& Parameters)
 {
-	FTransportFixture F;
-	if (!TestNotNull(TEXT("Transport"), F.Transport)) return false;
+	PangeaMiningTransportTestsHelpers::FTransportFixture F;
+
+	if (!TestNotNull(TEXT("Transport"), F.Transport))
+	{
+		return false;
+	}
+
 	F.Transport->TryDispatch();
 	F.Step(2.f);
 	const FPangeaMiningShipment Saved = F.Transport->GetShipment();
-	TArray<uint8> ActorBytes, ComponentBytes;
-	FMemoryWriter ActorWriter(ActorBytes), ComponentWriter(ComponentBytes);
-	FALSSaveGameArchive ActorSave(ActorWriter, true), ComponentSave(ComponentWriter, true);
+	TArray<uint8> ActorBytes;
+	TArray<uint8> ComponentBytes;
+	FMemoryWriter ActorWriter(ActorBytes);
+	FMemoryWriter ComponentWriter(ComponentBytes);
+	FALSSaveGameArchive ActorSave(ActorWriter, true);
+	FALSSaveGameArchive ComponentSave(ComponentWriter, true);
 	F.Actor->Serialize(ActorSave);
 	F.Transport->Serialize(ComponentSave);
+
 	for (int32 Repeat = 0; Repeat < 2; ++Repeat)
 	{
-		FMemoryReader ComponentReader(ComponentBytes), ActorReader(ActorBytes);
-		FALSSaveGameArchive ComponentLoad(ComponentReader, true), ActorLoad(ActorReader, true);
+		FMemoryReader ComponentReader(ComponentBytes);
+		FMemoryReader ActorReader(ActorBytes);
+		FALSSaveGameArchive ComponentLoad(ComponentReader, true);
+		FALSSaveGameArchive ActorLoad(ActorReader, true);
 		F.Transport->Serialize(ComponentLoad); // ALS restores components FIRST.
 		F.Actor->Serialize(ActorLoad);
 		F.Transport->OnComponentLoaded();
@@ -286,12 +389,14 @@ bool FMiningTransportActorRestoreOrderTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Actor restore must not clear restored cargo"), F.Transport->GetShipment().Cargo.Quantity, 5);
 		TestTrue(TEXT("Saved online position retained"), F.Transport->GetShipment().Position.Equals(Saved.Position));
 	}
+
 	FMemoryReader LegacyReader(ActorBytes);
 	FALSSaveGameArchive LegacyLoad(LegacyReader, true);
 	F.Actor->Serialize(LegacyLoad); // No component record: legacy reset still required.
 	F.Transport->OnComponentLoaded();
 	TestFalse(TEXT("Legacy actor-only restore cannot retain an unrelated live shipment"), F.Transport->HasActiveShipment());
 	TestEqual(TEXT("No delivery on any restore"), F.Delivered(), 0);
+
 	return true;
 }
 #endif

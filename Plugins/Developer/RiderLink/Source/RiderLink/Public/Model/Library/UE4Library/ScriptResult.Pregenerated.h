@@ -61,7 +61,7 @@
 #endif
 
 /// <summary>
-/// <p>Generated from: UE4Library.kt:222</p>
+/// <p>Generated from: UE4Library.kt:223</p>
 /// </summary>
 namespace JetBrains {
 namespace EditorPlugin {
@@ -81,6 +81,8 @@ protected:
     FString output_;
     FString result_;
     FString error_;
+    bool aborted_{false};
+    int32_t elapsedMs_{0};
     
 
 private:
@@ -89,18 +91,20 @@ private:
 
 public:
     // primary ctor
-    ScriptResult(bool success_, FString output_, FString result_, FString error_);
+    ScriptResult(bool success_, FString output_, FString result_, FString error_, bool aborted_, int32_t elapsedMs_);
     
     // deconstruct trait
     #ifdef __cpp_structured_bindings
     template <size_t I>
     decltype(auto) get() const
     {
-        if constexpr (I < 0 || I >= 4) static_assert (I < 0 || I >= 4, "I < 0 || I >= 4");
+        if constexpr (I < 0 || I >= 6) static_assert (I < 0 || I >= 6, "I < 0 || I >= 6");
         else if constexpr (I==0)  return static_cast<const bool&>(get_success());
         else if constexpr (I==1)  return static_cast<const FString&>(get_output());
         else if constexpr (I==2)  return static_cast<const FString&>(get_result());
         else if constexpr (I==3)  return static_cast<const FString&>(get_error());
+        else if constexpr (I==4)  return static_cast<const bool&>(get_aborted());
+        else if constexpr (I==5)  return static_cast<const int32_t&>(get_elapsedMs());
     }
     #endif
     
@@ -133,6 +137,8 @@ public:
     FString const & get_output() const;
     FString const & get_result() const;
     FString const & get_error() const;
+    bool const & get_aborted() const;
+    int32_t const & get_elapsedMs() const;
     
     // intern
 
@@ -180,7 +186,7 @@ struct hash<JetBrains::EditorPlugin::ScriptResult> {
 namespace std {
 
 template <>
-class tuple_size<JetBrains::EditorPlugin::ScriptResult> : public integral_constant<size_t, 4> {};
+class tuple_size<JetBrains::EditorPlugin::ScriptResult> : public integral_constant<size_t, 6> {};
 
 template <size_t I>
 class tuple_element<I, JetBrains::EditorPlugin::ScriptResult> {

@@ -79,6 +79,7 @@ protected:
     // fields
     FString script_;
     bool isolated_{false};
+    int32_t timeoutMs_{0};
     
 
 private:
@@ -87,16 +88,17 @@ private:
 
 public:
     // primary ctor
-    ScriptRequest(FString script_, bool isolated_);
+    ScriptRequest(FString script_, bool isolated_, int32_t timeoutMs_);
     
     // deconstruct trait
     #ifdef __cpp_structured_bindings
     template <size_t I>
     decltype(auto) get() const
     {
-        if constexpr (I < 0 || I >= 2) static_assert (I < 0 || I >= 2, "I < 0 || I >= 2");
+        if constexpr (I < 0 || I >= 3) static_assert (I < 0 || I >= 3, "I < 0 || I >= 3");
         else if constexpr (I==0)  return static_cast<const FString&>(get_script());
         else if constexpr (I==1)  return static_cast<const bool&>(get_isolated());
+        else if constexpr (I==2)  return static_cast<const int32_t&>(get_timeoutMs());
     }
     #endif
     
@@ -127,6 +129,7 @@ public:
     // getters
     FString const & get_script() const;
     bool const & get_isolated() const;
+    int32_t const & get_timeoutMs() const;
     
     // intern
 
@@ -174,7 +177,7 @@ struct hash<JetBrains::EditorPlugin::ScriptRequest> {
 namespace std {
 
 template <>
-class tuple_size<JetBrains::EditorPlugin::ScriptRequest> : public integral_constant<size_t, 2> {};
+class tuple_size<JetBrains::EditorPlugin::ScriptRequest> : public integral_constant<size_t, 3> {};
 
 template <size_t I>
 class tuple_element<I, JetBrains::EditorPlugin::ScriptRequest> {

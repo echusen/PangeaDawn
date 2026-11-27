@@ -11,7 +11,7 @@
 
 UPangeaCreatureDefinition* UPangeaBreedingLibrary::GetCreatureDefinitionFromActor(const AActor* Actor)
 {
-	if (!Actor || !Actor->GetClass()->ImplementsInterface(UPDDefinitionProviderInterface::StaticClass()))
+	if (Actor == nullptr || !Actor->GetClass()->ImplementsInterface(UPDDefinitionProviderInterface::StaticClass()))
 	{
 		return nullptr;
 	}
@@ -21,7 +21,7 @@ UPangeaCreatureDefinition* UPangeaBreedingLibrary::GetCreatureDefinitionFromActo
 
 UPangeaCreatureDefinition* UPangeaBreedingLibrary::GetCreatureDefinitionFromBreedable(const UPangeaBreedableComponent* Breedable)
 {
-	return Breedable ? GetCreatureDefinitionFromActor(Breedable->GetOwner()) : nullptr;
+	return Breedable != nullptr ? GetCreatureDefinitionFromActor(Breedable->GetOwner()) : nullptr;
 }
 
 UPangeaBreedingFragment* UPangeaBreedingLibrary::GetBreedingFragmentFromActor(const AActor* Actor)
@@ -36,10 +36,11 @@ UPangeaBreedingFragment* UPangeaBreedingLibrary::GetBreedingFragmentFromActor(co
 
 UPangeaBreedingFragment* UPangeaBreedingLibrary::GetBreedingFragmentFromBreedable(const UPangeaBreedableComponent* Breedable)
 {
-	return Breedable ? GetBreedingFragmentFromActor(Breedable->GetOwner()) : nullptr;
+	return Breedable != nullptr ? GetBreedingFragmentFromActor(Breedable->GetOwner()) : nullptr;
 }
 
-TSubclassOf<APangeaEggActor> UPangeaBreedingLibrary::ResolveEggActorClass(const UPangeaBreedableComponent* Breedable, const TSubclassOf<APangeaEggActor> FallbackEggClass)
+TSubclassOf<APangeaEggActor> UPangeaBreedingLibrary::ResolveEggActorClass(
+	const UPangeaBreedableComponent* Breedable, const TSubclassOf<APangeaEggActor> FallbackEggClass)
 {
 	if (const UPangeaBreedingFragment* BreedingFragment = GetBreedingFragmentFromBreedable(Breedable))
 	{
@@ -52,13 +53,14 @@ TSubclassOf<APangeaEggActor> UPangeaBreedingLibrary::ResolveEggActorClass(const 
 	return FallbackEggClass;
 }
 
-UPangeaGeneticStrategy* UPangeaBreedingLibrary::CreateGeneticStrategy(UObject* Outer, const UPangeaBreedableComponent* Breedable, UPangeaGeneticStrategy* FallbackStrategy)
+UPangeaGeneticStrategy* UPangeaBreedingLibrary::CreateGeneticStrategy(
+	UObject* Outer, const UPangeaBreedableComponent* Breedable, UPangeaGeneticStrategy* FallbackStrategy)
 {
 	if (const UPangeaBreedingFragment* BreedingFragment = GetBreedingFragmentFromBreedable(Breedable))
 	{
 		if (BreedingFragment->GeneticStrategyClass)
 		{
-			UObject* StrategyOuter = Outer ? Outer : GetTransientPackage();
+			UObject* const StrategyOuter = Outer != nullptr ? Outer : GetTransientPackage();
 			return NewObject<UPangeaGeneticStrategy>(StrategyOuter, BreedingFragment->GeneticStrategyClass);
 		}
 	}

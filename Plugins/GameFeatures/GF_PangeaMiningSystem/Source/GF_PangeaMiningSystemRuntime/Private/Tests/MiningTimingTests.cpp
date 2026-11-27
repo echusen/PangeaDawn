@@ -15,20 +15,32 @@
 #include "UObject/UnrealType.h"
 #include <limits>
 
-namespace
+namespace MiningTimingTestsHelpers
 {
+/** Isolated preview world whose clock the timing tests set directly, plus a factory for established mining sites with a private definition. */
 struct FMiningTimingFixture
 {
 	// Test-only clock control in an isolated preview world; no live PIE or wall-clock sleeps.
 	UWorld* World = UWorld::CreateWorld(EWorldType::EditorPreview, false);
-	~FMiningTimingFixture() { if (World) World->DestroyWorld(false); }
+	~FMiningTimingFixture()
+	{
+		if (World != nullptr)
+		{
+			World->DestroyWorld(false);
+		}
+	}
+
 	UMiningSiteComponent* AddSite(bool bShipment = false, int32 Capacity = 1000)
 	{
-		AActor* Owner = World ? World->SpawnActor<AActor>() : nullptr;
-		if (!Owner) return nullptr;
-		UMiningSiteComponent* Site = NewObject<UMiningSiteComponent>(Owner, TEXT("MiningSite"));
+		AActor* const Owner = World != nullptr ? World->SpawnActor<AActor>() : nullptr;
+		if (Owner == nullptr)
+		{
+			return nullptr;
+		}
+
+		UMiningSiteComponent* const Site = NewObject<UMiningSiteComponent>(Owner, TEXT("MiningSite"));
 		Owner->AddInstanceComponent(Site);
-		UALSLoadAndSaveComponent* Save = NewObject<UALSLoadAndSaveComponent>(Owner);
+		UALSLoadAndSaveComponent* const Save = NewObject<UALSLoadAndSaveComponent>(Owner);
 		Owner->AddInstanceComponent(Save);
 		Save->AddComponentClassToSave(UMiningSiteComponent::StaticClass());
 		Site->SiteDefinition = NewObject<UMiningSiteDefinition>(Site);
@@ -43,6 +55,7 @@ struct FMiningTimingFixture
 		Level.ShipmentLossChance = 0.f;
 		Site->SiteDefinition->Levels.Add(Level);
 		Site->EstablishSite();
+
 		return Site;
 	}
 };
@@ -54,6 +67,7 @@ TArray<uint8> SaveComponent(UMiningSiteComponent* Site)
 	FMemoryWriter Writer(Bytes);
 	FALSSaveGameArchive Archive(Writer, true);
 	Site->Serialize(Archive);
+
 	return Bytes;
 }
 
@@ -63,34 +77,45 @@ bool LoadComponent(UMiningSiteComponent* Site, const TArray<uint8>& Bytes)
 	FALSSaveGameArchive Archive(Reader, true);
 	Site->Serialize(Archive);
 	Site->OnComponentLoaded();
+
 	return !Archive.IsError();
 }
 
+/** Save archive that omits the timing properties, to reproduce a save written before they existed. */
 struct FLegacyMiningArchive : FALSSaveGameArchive
 {
-	FLegacyMiningArchive(FArchive& Inner) : FALSSaveGameArchive(Inner, true) {}
+	FLegacyMiningArchive(FArchive& Inner)
+		: FALSSaveGameArchive(Inner, true)
+	{
+	}
+
 	virtual bool ShouldSkipProperty(const FProperty* Property) const override
 	{
 		const FName Name = Property->GetFName();
-		return Name == TEXT("MiningTimingVersion") || Name == TEXT("ProductionRemainder") ||
-			Name == TEXT("ShipmentCooldownRemaining") || FALSSaveGameArchive::ShouldSkipProperty(Property);
+		return Name == TEXT("MiningTimingVersion") || Name == TEXT("ProductionRemainder") || Name == TEXT("ShipmentCooldownRemaining")
+			|| FALSSaveGameArchive::ShouldSkipProperty(Property);
 	}
 };
-}
+} // namespace MiningTimingTestsHelpers
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningCadenceTest, "Pangea.ACF.Mining.CadenceInvariantFractionalProduction",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningCadenceTest, "Pangea.ACF.Mining.CadenceInvariantFractionalProduction", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningCadenceTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Frequent = Fixture.AddSite();
 	UMiningSiteComponent* Batched = Fixture.AddSite();
-	if (!TestNotNull(TEXT("Frequent site"), Frequent) || !TestNotNull(TEXT("Batched site"), Batched)) return false;
+	if (!TestNotNull(TEXT("Frequent site"), Frequent) || !TestNotNull(TEXT("Batched site"), Batched))
+	{
+		return false;
+	}
+
 	for (int32 Second = 1; Second <= 300; ++Second)
 	{
 		Fixture.World->TimeSeconds = Second;
 		Frequent->SyncProductionFromWorldTime();
 	}
+
 	Batched->SyncProductionFromWorldTime();
 	TestEqual(TEXT("300 one-second syncs produce 50"), Frequent->GetStoredUnits(), 50);
 	TestEqual(TEXT("One 300-second sync produces 50"), Batched->GetStoredUnits(), 50);
@@ -110,18 +135,24 @@ bool FMiningCadenceTest::RunTest(const FString& Parameters)
 	Fixture.World->TimeSeconds = 4.0;
 	Frequent->OnComponentSaved();
 	TestTrue(TEXT("Clock resumes against the new anchor"), FMath::IsNearlyEqual(Frequent->GetProductionRemainder(), 0.5, 1.e-8));
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningOfflineTest, "Pangea.ACF.Mining.PauseOfflineALSRoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningOfflineTest, "Pangea.ACF.Mining.PauseOfflineALSRoundTrip", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningOfflineTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Source = Fixture.AddSite(true);
 	UMiningSiteComponent* Restored = Fixture.AddSite(true);
-	if (!TestNotNull(TEXT("Source"), Source) || !TestNotNull(TEXT("Restored"), Restored)) return false;
+	if (!TestNotNull(TEXT("Source"), Source) || !TestNotNull(TEXT("Restored"), Restored))
+	{
+		return false;
+	}
+
 	Fixture.World->TimeSeconds = 15.0;
+
 	// Real ALS collection, reflected pre-save hook and component serialization.
 	const FALSActorData Record = UALSFunctionLibrary::SerializeActor(Source->GetOwner());
 	TestEqual(TEXT("ALS pre-save settles two whole units without shipping"), Source->GetStoredUnits(), 2);
@@ -141,16 +172,21 @@ bool FMiningOfflineTest::RunTest(const FString& Parameters)
 	Fixture.World->TimeSeconds = 3.0;
 	Restored->OnComponentSaved();
 	TestEqual(TEXT("Time zero is a valid initialized anchor"), Restored->GetStoredUnits(), 3);
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningUpgradeTimingTest, "Pangea.ACF.Mining.UpgradeSettlesOldRate",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningUpgradeTimingTest, "Pangea.ACF.Mining.UpgradeSettlesOldRate", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningUpgradeTimingTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite();
-	if (!TestNotNull(TEXT("Site"), Site)) return false;
+	if (!TestNotNull(TEXT("Site"), Site))
+	{
+		return false;
+	}
+
 	FMiningSiteLevelDefinition Next = Site->SiteDefinition->Levels[0];
 	Next.Level = 1;
 	Next.AutomatedMineralsPerDay = 100;
@@ -171,16 +207,21 @@ bool FMiningUpgradeTimingTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Half unit before resource change"), FMath::IsNearlyEqual(Site->GetProductionRemainder(), 0.5, 1.e-8));
 	TestTrue(TEXT("Second upgrade succeeds"), Site->UpgradeSite());
 	TestTrue(TEXT("A fraction cannot change resource type"), FMath::IsNearlyZero(Site->GetProductionRemainder()));
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningCapacityTest, "Pangea.ACF.Mining.CapacityAndInvalidElapsed",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningCapacityTest, "Pangea.ACF.Mining.CapacityAndInvalidElapsed", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningCapacityTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite(false, 7);
-	if (!TestNotNull(TEXT("Site"), Site)) return false;
+	if (!TestNotNull(TEXT("Site"), Site))
+	{
+		return false;
+	}
+
 	TestEqual(TEXT("Long elapsed saturates capacity, no integer overflow"), Site->ProduceForElapsedSeconds(std::numeric_limits<float>::max()), 7);
 	TestEqual(TEXT("Full storage rejects more output"), Site->ProduceForElapsedSeconds(300.f), 0);
 	TestTrue(TEXT("Full storage does not bank fractional backlog"), FMath::IsNearlyZero(Site->GetProductionRemainder()));
@@ -190,11 +231,15 @@ bool FMiningCapacityTest::RunTest(const FString& Parameters)
 	Site->ProduceForElapsedSeconds(3.f);
 	TestEqual(TEXT("No deferred whole output after freeing space"), Site->GetStoredUnits(), 0);
 	const double Before = Site->GetProductionRemainder();
+
 	for (float Invalid : { -1.f, 0.f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+	{
 		TestEqual(TEXT("Invalid elapsed does not produce"), Site->ProduceForElapsedSeconds(Invalid), 0);
+	}
+
 	TestEqual(TEXT("Invalid elapsed preserves valid fraction"), Site->GetProductionRemainder(), Before);
-	const TArray<uint8> Bytes = SaveComponent(Site);
-	TestTrue(TEXT("Fraction archive loads"), LoadComponent(Site, Bytes));
+	const TArray<uint8> Bytes = MiningTimingTestsHelpers::SaveComponent(Site);
+	TestTrue(TEXT("Fraction archive loads"), MiningTimingTestsHelpers::LoadComponent(Site, Bytes));
 	Site->ProduceForElapsedSeconds(3.f);
 	TestEqual(TEXT("Fractional progress survives serialization"), Site->GetStoredUnits(), 1);
 	TArray<uint8> DefaultBytes;
@@ -205,20 +250,26 @@ bool FMiningCapacityTest::RunTest(const FString& Parameters)
 		Site->Serialize(Archive);
 		TestEqual(TEXT("Component save restores the caller's archive delta policy"), Archive.DoDelta(), bOriginalDoDelta);
 	}
+
 	Site->ProduceForElapsedSeconds(3.f);
 	TestTrue(TEXT("Reused component has a different fraction before loading"), FMath::IsNearlyEqual(Site->GetProductionRemainder(), 0.5, 1.e-8));
-	TestTrue(TEXT("Default-valued timing archive loads"), LoadComponent(Site, DefaultBytes));
+	TestTrue(TEXT("Default-valued timing archive loads"), MiningTimingTestsHelpers::LoadComponent(Site, DefaultBytes));
 	TestTrue(TEXT("Saved zero replaces reused nonzero fraction"), FMath::IsNearlyZero(Site->GetProductionRemainder()));
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningShipmentTimingTest, "Pangea.ACF.Mining.ShipmentCooldownAndReentry",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningShipmentTimingTest, "Pangea.ACF.Mining.ShipmentCooldownAndReentry", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningShipmentTimingTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite(true);
-	if (!TestNotNull(TEXT("Site"), Site)) return false;
+	if (!TestNotNull(TEXT("Site"), Site))
+	{
+		return false;
+	}
+
 	Site->SiteDefinition->Levels[0].AutomatedMineralsPerDay = 0;
 	Site->OnStorageChanged.AddDynamic(Site, &UMiningSiteComponent::SyncProductionFromWorldTime);
 	FMiningItemQuantity Item = Site->SiteDefinition->Levels[0].PrimaryOutput;
@@ -231,9 +282,9 @@ bool FMiningShipmentTimingTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("One due shipment succeeds"), Site->TryAutoShipment());
 	TestEqual(TEXT("Storage callback does not recursively ship"), Site->GetStoredUnits(), 15);
 	TestFalse(TEXT("Cooldown prevents duplicate dispatch"), Site->TryAutoShipment());
-	const TArray<uint8> Bytes = SaveComponent(Site);
+	const TArray<uint8> Bytes = MiningTimingTestsHelpers::SaveComponent(Site);
 	Fixture.World->TimeSeconds = 50000.0;
-	TestTrue(TEXT("Shipment archive loads"), LoadComponent(Site, Bytes));
+	TestTrue(TEXT("Shipment archive loads"), MiningTimingTestsHelpers::LoadComponent(Site, Bytes));
 	TestFalse(TEXT("Offline time does not consume cooldown"), Site->TryAutoShipment());
 	Fixture.World->TimeSeconds += 60.0;
 	TestTrue(TEXT("Online cooldown completes after load"), Site->TryAutoShipment());
@@ -242,45 +293,60 @@ bool FMiningShipmentTimingTest::RunTest(const FString& Parameters)
 	Fixture.World->TimeSeconds += 60.0;
 	TestTrue(TEXT("Zero-interval config still dispatches only once per call"), Site->TryAutoShipment());
 	TestEqual(TEXT("Even zero-interval reentry cannot drain everything"), Site->GetStoredUnits(), 5);
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningLegacyTimingTest, "Pangea.ACF.Mining.LegacyTimingMigration",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningLegacyTimingTest, "Pangea.ACF.Mining.LegacyTimingMigration", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningLegacyTimingTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite(true);
-	if (!TestNotNull(TEXT("Site"), Site)) return false;
+	if (!TestNotNull(TEXT("Site"), Site))
+	{
+		return false;
+	}
+
 	Fixture.World->TimeSeconds = 15.0;
 	Site->OnComponentSaved();
 	TArray<uint8> Bytes;
 	{
 		FMemoryWriter Writer(Bytes);
-		FLegacyMiningArchive Legacy(Writer);
+		MiningTimingTestsHelpers::FLegacyMiningArchive Legacy(Writer);
 		Site->Serialize(Legacy);
 	}
+
 	Fixture.World->TimeSeconds = 1.0;
 	AddExpectedError(TEXT("Legacy mining timing"), EAutomationExpectedErrorFlags::Contains, 1);
-	TestTrue(TEXT("Legacy archive loads on a previously used component"), LoadComponent(Site, Bytes));
+	TestTrue(TEXT("Legacy archive loads on a previously used component"), MiningTimingTestsHelpers::LoadComponent(Site, Bytes));
 	TestEqual(TEXT("Existing whole inventory survives migration"), Site->GetStoredUnits(), 2);
 	TestTrue(TEXT("Missing legacy fraction cannot retain newer runtime fraction"), FMath::IsNearlyZero(Site->GetProductionRemainder()));
 	TestTrue(TEXT("Legacy shipment gets conservative full cooldown"), FMath::IsNearlyEqual(Site->GetShipmentCooldownRemaining(), 60.0));
 	Site->OnComponentLoaded();
 	Site->SyncProductionFromWorldTime();
 	TestEqual(TEXT("Migration does not fabricate output"), Site->GetStoredUnits(), 2);
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningLinkedStorageTest, "Pangea.ACF.Mining.LinkedACFStorageAccounting",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningLinkedStorageTest, "Pangea.ACF.Mining.LinkedACFStorageAccounting", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningLinkedStorageTest::RunTest(const FString& Parameters)
 {
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite();
-	if (!TestNotNull(TEXT("Site"), Site)) return false;
+	if (!TestNotNull(TEXT("Site"), Site))
+	{
+		return false;
+	}
+
 	UClass* MetalClass = LoadClass<UACFItem>(nullptr, TEXT("/Game/FullSample/Blueprints/Items/Materials/ACFMetalBP.ACFMetalBP_C"));
-	if (!TestNotNull(TEXT("Existing ACF metal item"), MetalClass)) return false;
+	if (!TestNotNull(TEXT("Existing ACF metal item"), MetalClass))
+	{
+		return false;
+	}
+
 	FMiningItemQuantity BaseItem = Site->SiteDefinition->Levels[0].PrimaryOutput;
 	BaseItem.Quantity = 3; // Native ACFItem has stack size one; exercise multiple stacks.
 	FMiningItemQuantity Metal;
@@ -303,21 +369,30 @@ bool FMiningLinkedStorageTest::RunTest(const FString& Parameters)
 	Storage->SetMaxInventoryWeight(0);
 	TestEqual(TEXT("ACF rejection is not falsely reported as production"), Site->ProduceForElapsedSeconds(6.f), 0);
 	TestEqual(TEXT("Rejected output does not appear in mirror"), Site->GetStoredUnits(), 3);
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningTimingValidationTest, "Pangea.ACF.Mining.TimingDefinitionValidation",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningTimingValidationTest, "Pangea.ACF.Mining.TimingDefinitionValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningTimingValidationTest::RunTest(const FString& Parameters)
 {
-	UMiningSiteDefinition* Existing = LoadObject<UMiningSiteDefinition>(nullptr,
-		TEXT("/Game/_Game/MiningSystem/DA_MiningSite_Iron_Test.DA_MiningSite_Iron_Test"));
-	if (!TestNotNull(TEXT("Current iron definition"), Existing)) return false;
+	UMiningSiteDefinition* Existing =
+		LoadObject<UMiningSiteDefinition>(nullptr, TEXT("/Game/_Game/MiningSystem/DA_MiningSite_Iron_Test.DA_MiningSite_Iron_Test"));
+	if (!TestNotNull(TEXT("Current iron definition"), Existing))
+	{
+		return false;
+	}
+
 	FDataValidationContext CurrentContext;
 	TestTrue(TEXT("Existing balancing passes validation unchanged"), Existing->IsDataValid(CurrentContext) == EDataValidationResult::Valid);
-	FMiningTimingFixture Fixture;
+	MiningTimingTestsHelpers::FMiningTimingFixture Fixture;
 	UMiningSiteComponent* Site = Fixture.AddSite();
-	if (!TestNotNull(TEXT("Private validation fixture"), Site)) return false;
+	if (!TestNotNull(TEXT("Private validation fixture"), Site))
+	{
+		return false;
+	}
+
 	Site->SiteDefinition->PresentationConfig = Existing->PresentationConfig;
 	FDataValidationContext ValidContext;
 	TestTrue(TEXT("Valid private definition accepted"), Site->SiteDefinition->IsDataValid(ValidContext) == EDataValidationResult::Valid);
@@ -327,29 +402,41 @@ bool FMiningTimingValidationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Invalid timing rejected before authoring"), Site->SiteDefinition->IsDataValid(InvalidContext) == EDataValidationResult::Invalid);
 	TestEqual(TEXT("Runtime ignores non-finite production day"), Site->ProduceForElapsedSeconds(300.f), 0);
 	TestFalse(TEXT("Runtime ignores invalid shipment interval"), Site->TryAutoShipment());
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningStateContractTest, "Pangea.ACF.Mining.PersistentReplicationContract",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMiningStateContractTest, "Pangea.ACF.Mining.PersistentReplicationContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningStateContractTest::RunTest(const FString& Parameters)
 {
-	for (const TCHAR* Name : { TEXT("bEstablished"), TEXT("CurrentLevel"), TEXT("StoredItems"), TEXT("SiteDefinition"),
-		TEXT("ProductionRemainder"), TEXT("ShipmentCooldownRemaining") })
+	for (const TCHAR* Name : { TEXT("bEstablished"),
+			 TEXT("CurrentLevel"),
+			 TEXT("StoredItems"),
+			 TEXT("SiteDefinition"),
+			 TEXT("ProductionRemainder"),
+			 TEXT("ShipmentCooldownRemaining") })
 	{
 		const FProperty* Property = FindFProperty<FProperty>(UMiningSiteComponent::StaticClass(), Name);
-		if (!TestNotNull(Name, Property)) continue;
+		if (!TestNotNull(Name, Property))
+		{
+			continue;
+		}
+
 		TestTrue(FString(Name) + TEXT(" persists"), Property->HasAnyPropertyFlags(CPF_SaveGame));
 		TestTrue(FString(Name) + TEXT(" replicates"), Property->HasAnyPropertyFlags(CPF_Net));
 	}
+
 	for (const TCHAR* Name : { TEXT("ItemClass"), TEXT("ItemTag"), TEXT("Quantity") })
 	{
 		const FProperty* Property = FindFProperty<FProperty>(FMiningStoredItem::StaticStruct(), Name);
 		TestTrue(FString(Name) + TEXT(" persists within storage"), Property && Property->HasAnyPropertyFlags(CPF_SaveGame));
 	}
+
 	const UALSSaveGameSettings* Settings = GetDefault<UALSSaveGameSettings>();
 	TestEqual(TEXT("ALS pre-save hook matches"), Settings->GetOnComponentSavedFunctionName(), FName(TEXT("OnComponentSaved")));
 	TestEqual(TEXT("ALS post-load hook matches"), Settings->GetOnComponentLoadedFunctionName(), FName(TEXT("OnComponentLoaded")));
+
 	return !HasAnyErrors();
 }
 #endif

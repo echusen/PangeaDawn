@@ -30,47 +30,48 @@ class PANGEABASEUPGRADESYSTEM_API UVillageUpgradeMenuWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-
 	/** Village this menu is showing data for */
-	UPROPERTY(BlueprintReadWrite, Category="Upgrade")
+	UPROPERTY(BlueprintReadWrite, Category = "Upgrade")
 	TObjectPtr<AVillageBase> VillageActor;
 
 	/** Pawn interacting with the village */
-	UPROPERTY(BlueprintReadWrite, Category="Upgrade")
+	UPROPERTY(BlueprintReadWrite, Category = "Upgrade")
 	TObjectPtr<APawn> InteractingPawn;
 
 	/** Bound via UMG (Style A) */
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* CurrentLevelText;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CurrentLevelText;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* NextLevelText;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> NextLevelText;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UScrollBox* RequirementsScroll;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> RequirementsScroll;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UScrollBox* UnlocksScroll;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> UnlocksScroll;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UButton* UpgradeButton;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> UpgradeButton;
 
 	/** Widget classes for entries (set in BP) */
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Upgrade|UI")
+	/** Row widget created for each requirement of the next level. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Upgrade|UI")
 	TSubclassOf<URequirementEntryWidget> RequirementEntryClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Upgrade|UI")
+	/** Row widget created for each facility that the next level unlocks. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Upgrade|UI")
 	TSubclassOf<UFacilityUnlockEntryWidget> FacilityUnlockEntryClass;
 
 	/** Initialize with village + pawn */
-	UFUNCTION(BlueprintCallable, Category="Upgrade")
+	UFUNCTION(BlueprintCallable, Category = "Upgrade")
 	void InitializeFromVillage(AVillageBase* InVillage, APawn* InInteractingPawn);
 
 protected:
 	virtual void NativeOnInitialized() override;
-	
+
 	UFUNCTION()
 	void OnUpgradeButtonClicked();
 

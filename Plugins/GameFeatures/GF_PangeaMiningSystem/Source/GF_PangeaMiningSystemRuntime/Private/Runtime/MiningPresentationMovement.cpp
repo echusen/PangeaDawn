@@ -1,9 +1,6 @@
 #include "Components/MiningSitePresentationCoordinatorComponent.h"
 
-#include "Actors/MiningSiteActor.h"
 #include "AIController.h"
-#include "Components/MiningSiteComponent.h"
-#include "DataAssets/MiningSitePresentationConfig.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
@@ -12,22 +9,26 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "NavigationSystem.h"
 
+#include "Actors/MiningSiteActor.h"
+#include "Components/MiningSiteComponent.h"
+#include "DataAssets/MiningSitePresentationConfig.h"
+
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningPresentationMovement, Log, All);
 
 bool UMiningSitePresentationCoordinatorComponent::HasPresentationHoldActive(AActor* Actor) const
 {
-	if (!Actor || !GetWorld())
+	if (Actor == nullptr || GetWorld() == nullptr)
 	{
 		return false;
 	}
 
-	const float* HoldUntilTime = PresentationHoldUntilTimeMap.Find(Actor);
-	return HoldUntilTime && *HoldUntilTime > GetWorld()->GetTimeSeconds();
+	const float* const HoldUntilTime = PresentationHoldUntilTimeMap.Find(Actor);
+	return HoldUntilTime != nullptr && *HoldUntilTime > GetWorld()->GetTimeSeconds();
 }
 
 void UMiningSitePresentationCoordinatorComponent::BeginPresentationHold(AActor* Actor, float Duration)
 {
-	if (!Actor || !GetWorld() || Duration <= 0.0f)
+	if (Actor == nullptr || GetWorld() == nullptr || Duration <= 0.0f)
 	{
 		return;
 	}
@@ -37,35 +38,38 @@ void UMiningSitePresentationCoordinatorComponent::BeginPresentationHold(AActor* 
 
 void UMiningSitePresentationCoordinatorComponent::UpdatePresentationFacing(AActor* Actor, const FVector& LookAtLocation) const
 {
-	if (!Actor)
+	if (Actor == nullptr)
 	{
 		return;
 	}
 
 	FVector ToTarget = LookAtLocation - Actor->GetActorLocation();
 	ToTarget.Z = 0.0f;
+
 	if (ToTarget.SizeSquared() <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
 	const FRotator DesiredRotation = ToTarget.Rotation();
-	const float DeltaSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : PresentationMovementInterval;
-	const FRotator NewRotation = FMath::RInterpTo(Actor->GetActorRotation(), FRotator(0.0f, DesiredRotation.Yaw, 0.0f), DeltaSeconds, PresentationFacingInterpSpeed);
+	const float DeltaSeconds = GetWorld() != nullptr ? GetWorld()->GetDeltaSeconds() : PresentationMovementInterval;
+	const FRotator NewRotation =
+		FMath::RInterpTo(Actor->GetActorRotation(), FRotator(0.0f, DesiredRotation.Yaw, 0.0f), DeltaSeconds, PresentationFacingInterpSpeed);
 	Actor->SetActorRotation(NewRotation);
 }
 
-void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(AMiningSiteActor& SiteActor, AActor* Actor, const FVector& Destination, EMiningPresentationRole Role, bool bAllowFullFidelityNav)
+void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(
+	AMiningSiteActor& SiteActor, AActor* Actor, const FVector& Destination, EMiningPresentationRole Role, bool bAllowFullFidelityNav)
 {
-	if (!Actor)
+	if (Actor == nullptr)
 	{
 		return;
 	}
 
 	ApplyAgentPresentation(Actor, Role, EMiningPresentationState::Traveling, &Destination);
 
-	APawn* Pawn = Cast<APawn>(Actor);
-	if (Pawn && !Pawn->GetController())
+	APawn* const Pawn = Cast<APawn>(Actor);
+	if (Pawn != nullptr && !Pawn->GetController())
 	{
 		Pawn->SpawnDefaultController();
 	}
@@ -97,11 +101,13 @@ void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(AMini
 	}
 
 	float MoveSpeed = PresentationMoveSpeed;
+
 	if (ACharacter* Character = Cast<ACharacter>(Actor))
 	{
 		if (UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement())
 		{
 			MoveSpeed = CharacterMovement->MaxWalkSpeed;
+
 			if (bAllowFullFidelityNav && IsFullFidelityPresentationRelevant(SiteActor))
 			{
 				if (APawn* PawnCharacter = Cast<APawn>(Character))
@@ -109,20 +115,24 @@ void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(AMini
 					if (AAIController* AIController = Cast<AAIController>(PawnCharacter->GetController()))
 					{
 						const FVector ProjectedDestination(Destination.X, Destination.Y, Character->GetActorLocation().Z);
-						const FVector* LastRequestedDestination = PresentationMoveTargetMap.Find(Actor);
-						const bool bTargetChanged = !LastRequestedDestination || FVector::DistSquared2D(*LastRequestedDestination, ProjectedDestination) > FMath::Square(50.0f);
+						const FVector* const LastRequestedDestination = PresentationMoveTargetMap.Find(Actor);
+						const bool bTargetChanged = LastRequestedDestination == nullptr
+							|| FVector::DistSquared2D(*LastRequestedDestination, ProjectedDestination) > FMath::Square(50.0f);
 						const bool bNotMoving = AIController->GetMoveStatus() != EPathFollowingStatus::Moving;
 
 						if (bTargetChanged || bNotMoving)
 						{
 							FVector MoveDestination = ProjectedDestination;
 							bool bUsePathfinding = true;
+
 							if (Role == EMiningPresentationRole::Courier)
 							{
 								bUsePathfinding = false;
+
 								if (UNavigationSystemV1* NavigationSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(SiteActor.GetWorld()))
 								{
 									FNavLocation ProjectedNavLocation;
+
 									if (NavigationSystem->ProjectPointToNavigation(ProjectedDestination, ProjectedNavLocation, FVector(300.0f, 300.0f, 500.0f)))
 									{
 										MoveDestination = ProjectedNavLocation.Location;
@@ -130,14 +140,22 @@ void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(AMini
 								}
 							}
 
-							const EPathFollowingRequestResult::Type MoveResult = AIController->MoveToLocation(MoveDestination, 35.0f, true, bUsePathfinding, true, true, nullptr, true);
+							const EPathFollowingRequestResult::Type MoveResult =
+								AIController->MoveToLocation(MoveDestination, 35.0f, true, bUsePathfinding, true, true, nullptr, true);
 							if (MoveResult == EPathFollowingRequestResult::RequestSuccessful || MoveResult == EPathFollowingRequestResult::AlreadyAtGoal)
 							{
 								PresentationMoveTargetMap.Add(Actor, MoveDestination);
 								return;
 							}
 
-							UE_LOG(LogPangeaMiningPresentationMovement, Warning, TEXT("Full-fidelity move request failed. Site=%s Pawn=%s Controller=%s Result=%d Destination=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(PawnCharacter), *GetNameSafe(AIController), static_cast<int32>(MoveResult), *MoveDestination.ToString());
+							UE_LOG(LogPangeaMiningPresentationMovement,
+								Warning,
+								TEXT("Full-fidelity move request failed. Site=%s Pawn=%s Controller=%s Result=%d Destination=%s"),
+								*GetNameSafe(&SiteActor),
+								*GetNameSafe(PawnCharacter),
+								*GetNameSafe(AIController),
+								static_cast<int32>(MoveResult),
+								*MoveDestination.ToString());
 						}
 						else
 						{
@@ -155,6 +173,7 @@ void UMiningSitePresentationCoordinatorComponent::TryMovePresentationActor(AMini
 	NewLocation.Z = CurrentLocation.Z;
 
 	Actor->SetActorLocation(NewLocation, false, nullptr, ETeleportType::None);
+
 	if (!StepDelta.IsNearlyZero())
 	{
 		Actor->SetActorRotation(StepDelta.Rotation());
@@ -165,15 +184,18 @@ FVector UMiningSitePresentationCoordinatorComponent::GetPresentationSlotLocation
 {
 	const float AngleRadians = FMath::DegreesToRadians(AngleDegrees);
 	const FVector LocalOffset(FMath::Cos(AngleRadians) * Radius, FMath::Sin(AngleRadians) * Radius, 0.0f);
+
 	return SiteActor.GetActorTransform().TransformPosition(LocalOffset);
 }
 
-bool UMiningSitePresentationCoordinatorComponent::TryGetRouteMarkerLocation(const AMiningSiteActor& SiteActor, const FString& MarkerName, FVector& OutLocation) const
+bool UMiningSitePresentationCoordinatorComponent::TryGetRouteMarkerLocation(
+	const AMiningSiteActor& SiteActor, const FString& MarkerName, FVector& OutLocation) const
 {
 	TInlineComponentArray<USceneComponent*> SceneComponents(&SiteActor);
+
 	for (USceneComponent* SceneComponent : SceneComponents)
 	{
-		if (SceneComponent && SceneComponent->GetName() == MarkerName)
+		if (SceneComponent != nullptr && SceneComponent->GetName() == MarkerName)
 		{
 			OutLocation = SceneComponent->GetComponentLocation();
 			return true;
@@ -185,17 +207,18 @@ bool UMiningSitePresentationCoordinatorComponent::TryGetRouteMarkerLocation(cons
 
 bool UMiningSitePresentationCoordinatorComponent::IsPresentationRelevant(const AMiningSiteActor& SiteActor) const
 {
-	if (!SiteActor.GetWorld())
+	if (SiteActor.GetWorld() == nullptr)
 	{
 		return false;
 	}
 
 	const float ActivationRadiusSq = FMath::Square(bPresentationRelevantCached ? PresentationActivationExitRadius : PresentationActivationRadius);
 	bool bRelevantNow = false;
+
 	for (TActorIterator<APawn> PawnIt(SiteActor.GetWorld()); PawnIt; ++PawnIt)
 	{
-		const APawn* Pawn = *PawnIt;
-		if (Pawn && Pawn->IsPlayerControlled() && FVector::DistSquared(Pawn->GetActorLocation(), SiteActor.GetActorLocation()) <= ActivationRadiusSq)
+		const APawn* const Pawn = *PawnIt;
+		if (Pawn != nullptr && Pawn->IsPlayerControlled() && FVector::DistSquared(Pawn->GetActorLocation(), SiteActor.GetActorLocation()) <= ActivationRadiusSq)
 		{
 			bRelevantNow = true;
 			break;
@@ -210,10 +233,12 @@ bool UMiningSitePresentationCoordinatorComponent::IsFullFidelityPresentationRele
 {
 	const bool bRelevantNow = IsPresentationRelevant(SiteActor);
 	const_cast<UMiningSitePresentationCoordinatorComponent*>(this)->bFullFidelityRelevantCached = bRelevantNow;
+
 	return bRelevantNow;
 }
 
-float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForRole(const UMiningSiteComponent* MiningSiteComponent, EMiningPresentationRole Role) const
+float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForRole(
+	const UMiningSiteComponent* MiningSiteComponent, EMiningPresentationRole Role) const
 {
 	if (const FMiningPresentationRoleConfig* RoleConfig = GetRoleConfig(MiningSiteComponent, Role))
 	{
@@ -225,27 +250,29 @@ float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForRole
 
 	switch (Role)
 	{
-	case EMiningPresentationRole::Worker:
-		return WorkerInteractionDuration;
-	case EMiningPresentationRole::Guard:
-		return GuardInteractionDuration;
-	case EMiningPresentationRole::Courier:
-		return CourierInteractionDuration;
-	default:
-		return WorkerInteractionDuration;
+		case EMiningPresentationRole::Worker:
+			return WorkerInteractionDuration;
+		case EMiningPresentationRole::Guard:
+			return GuardInteractionDuration;
+		case EMiningPresentationRole::Courier:
+			return CourierInteractionDuration;
+		default:
+			return WorkerInteractionDuration;
 	}
 }
 
-float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForActor(const UMiningSiteComponent* MiningSiteComponent, const EMiningPresentationRole Role, const AActor* Actor) const
+float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForActor(
+	const UMiningSiteComponent* MiningSiteComponent, const EMiningPresentationRole Role, const AActor* Actor) const
 {
 	const float BaseDuration = GetInteractionDurationForRole(MiningSiteComponent, Role);
-	if (!Actor)
+
+	if (Actor == nullptr)
 	{
 		return BaseDuration;
 	}
 
-	const FMiningPresentationRoleConfig* RoleConfig = GetRoleConfig(MiningSiteComponent, Role);
-	if (!RoleConfig || RoleConfig->InteractionDurationVariance <= 0.0f)
+	const FMiningPresentationRoleConfig* const RoleConfig = GetRoleConfig(MiningSiteComponent, Role);
+	if (RoleConfig == nullptr || RoleConfig->InteractionDurationVariance <= 0.0f)
 	{
 		return BaseDuration;
 	}
@@ -253,5 +280,6 @@ float UMiningSitePresentationCoordinatorComponent::GetInteractionDurationForActo
 	const uint32 Hash = GetTypeHash(Actor->GetFName());
 	const float Normalized = static_cast<float>(Hash % 1000) / 999.0f;
 	const float Offset = FMath::Lerp(-RoleConfig->InteractionDurationVariance, RoleConfig->InteractionDurationVariance, Normalized);
+
 	return FMath::Max(0.1f, BaseDuration + Offset);
 }

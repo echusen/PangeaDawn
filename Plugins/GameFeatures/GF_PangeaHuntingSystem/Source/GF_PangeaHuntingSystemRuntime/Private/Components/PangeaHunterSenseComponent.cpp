@@ -1,34 +1,35 @@
 #include "Components/PangeaHunterSenseComponent.h"
 
-#include "Actors/ACFCharacter.h"
-#include "Actors/PangeaHuntClueActor.h"
-#include "Components/ACFCharacterMovementComponent.h"
-#include "Components/PangeaTrackEmitterComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "DataAssets/HuntSpeciesConfig.h"
-#include "DrawDebugHelpers.h"
-#include "Engine/Engine.h"
-#include "Kismet/KismetMathLibrary.h"
-#include "EngineUtils.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
-#include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
-#include "Materials/MaterialInterface.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Engine/StaticMesh.h"
-#include "UI/PangeaFootprintFocusWidget.h"
-#include "ANSUIPlayerSubsystem.h"
-#include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+
+#include "Actors/ACFCharacter.h"
+#include "Actors/PangeaHuntClueActor.h"
+#include "ANSUIPlayerSubsystem.h"
+#include "Components/ACFCharacterMovementComponent.h"
+#include "Components/PangeaTrackEmitterComponent.h"
+#include "DataAssets/HuntSpeciesConfig.h"
+#include "UI/PangeaFootprintFocusWidget.h"
 
 namespace PangeaHuntingDebug
 {
-	static int32 HunterDebugMessageKey = 450100;
-	static const TCHAR* FallbackTrackMaterialPath = TEXT("/GF_PangeaHuntingSystem/Materials/M_HuntTrack_Visual.M_HuntTrack_Visual");
-}
+static int32 HunterDebugMessageKey = 450100;
+static const TCHAR* FallbackTrackMaterialPath = TEXT("/GF_PangeaHuntingSystem/Materials/M_HuntTrack_Visual.M_HuntTrack_Visual");
+} // namespace PangeaHuntingDebug
 
 UPangeaHunterSenseComponent::UPangeaHunterSenseComponent()
 {
@@ -38,16 +39,14 @@ UPangeaHunterSenseComponent::UPangeaHunterSenseComponent()
 
 bool UPangeaHunterSenseComponent::IdentifyNearestVisibleFootprint()
 {
-	AActor* SourceActor = FocusedFootprintSourceActor.IsValid()
-		? FocusedFootprintSourceActor.Get()
-		: NearestVisibleFootprintSourceActor.Get();
-	if (!SourceActor)
+	AActor* const SourceActor = FocusedFootprintSourceActor.IsValid() ? FocusedFootprintSourceActor.Get() : NearestVisibleFootprintSourceActor.Get();
+	if (SourceActor == nullptr)
 	{
 		return false;
 	}
 
-	AActor* Owner = GetOwner();
-	if (Owner && Owner->HasAuthority())
+	AActor* const Owner = GetOwner();
+	if (Owner != nullptr && Owner->HasAuthority())
 	{
 		if (UPangeaTrackEmitterComponent* TrackEmitter = SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>())
 		{
@@ -59,6 +58,7 @@ bool UPangeaHunterSenseComponent::IdentifyNearestVisibleFootprint()
 			TrackEmitter->MarkClueTypeIdentified(EHuntClueType::Footprint, Owner);
 			return true;
 		}
+
 		return false;
 	}
 
@@ -88,7 +88,7 @@ void UPangeaHunterSenseComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 		MovementComponent->OnAimChanged.RemoveDynamic(this, &UPangeaHunterSenseComponent::HandleAimChanged);
 	}
 
-	if (FootprintFocusWidget)
+	if (FootprintFocusWidget != nullptr)
 	{
 		FootprintFocusWidget->RemoveFromParent();
 		FootprintFocusWidget = nullptr;
@@ -97,7 +97,13 @@ void UPangeaHunterSenseComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	// Game Feature deactivation destroys this component while its owning pawn lives.
 	// These visuals are outered to that pawn, so they do not disappear with us automatically.
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)
-		if (IsValid(Slot.VisualComponent)) Slot.VisualComponent->DestroyComponent();
+	{
+		if (IsValid(Slot.VisualComponent))
+		{
+			Slot.VisualComponent->DestroyComponent();
+		}
+	}
+
 	VisualPool.Empty();
 	FocusedFootprintSourceActor.Reset();
 	NearestVisibleFootprintSourceActor.Reset();
@@ -131,6 +137,7 @@ void UPangeaHunterSenseComponent::TickComponent(float DeltaTime, ELevelTick Tick
 			ResetVisualAssignments();
 			ReleaseUnusedVisuals();
 		}
+
 		ResetFootprintFocus();
 		return;
 	}
@@ -158,34 +165,35 @@ void UPangeaHunterSenseComponent::HandleAimChanged(const bool bIsNowAiming)
 void UPangeaHunterSenseComponent::HandleCrouchChanged(const bool bIsNowCrouched)
 {
 	bIsCrouched = bIsNowCrouched;
+
 	if (AACFCharacter* OwnerCharacter = CachedOwnerCharacter.Get())
 	{
-		PrintDebugMessage(
-			FString::Printf(TEXT("Crouch changed delegate=%s cached=%s actualFlag=%s"),
-				bIsNowCrouched ? TEXT("true") : TEXT("false"),
-				bIsCrouched ? TEXT("true") : TEXT("false"),
-				OwnerCharacter->bIsCrouched ? TEXT("true") : TEXT("false")),
+		PrintDebugMessage(FString::Printf(TEXT("Crouch changed delegate=%s cached=%s actualFlag=%s"),
+							  bIsNowCrouched ? TEXT("true") : TEXT("false"),
+							  bIsCrouched ? TEXT("true") : TEXT("false"),
+							  OwnerCharacter->bIsCrouched ? TEXT("true") : TEXT("false")),
 			FColor::Silver,
 			true);
 	}
+
 	RefreshSenseState();
 }
 
 void UPangeaHunterSenseComponent::ResolveOwnerState()
 {
-	AACFCharacter* OwnerCharacter = Cast<AACFCharacter>(GetOwner());
+	AACFCharacter* const OwnerCharacter = Cast<AACFCharacter>(GetOwner());
 	CachedOwnerCharacter = OwnerCharacter;
 
-	if (!OwnerCharacter)
+	if (OwnerCharacter == nullptr)
 	{
 		SetComponentTickEnabled(false);
 		return;
 	}
 
-	UACFCharacterMovementComponent* MovementComponent = OwnerCharacter->GetACFCharacterMovementComponent();
+	UACFCharacterMovementComponent* const MovementComponent = OwnerCharacter->GetACFCharacterMovementComponent();
 	CachedMovementComponent = MovementComponent;
 
-	if (MovementComponent)
+	if (MovementComponent != nullptr)
 	{
 		MovementComponent->OnAimChanged.AddDynamic(this, &UPangeaHunterSenseComponent::HandleAimChanged);
 		bIsAiming = MovementComponent->GetIsAiming();
@@ -194,9 +202,11 @@ void UPangeaHunterSenseComponent::ResolveOwnerState()
 	OwnerCharacter->OnCrouchStateChanged.AddDynamic(this, &UPangeaHunterSenseComponent::HandleCrouchChanged);
 	bIsCrouched = OwnerCharacter->bIsCrouched;
 	PrintDebugMessage(FString::Printf(TEXT("Resolved owner state. Aim=%s Crouch=%s Local=%s"),
-		bIsAiming ? TEXT("true") : TEXT("false"),
-		bIsCrouched ? TEXT("true") : TEXT("false"),
-		IsLocallyControlledHunter() ? TEXT("true") : TEXT("false")), FColor::Silver, true);
+						  bIsAiming ? TEXT("true") : TEXT("false"),
+						  bIsCrouched ? TEXT("true") : TEXT("false"),
+						  IsLocallyControlledHunter() ? TEXT("true") : TEXT("false")),
+		FColor::Silver,
+		true);
 }
 
 void UPangeaHunterSenseComponent::RefreshSenseState()
@@ -207,11 +217,10 @@ void UPangeaHunterSenseComponent::RefreshSenseState()
 
 	if (bWasActive != bHuntingSenseActive)
 	{
-		PrintDebugMessage(
-			FString::Printf(TEXT("Hunt mode %s (Aim=%s Crouch=%s)"),
-				bHuntingSenseActive ? TEXT("ENTER") : TEXT("EXIT"),
-				bIsAiming ? TEXT("true") : TEXT("false"),
-				bIsCrouched ? TEXT("true") : TEXT("false")),
+		PrintDebugMessage(FString::Printf(TEXT("Hunt mode %s (Aim=%s Crouch=%s)"),
+							  bHuntingSenseActive ? TEXT("ENTER") : TEXT("EXIT"),
+							  bIsAiming ? TEXT("true") : TEXT("false"),
+							  bIsCrouched ? TEXT("true") : TEXT("false")),
 			bHuntingSenseActive ? FColor::Green : FColor::Red,
 			true);
 	}
@@ -225,6 +234,7 @@ void UPangeaHunterSenseComponent::RefreshSenseState()
 				ClueIterator->SetRevealState(false, 0.f);
 			}
 		}
+
 		ResetVisualAssignments();
 		ReleaseUnusedVisuals();
 		ResetFootprintFocus();
@@ -233,9 +243,9 @@ void UPangeaHunterSenseComponent::RefreshSenseState()
 
 void UPangeaHunterSenseComponent::DrawNearbyTracks()
 {
-	UWorld* World = GetWorld();
-	AActor* Owner = GetOwner();
-	if (!World || !Owner)
+	UWorld* const World = GetWorld();
+	AActor* const Owner = GetOwner();
+	if (World == nullptr || Owner == nullptr)
 	{
 		return;
 	}
@@ -246,15 +256,16 @@ void UPangeaHunterSenseComponent::DrawNearbyTracks()
 
 	for (TActorIterator<AActor> ActorIterator(World); ActorIterator; ++ActorIterator)
 	{
-		UPangeaTrackEmitterComponent* TrackEmitter = ActorIterator->FindComponentByClass<UPangeaTrackEmitterComponent>();
-		if (!TrackEmitter)
+		UPangeaTrackEmitterComponent* const TrackEmitter = ActorIterator->FindComponentByClass<UPangeaTrackEmitterComponent>();
+		if (TrackEmitter == nullptr)
 		{
 			continue;
 		}
 
-		const UHuntSpeciesConfig* HuntConfig = TrackEmitter->GetHuntSpeciesConfig();
+		const UHuntSpeciesConfig* const HuntConfig = TrackEmitter->GetHuntSpeciesConfig();
 		const float RevealRadius = GetModifiedRevealRadius(TrackEmitter->GetRevealRadius());
 		const float RevealRadiusSq = FMath::Square(RevealRadius);
+
 		for (const FHuntTrackPoint& TrackPoint : TrackEmitter->GetTrackPoints())
 		{
 			const float DistanceSq = FVector::DistSquared(HunterLocation, TrackPoint.Location);
@@ -271,7 +282,8 @@ void UPangeaHunterSenseComponent::DrawNearbyTracks()
 
 			float FreshnessAlpha = TrackPoint.Lifetime > 0.f ? 1.f - (AgeSeconds / TrackPoint.Lifetime) : 1.f;
 			FreshnessAlpha = FMath::Clamp(FreshnessAlpha, 0.f, 1.f);
-			if (HuntConfig && HuntConfig->FreshnessVisibilityCurve)
+
+			if (HuntConfig != nullptr && HuntConfig->FreshnessVisibilityCurve != nullptr)
 			{
 				FreshnessAlpha = HuntConfig->FreshnessVisibilityCurve->GetFloatValue(FreshnessAlpha);
 			}
@@ -294,9 +306,9 @@ void UPangeaHunterSenseComponent::DrawNearbyTracks()
 
 void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 {
-	UWorld* World = GetWorld();
-	AActor* Owner = GetOwner();
-	if (!World || !Owner)
+	UWorld* const World = GetWorld();
+	AActor* const Owner = GetOwner();
+	if (World == nullptr || Owner == nullptr)
 	{
 		return;
 	}
@@ -312,20 +324,24 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 	{
 		for (TActorIterator<AActor> ActorIterator(World); ActorIterator; ++ActorIterator)
 		{
-			AActor* SourceActor = *ActorIterator;
-			UPangeaTrackEmitterComponent* TrackEmitter = SourceActor ? SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() : nullptr;
-			if (!TrackEmitter)
+			AActor* const SourceActor = *ActorIterator;
+			UPangeaTrackEmitterComponent* const TrackEmitter =
+				SourceActor != nullptr ? SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() : nullptr;
+			if (TrackEmitter == nullptr)
 			{
 				continue;
 			}
 
-			const UHuntSpeciesConfig* HuntConfig = TrackEmitter->GetHuntSpeciesConfig();
+			const UHuntSpeciesConfig* const HuntConfig = TrackEmitter->GetHuntSpeciesConfig();
 			const float RevealRadius = GetModifiedRevealRadius(TrackEmitter->GetRevealRadius());
 			const float RevealRadiusSq = FMath::Square(RevealRadius);
-			const float VisualScale = HuntConfig && HuntConfig->FootprintVisualScale > 0.f ? HuntConfig->FootprintVisualScale : 0.35f;
-			UStaticMesh* VisualMesh = HuntConfig && HuntConfig->FootprintStaticMesh ? HuntConfig->FootprintStaticMesh.Get() : ResolveFallbackMesh();
-			UMaterialInterface* VisualMaterial = HuntConfig && HuntConfig->FootprintStaticMeshMaterial ? HuntConfig->FootprintStaticMeshMaterial.Get() : ResolveFallbackMaterial();
-			if (!VisualMesh)
+			const float VisualScale = HuntConfig != nullptr && HuntConfig->FootprintVisualScale > 0.f ? HuntConfig->FootprintVisualScale : 0.35f;
+			UStaticMesh* const VisualMesh =
+				HuntConfig != nullptr && HuntConfig->FootprintStaticMesh != nullptr ? HuntConfig->FootprintStaticMesh.Get() : ResolveFallbackMesh();
+			UMaterialInterface* const VisualMaterial = HuntConfig != nullptr && HuntConfig->FootprintStaticMeshMaterial != nullptr
+				? HuntConfig->FootprintStaticMeshMaterial.Get()
+				: ResolveFallbackMaterial();
+			if (VisualMesh == nullptr)
 			{
 				continue;
 			}
@@ -352,13 +368,15 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 
 				float FreshnessAlpha = TrackPoint.Lifetime > 0.f ? 1.f - (AgeSeconds / TrackPoint.Lifetime) : 1.f;
 				FreshnessAlpha = FMath::Clamp(FreshnessAlpha, 0.15f, 1.f);
-				if (HuntConfig && HuntConfig->FreshnessVisibilityCurve)
+
+				if (HuntConfig != nullptr && HuntConfig->FreshnessVisibilityCurve != nullptr)
 				{
 					FreshnessAlpha = HuntConfig->FreshnessVisibilityCurve->GetFloatValue(FreshnessAlpha);
 				}
 
 				float ProximityAlpha = 1.f;
-				if (SourceActor)
+
+				if (SourceActor != nullptr)
 				{
 					const float DistanceToDino = FVector::Dist(SourceActor->GetActorLocation(), TrackPoint.Location);
 					const float MaxDistance = FMath::Max(1.f, RevealRadius);
@@ -368,13 +386,14 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 
 				const float FinalVisibility = FMath::Clamp(FreshnessAlpha * FMath::Lerp(0.35f, 1.0f, ProximityAlpha), 0.08f, 1.f);
 
-				UStaticMeshComponent* VisualComponent = AcquireVisualSlot(BuildTrackKey(SourceActor, TrackPoint));
-				if (!VisualComponent)
+				UStaticMeshComponent* const VisualComponent = AcquireVisualSlot(BuildTrackKey(SourceActor, TrackPoint));
+				if (VisualComponent == nullptr)
 				{
 					continue;
 				}
 
 				FPangeaHuntVisualSlot* VisualSlot = nullptr;
+
 				for (FPangeaHuntVisualSlot& Slot : VisualPool)
 				{
 					if (Slot.VisualComponent == VisualComponent)
@@ -384,7 +403,7 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 					}
 				}
 
-				if (!VisualSlot)
+				if (VisualSlot == nullptr)
 				{
 					continue;
 				}
@@ -393,19 +412,18 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 				VisualSlot->ClueType = TrackPoint.ClueType;
 
 				VisualComponent->SetStaticMesh(VisualMesh);
-				if (VisualMaterial)
+
+				if (VisualMaterial != nullptr)
 				{
-					if (!VisualSlot->MaterialInstance || VisualSlot->MaterialInstance->Parent != VisualMaterial)
+					if (VisualSlot->MaterialInstance == nullptr || VisualSlot->MaterialInstance->Parent != VisualMaterial)
 					{
 						VisualSlot->MaterialInstance = UMaterialInstanceDynamic::Create(VisualMaterial, this);
 					}
 
-					if (VisualSlot->MaterialInstance)
+					if (VisualSlot->MaterialInstance != nullptr)
 					{
 						const FLinearColor TrackTint = UKismetMathLibrary::LinearColorLerp(
-							FLinearColor(0.14f, 0.95f, 0.45f, 1.f),
-							FLinearColor(0.05f, 0.35f, 1.0f, 1.f),
-							1.f - FinalVisibility);
+							FLinearColor(0.14f, 0.95f, 0.45f, 1.f), FLinearColor(0.05f, 0.35f, 1.0f, 1.f), 1.f - FinalVisibility);
 						VisualSlot->MaterialInstance->SetScalarParameterValue(TEXT("Opacity"), FinalVisibility);
 						VisualSlot->MaterialInstance->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Lerp(1.5f, 8.0f, FinalVisibility));
 						VisualSlot->MaterialInstance->SetVectorParameterValue(TEXT("Tint"), TrackTint);
@@ -429,8 +447,8 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 
 	for (TActorIterator<APangeaHuntClueActor> ClueIterator(World); ClueIterator; ++ClueIterator)
 	{
-		APangeaHuntClueActor* ClueActor = *ClueIterator;
-		if (!ClueActor)
+		APangeaHuntClueActor* const ClueActor = *ClueIterator;
+		if (ClueActor == nullptr)
 		{
 			continue;
 		}
@@ -461,18 +479,24 @@ void UPangeaHunterSenseComponent::UpdateTrackVisuals()
 
 void UPangeaHunterSenseComponent::UpdateFootprintFocus(const float DeltaTime)
 {
-	const UHuntSpeciesConfig* FocusConfig = FocusedFootprintSourceActor.IsValid()
-		? (FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr)
-		: nullptr;
-	const bool bEnableFocusIdentification = FocusConfig ? FocusConfig->bEnableFootprintFocusIdentification : bEnableFootprintFocusIdentification;
+	const UHuntSpeciesConfig* FocusConfig = nullptr;
+
+	if (FocusedFootprintSourceActor.IsValid())
+	{
+		FocusConfig = FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() != nullptr
+			? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig()
+			: nullptr;
+	}
+
+	const bool bEnableFocusIdentification = FocusConfig != nullptr ? FocusConfig->bEnableFootprintFocusIdentification : bEnableFootprintFocusIdentification;
 	if (!bEnableFocusIdentification || !bUsePlaceholderMeshVisuals)
 	{
 		ResetFootprintFocus();
 		return;
 	}
 
-	AActor* FocusTarget = FindFocusedFootprintSource();
-	if (!FocusTarget)
+	AActor* const FocusTarget = FindFocusedFootprintSource();
+	if (FocusTarget == nullptr)
 	{
 		ResetFootprintFocus();
 		return;
@@ -481,20 +505,22 @@ void UPangeaHunterSenseComponent::UpdateFootprintFocus(const float DeltaTime)
 	if (FocusedFootprintSourceActor.Get() != FocusTarget)
 	{
 		FocusedFootprintSourceActor = FocusTarget;
-		FocusConfig = FocusTarget->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusTarget->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr;
+		FocusConfig = FocusTarget->FindComponentByClass<UPangeaTrackEmitterComponent>() != nullptr
+			? FocusTarget->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig()
+			: nullptr;
 		FootprintFocusProgress = 0.f;
 		bFocusedFootprintAlreadyIdentified = false;
 		OnFootprintFocusChanged.Broadcast(true, FootprintFocusProgress, FocusTarget);
 		UpdateFootprintFocusWidget(true, FootprintFocusProgress);
 	}
 
-	const float FocusDuration = FocusConfig ? FocusConfig->FootprintFocusDuration : FootprintFocusDuration;
+	const float FocusDuration = FocusConfig != nullptr ? FocusConfig->FootprintFocusDuration : FootprintFocusDuration;
 	FootprintFocusProgress = FMath::Clamp(FootprintFocusProgress + (DeltaTime / FMath::Max(0.05f, FocusDuration)), 0.f, 1.f);
 
 	OnFootprintFocusChanged.Broadcast(true, FootprintFocusProgress, FocusTarget);
 	UpdateFootprintFocusWidget(true, FootprintFocusProgress);
 
-	const bool bAutoIdentify = FocusConfig ? FocusConfig->bAutoIdentifyFocusedFootprints : bAutoIdentifyFocusedFootprints;
+	const bool bAutoIdentify = FocusConfig != nullptr ? FocusConfig->bAutoIdentifyFocusedFootprints : bAutoIdentifyFocusedFootprints;
 	if (bAutoIdentify && !bFocusedFootprintAlreadyIdentified && FootprintFocusProgress >= 1.f)
 	{
 		bFocusedFootprintAlreadyIdentified = true;
@@ -512,9 +538,9 @@ void UPangeaHunterSenseComponent::UpdateFootprintFocus(const float DeltaTime)
 
 AActor* UPangeaHunterSenseComponent::FindFocusedFootprintSource() const
 {
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	APlayerController* PlayerController = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
-	if (!PlayerController)
+	const APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* const PlayerController = OwnerPawn != nullptr ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (PlayerController == nullptr)
 	{
 		return nullptr;
 	}
@@ -522,6 +548,7 @@ AActor* UPangeaHunterSenseComponent::FindFocusedFootprintSource() const
 	int32 ViewportX = 0;
 	int32 ViewportY = 0;
 	PlayerController->GetViewportSize(ViewportX, ViewportY);
+
 	if (ViewportX <= 0 || ViewportY <= 0)
 	{
 		return nullptr;
@@ -533,19 +560,19 @@ AActor* UPangeaHunterSenseComponent::FindFocusedFootprintSource() const
 
 	for (const FPangeaHuntVisualSlot& Slot : VisualPool)
 	{
-		if (Slot.ClueType != EHuntClueType::Footprint || !Slot.SourceActor.IsValid() || !Slot.VisualComponent)
+		if (Slot.ClueType != EHuntClueType::Footprint || !Slot.SourceActor.IsValid() || Slot.VisualComponent == nullptr)
 		{
 			continue;
 		}
 
-		const UPangeaTrackEmitterComponent* TrackEmitter = Slot.SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>();
-		if (TrackEmitter && TrackEmitter->IsClueTypeIdentified(EHuntClueType::Footprint))
+		const UPangeaTrackEmitterComponent* const TrackEmitter = Slot.SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>();
+		if (TrackEmitter != nullptr && TrackEmitter->IsClueTypeIdentified(EHuntClueType::Footprint))
 		{
 			continue;
 		}
 
-		const UHuntSpeciesConfig* HuntConfig = TrackEmitter ? TrackEmitter->GetHuntSpeciesConfig() : nullptr;
-		const float FocusRadius = HuntConfig ? HuntConfig->FootprintFocusScreenRadius : FootprintFocusScreenRadius;
+		const UHuntSpeciesConfig* const HuntConfig = TrackEmitter != nullptr ? TrackEmitter->GetHuntSpeciesConfig() : nullptr;
+		const float FocusRadius = HuntConfig != nullptr ? HuntConfig->FootprintFocusScreenRadius : FootprintFocusScreenRadius;
 		const float FocusRadiusSq = FMath::Square(FocusRadius);
 
 		if (Slot.VisualComponent->bHiddenInGame)
@@ -554,6 +581,7 @@ AActor* UPangeaHunterSenseComponent::FindFocusedFootprintSource() const
 		}
 
 		FVector2D ScreenPosition;
+
 		if (!PlayerController->ProjectWorldLocationToScreen(Slot.VisualComponent->GetComponentLocation(), ScreenPosition, true))
 		{
 			continue;
@@ -586,18 +614,24 @@ void UPangeaHunterSenseComponent::ResetFootprintFocus()
 
 void UPangeaHunterSenseComponent::EnsureFootprintFocusWidget()
 {
-	const UHuntSpeciesConfig* FocusConfig = FocusedFootprintSourceActor.IsValid()
-		? (FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr)
-		: nullptr;
-	const bool bShouldShowFocusWidget = FocusConfig ? FocusConfig->bShowFootprintFocusWidget : bShowFootprintFocusWidget;
-	if (!bShouldShowFocusWidget || FootprintFocusWidget || !IsLocallyControlledHunter())
+	const UHuntSpeciesConfig* FocusConfig = nullptr;
+
+	if (FocusedFootprintSourceActor.IsValid())
+	{
+		FocusConfig = FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() != nullptr
+			? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig()
+			: nullptr;
+	}
+
+	const bool bShouldShowFocusWidget = FocusConfig != nullptr ? FocusConfig->bShowFootprintFocusWidget : bShowFootprintFocusWidget;
+	if (!bShouldShowFocusWidget || FootprintFocusWidget != nullptr || !IsLocallyControlledHunter())
 	{
 		return;
 	}
 
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	APlayerController* PlayerController = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
-	if (!PlayerController)
+	const APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* const PlayerController = OwnerPawn != nullptr ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (PlayerController == nullptr)
 	{
 		return;
 	}
@@ -608,63 +642,98 @@ void UPangeaHunterSenseComponent::EnsureFootprintFocusWidget()
 		WidgetClass = UPangeaFootprintFocusWidget::StaticClass();
 	}
 
-    // The focus indicator is HUD content, never an independent viewport widget.
-    TArray<UUserWidget*> Widgets;
-    UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, Widgets, UUserWidget::StaticClass(), false);
-    for (UUserWidget* HUDWidget : Widgets)
-    {
-        if (!HUDWidget || HUDWidget->GetOwningPlayer() != PlayerController) continue;
-        UCanvasPanel* Layer = Cast<UCanvasPanel>(HUDWidget->GetWidgetFromName(TEXT("PangeaGameplayOverlay")));
-        if (!Layer) continue;
-        FootprintFocusWidget = CreateWidget<UPangeaFootprintFocusWidget>(PlayerController, WidgetClass);
-        if (!FootprintFocusWidget) return;
-        UCanvasPanelSlot* Slot = Layer->AddChildToCanvas(FootprintFocusWidget);
-        Slot->SetAnchors(FAnchors(0.5f, 0.5f));
-        Slot->SetAlignment(FVector2D(0.5f, 0.5f));
-        Slot->SetAutoSize(false);
-        Slot->SetSize(FocusConfig ? FocusConfig->FootprintFocusWidgetSize : FootprintFocusWidgetSize);
-        FootprintFocusWidget->SetRingCenter(FVector2D::ZeroVector);
-        FootprintFocusWidget->SetFocusState(false, 0.f);
-        return;
-    }
-    // HUD may not have constructed yet. A later focus update retries safely.
+	// The focus indicator is HUD content, never an independent viewport widget.
+	TArray<UUserWidget*> Widgets;
+	UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, Widgets, UUserWidget::StaticClass(), false);
+
+	for (UUserWidget* HUDWidget : Widgets)
+	{
+		if (HUDWidget == nullptr || HUDWidget->GetOwningPlayer() != PlayerController)
+		{
+			continue;
+		}
+
+		UCanvasPanel* const Layer = Cast<UCanvasPanel>(HUDWidget->GetWidgetFromName(TEXT("PangeaGameplayOverlay")));
+		if (Layer == nullptr)
+		{
+			continue;
+		}
+
+		FootprintFocusWidget = CreateWidget<UPangeaFootprintFocusWidget>(PlayerController, WidgetClass);
+		if (FootprintFocusWidget == nullptr)
+		{
+			return;
+		}
+
+		UCanvasPanelSlot* const Slot = Layer->AddChildToCanvas(FootprintFocusWidget);
+		Slot->SetAnchors(FAnchors(0.5f, 0.5f));
+		Slot->SetAlignment(FVector2D(0.5f, 0.5f));
+		Slot->SetAutoSize(false);
+		Slot->SetSize(FocusConfig != nullptr ? FocusConfig->FootprintFocusWidgetSize : FootprintFocusWidgetSize);
+		FootprintFocusWidget->SetRingCenter(FVector2D::ZeroVector);
+		FootprintFocusWidget->SetFocusState(false, 0.f);
+
+		return;
+	}
+
+	// HUD may not have constructed yet. A later focus update retries safely.
 }
+
 void UPangeaHunterSenseComponent::UpdateFootprintFocusWidget(const bool bHasTarget, const float Progress)
 {
-    EnsureFootprintFocusWidget();
-    if (!FootprintFocusWidget) return;
-    const UHuntSpeciesConfig* Config = FocusedFootprintSourceActor.IsValid() && FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()
-        ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr;
-    if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(FootprintFocusWidget->Slot))
-    {
-        const float Scale = FMath::Max(0.01f, UWidgetLayoutLibrary::GetViewportScale(this));
-        Slot->SetPosition((Config ? Config->FootprintFocusWidgetScreenOffset : FootprintFocusWidgetScreenOffset) / Scale);
-        const FVector2D Size = Config ? Config->FootprintFocusWidgetSize : FootprintFocusWidgetSize;
-        Slot->SetSize(FVector2D(FMath::Max(1.f, Size.X), FMath::Max(1.f, Size.Y)));
-    }
-    const bool bShow = Config ? Config->bShowFootprintFocusWidget : bShowFootprintFocusWidget;
-    FootprintFocusWidget->SetFocusState(bShow && bHasTarget && IsLocallyControlledHunter(), Progress);
-}
-void UPangeaHunterSenseComponent::ShowTracksIdentifiedMessage()
-{
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	APlayerController* PlayerController = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
-	if (!PlayerController)
+	EnsureFootprintFocusWidget();
+
+	if (FootprintFocusWidget == nullptr)
 	{
 		return;
 	}
 
-	const UHuntSpeciesConfig* FocusConfig = FocusedFootprintSourceActor.IsValid()
-		? (FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() ? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig() : nullptr)
+	const UHuntSpeciesConfig* const Config =
+		FocusedFootprintSourceActor.IsValid() && FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() != nullptr
+		? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig()
 		: nullptr;
-    const FText Message = FocusConfig ? FocusConfig->TracksIdentifiedMessage : TracksIdentifiedMessage;
-    const float Duration = FocusConfig ? FocusConfig->TracksIdentifiedMessageDuration : TracksIdentifiedMessageDuration;
-    if (!Message.IsEmpty())
-    {
-        if (UANSUIPlayerSubsystem* UI = PlayerController->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>())
-            UI->BroadcastNotification(Message, FMath::Max(0.1f, Duration));
-    }
+	if (UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(FootprintFocusWidget->Slot))
+	{
+		const float Scale = FMath::Max(0.01f, UWidgetLayoutLibrary::GetViewportScale(this));
+		Slot->SetPosition((Config != nullptr ? Config->FootprintFocusWidgetScreenOffset : FootprintFocusWidgetScreenOffset) / Scale);
+		const FVector2D Size = Config != nullptr ? Config->FootprintFocusWidgetSize : FootprintFocusWidgetSize;
+		Slot->SetSize(FVector2D(FMath::Max(1.f, Size.X), FMath::Max(1.f, Size.Y)));
+	}
+
+	const bool bShow = Config != nullptr ? Config->bShowFootprintFocusWidget : bShowFootprintFocusWidget;
+	FootprintFocusWidget->SetFocusState(bShow && bHasTarget && IsLocallyControlledHunter(), Progress);
 }
+
+void UPangeaHunterSenseComponent::ShowTracksIdentifiedMessage()
+{
+	const APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* const PlayerController = OwnerPawn != nullptr ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (PlayerController == nullptr)
+	{
+		return;
+	}
+
+	const UHuntSpeciesConfig* FocusConfig = nullptr;
+
+	if (FocusedFootprintSourceActor.IsValid())
+	{
+		FocusConfig = FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() != nullptr
+			? FocusedFootprintSourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>()->GetHuntSpeciesConfig()
+			: nullptr;
+	}
+
+	const FText Message = FocusConfig != nullptr ? FocusConfig->TracksIdentifiedMessage : TracksIdentifiedMessage;
+	const float Duration = FocusConfig != nullptr ? FocusConfig->TracksIdentifiedMessageDuration : TracksIdentifiedMessageDuration;
+
+	if (!Message.IsEmpty())
+	{
+		if (UANSUIPlayerSubsystem* UI = PlayerController->GetGameInstance()->GetSubsystem<UANSUIPlayerSubsystem>())
+		{
+			UI->BroadcastNotification(Message, FMath::Max(0.1f, Duration));
+		}
+	}
+}
+
 void UPangeaHunterSenseComponent::ResetVisualAssignments()
 {
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)
@@ -677,7 +746,7 @@ UStaticMeshComponent* UPangeaHunterSenseComponent::AcquireVisualSlot(const FName
 {
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)
 	{
-		if (Slot.TrackKey == TrackKey && Slot.VisualComponent)
+		if (Slot.TrackKey == TrackKey && Slot.VisualComponent != nullptr)
 		{
 			Slot.bAssignedThisUpdate = true;
 			return Slot.VisualComponent;
@@ -686,12 +755,13 @@ UStaticMeshComponent* UPangeaHunterSenseComponent::AcquireVisualSlot(const FName
 
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)
 	{
-		if (Slot.VisualComponent && !Slot.bAssignedThisUpdate)
+		if (Slot.VisualComponent != nullptr && !Slot.bAssignedThisUpdate)
 		{
 			Slot.TrackKey = TrackKey;
 			Slot.SourceActor.Reset();
 			Slot.ClueType = EHuntClueType::Custom;
 			Slot.bAssignedThisUpdate = true;
+
 			return Slot.VisualComponent;
 		}
 	}
@@ -701,14 +771,14 @@ UStaticMeshComponent* UPangeaHunterSenseComponent::AcquireVisualSlot(const FName
 		return nullptr;
 	}
 
-	AActor* Owner = GetOwner();
-	if (!Owner)
+	AActor* const Owner = GetOwner();
+	if (Owner == nullptr)
 	{
 		return nullptr;
 	}
 
-	UStaticMeshComponent* VisualComponent = NewObject<UStaticMeshComponent>(Owner);
-	if (!VisualComponent)
+	UStaticMeshComponent* const VisualComponent = NewObject<UStaticMeshComponent>(Owner);
+	if (VisualComponent == nullptr)
 	{
 		return nullptr;
 	}
@@ -735,7 +805,7 @@ void UPangeaHunterSenseComponent::ReleaseUnusedVisuals()
 {
 	for (FPangeaHuntVisualSlot& Slot : VisualPool)
 	{
-		if (Slot.VisualComponent && !Slot.bAssignedThisUpdate)
+		if (Slot.VisualComponent != nullptr && !Slot.bAssignedThisUpdate)
 		{
 			Slot.TrackKey = NAME_None;
 			Slot.SourceActor.Reset();
@@ -747,8 +817,7 @@ void UPangeaHunterSenseComponent::ReleaseUnusedVisuals()
 
 FName UPangeaHunterSenseComponent::BuildTrackKey(const AActor* SourceActor, const FHuntTrackPoint& TrackPoint) const
 {
-	const FString Key = FString::Printf(
-		TEXT("%s_%.0f_%.0f_%.0f_%.2f"),
+	const FString Key = FString::Printf(TEXT("%s_%.0f_%.0f_%.0f_%.2f"),
 		*GetNameSafe(SourceActor),
 		TrackPoint.Location.X,
 		TrackPoint.Location.Y,
@@ -774,8 +843,8 @@ UMaterialInterface* UPangeaHunterSenseComponent::ResolveFallbackMaterial() const
 
 bool UPangeaHunterSenseComponent::IsLocallyControlledHunter() const
 {
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	return OwnerPawn && OwnerPawn->IsLocallyControlled();
+	const APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+	return OwnerPawn != nullptr && OwnerPawn->IsLocallyControlled();
 }
 
 float UPangeaHunterSenseComponent::GetModifiedRevealRadius(const float BaseRevealRadius) const
@@ -784,9 +853,9 @@ float UPangeaHunterSenseComponent::GetModifiedRevealRadius(const float BaseRevea
 
 	if (bUseStatModifiedRevealRadius && RevealRadiusStatTag.IsValid())
 	{
-		const AActor* Owner = GetOwner();
-		const UACFGASStatisticsComponent* StatisticsComponent = Owner ? Owner->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
-		if (StatisticsComponent)
+		const AActor* const Owner = GetOwner();
+		const UACFGASStatisticsComponent* const StatisticsComponent = Owner != nullptr ? Owner->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
+		if (StatisticsComponent != nullptr)
 		{
 			BonusRadius += StatisticsComponent->GetCurrentValueForStatitstic(RevealRadiusStatTag) * RevealRadiusPerStatPoint;
 		}
@@ -798,15 +867,16 @@ float UPangeaHunterSenseComponent::GetModifiedRevealRadius(const float BaseRevea
 
 void UPangeaHunterSenseComponent::ServerIdentifyFootprints_Implementation(AActor* SourceActor)
 {
-	AActor* Owner = GetOwner();
-	UPangeaTrackEmitterComponent* TrackEmitter = SourceActor ? SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() : nullptr;
-	if (!Owner || !TrackEmitter)
+	AActor* const Owner = GetOwner();
+	UPangeaTrackEmitterComponent* const TrackEmitter = SourceActor != nullptr ? SourceActor->FindComponentByClass<UPangeaTrackEmitterComponent>() : nullptr;
+	if (Owner == nullptr || TrackEmitter == nullptr)
 	{
 		return;
 	}
 
 	const float RevealRadius = GetModifiedRevealRadius(TrackEmitter->GetRevealRadius());
 	const float RevealRadiusSq = FMath::Square(RevealRadius);
+
 	for (const FHuntTrackPoint& TrackPoint : TrackEmitter->GetTrackPoints())
 	{
 		if (TrackEmitter->IsClueTypeIdentified(EHuntClueType::Footprint))

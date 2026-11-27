@@ -6,24 +6,29 @@
 #include "Blueprint/UserWidget.h"
 #include "RequirementEntryWidget.generated.h"
 
-class UUpgradeRequirement;
 class UTextBlock;
+class UUpgradeRequirement;
 
+/** One row of the upgrade menu's requirement list. Shows a requirement and whether the player meets it. */
 UCLASS()
 class PANGEABASEUPGRADESYSTEM_API URequirementEntryWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintReadOnly, Category="Requirement")
+	/** Requirement this row stands for. */
+	UPROPERTY(BlueprintReadOnly, Category = "Requirement")
 	TObjectPtr<UUpgradeRequirement> Requirement;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* RequirementText;
+	/** Optional bound text block that shows the requirement description. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RequirementText;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* StatusText;
+	/** Optional bound text block that shows Met or Not Met. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> StatusText;
 
-	UFUNCTION(BlueprintCallable, Category="Requirement")
+	/** Stores the requirement and fills the bound text blocks. bMet selects the status text. */
+	UFUNCTION(BlueprintCallable, Category = "Requirement")
 	void InitFromRequirement(UUpgradeRequirement* InRequirement, bool bMet);
 };

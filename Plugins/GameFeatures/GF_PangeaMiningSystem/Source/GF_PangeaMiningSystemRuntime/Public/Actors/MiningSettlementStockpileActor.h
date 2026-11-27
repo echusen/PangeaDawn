@@ -1,10 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ALSSavableInterface.h"
+
 #include "GameFramework/Actor.h"
+
+#include "ALSSavableInterface.h"
 #include "Interfaces/ACFInteractableInterface.h"
 #include "Items/ACFItem.h"
+
 #include "MiningSettlementStockpileActor.generated.h"
 
 class UACFInteractionComponent;
@@ -15,6 +18,12 @@ class UStaticMeshComponent;
 class UTextRenderComponent;
 class UUserWidget;
 
+/**
+ * Settlement-side storage for mined goods. It owns the storage component that
+ * holds the settlement stock, gives couriers a location to unload at, and lets
+ * a player open the stockpile screen to move items between the stockpile and
+ * their own inventory.
+ */
 UCLASS(BlueprintType, Blueprintable)
 class GF_PANGEAMININGSYSTEMRUNTIME_API AMiningSettlementStockpileActor : public AActor, public IACFInteractableInterface, public IALSSavableInterface
 {
@@ -29,45 +38,59 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Root component that the other stockpile components attach to. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mining")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Visible mesh of the stockpile. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mining")
 	TObjectPtr<UStaticMeshComponent> StockpileMesh;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Text label that shows the stored item count. It is hidden when play begins. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mining")
 	TObjectPtr<UTextRenderComponent> StockpileLabel;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|UI")
+	/** Widget class for the stockpile menu. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining|UI")
 	TSubclassOf<UUserWidget> StockpileWidgetClass;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Marker whose world location couriers use as their unload point. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mining")
 	TObjectPtr<USceneComponent> CourierUnloadMarker;
 
 public:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Storage that holds the settlement stock. It is the only component of this actor written to the save game. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mining")
 	TObjectPtr<UACFStorageComponent> StorageComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining")
+	/** Items added to the storage on the authority when play begins and the storage is empty. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining")
 	TArray<FBaseItem> InitialStock;
 
-	UFUNCTION(BlueprintCallable, Category="Mining|UI")
+	/** Opens the stockpile screen for the local player that controls InteractingPawn. Closes a screen that is already open first. */
+	UFUNCTION(BlueprintCallable, Category = "Mining|UI")
 	void OpenStockpileMenu(APawn* InteractingPawn);
 
+	/** Drops the reference to the open stockpile widget when Widget is null or is that widget. */
 	void ClearActiveStockpileWidget(UUserWidget* Widget);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Mining|Storage")
+	/** Server RPC: moves every item in the stockpile into the pawn's inventory. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Mining|Storage")
 	void ServerWithdrawAllToPawn(APawn* InteractingPawn);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Mining|Storage")
+	/** Server RPC: moves every item in the pawn's inventory into the stockpile. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Mining|Storage")
 	void ServerDepositAllFromPawn(APawn* InteractingPawn);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Mining|Storage")
-	void ServerTransferItemToPawn(APawn* InteractingPawn, TSubclassOf<class UACFItem> ItemClass, int32 Count);
+	/** Server RPC: moves up to Count items of the first stockpile stack of ItemClass into the pawn's inventory. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Mining|Storage")
+	void ServerTransferItemToPawn(APawn* InteractingPawn, TSubclassOf<UACFItem> ItemClass, int32 Count);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Mining|Storage")
-	void ServerTransferItemFromPawn(APawn* InteractingPawn, TSubclassOf<class UACFItem> ItemClass, int32 Count);
+	/** Server RPC: moves up to Count items of the pawn's first inventory stack of ItemClass into the stockpile. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Mining|Storage")
+	void ServerTransferItemFromPawn(APawn* InteractingPawn, TSubclassOf<UACFItem> ItemClass, int32 Count);
 
+	/** Returns the world location where couriers unload. Falls back to the actor location when the marker is missing. */
 	FVector GetCourierUnloadLocation() const;
 
 	virtual void OnInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType = "") override;
@@ -91,7 +114,12 @@ private:
 	void RegisterWithInteractionComponent(UACFInteractionComponent* InteractionComponent);
 	void UnregisterFromInteractionComponent(UACFInteractionComponent* InteractionComponent);
 	UFUNCTION()
-	void HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+	void HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
 	UFUNCTION()
 	void HandleInteractionEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };

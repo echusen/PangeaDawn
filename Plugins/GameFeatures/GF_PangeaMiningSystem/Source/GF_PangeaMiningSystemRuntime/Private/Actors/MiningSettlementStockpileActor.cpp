@@ -1,17 +1,18 @@
 #include "Actors/MiningSettlementStockpileActor.h"
 
 #include "Blueprint/UserWidget.h"
-#include "Actors/MiningScreenHost.h"
-#include "Components/ACFInteractionComponent.h"
-#include "Components/ACFInventoryComponent.h"
-#include "Components/ACFStorageComponent.h"
-#include "Components/PangeaMiningTransportStorageComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "UObject/ConstructorHelpers.h"
+
+#include "Actors/MiningScreenHost.h"
+#include "Components/ACFInteractionComponent.h"
+#include "Components/ACFInventoryComponent.h"
+#include "Components/ACFStorageComponent.h"
+#include "Components/PangeaMiningTransportStorageComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningStockpile, Log, All);
 
@@ -52,6 +53,7 @@ AMiningSettlementStockpileActor::AMiningSettlementStockpileActor()
 	}
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> ChestAsset(TEXT("/Game/Environment/Oppidam/Decoration/SM_Oppi_Deco_Chest_AD.SM_Oppi_Deco_Chest_AD"));
+
 	if (ChestAsset.Succeeded())
 	{
 		StockpileMesh->SetStaticMesh(ChestAsset.Object);
@@ -62,18 +64,22 @@ AMiningSettlementStockpileActor::AMiningSettlementStockpileActor()
 void AMiningSettlementStockpileActor::BeginPlay()
 {
 	Super::BeginPlay();
-	if (StockpileLabel) StockpileLabel->SetVisibility(false);
+
+	if (StockpileLabel != nullptr)
+	{
+		StockpileLabel->SetVisibility(false);
+	}
 
 	InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleInteractionBegin);
 	InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HandleInteractionEnd);
 	RefreshLocalInteractionRegistration();
 
-	if (StorageComponent)
+	if (StorageComponent != nullptr)
 	{
 		StorageComponent->OnInventoryChanged.AddDynamic(this, &ThisClass::UpdateStatusText);
 	}
 
-	if (!HasAuthority() || !StorageComponent || !StorageComponent->GetInventory().IsEmpty())
+	if (!HasAuthority() || StorageComponent == nullptr || !StorageComponent->GetInventory().IsEmpty())
 	{
 		UpdateStatusText();
 		return;
@@ -94,6 +100,7 @@ void AMiningSettlementStockpileActor::BeginPlay()
 void AMiningSettlementStockpileActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	MiningScreenHost::Close(ActiveStockpileWidget.Get());
+
 	for (const TWeakObjectPtr<UACFInteractionComponent>& InteractionComponent : RegisteredInteractionComponents)
 	{
 		if (InteractionComponent.IsValid())
@@ -110,7 +117,7 @@ TArray<UActorComponent*> AMiningSettlementStockpileActor::GetComponentsToSave_Im
 {
 	TArray<UActorComponent*> ComponentsToSave;
 
-	if (StorageComponent)
+	if (StorageComponent != nullptr)
 	{
 		ComponentsToSave.Add(StorageComponent);
 	}
@@ -126,12 +133,12 @@ void AMiningSettlementStockpileActor::OnLoaded_Implementation()
 
 FVector AMiningSettlementStockpileActor::GetCourierUnloadLocation() const
 {
-	return CourierUnloadMarker ? CourierUnloadMarker->GetComponentLocation() : GetActorLocation();
+	return CourierUnloadMarker != nullptr ? CourierUnloadMarker->GetComponentLocation() : GetActorLocation();
 }
 
 void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 {
-	if (!InteractingPawn)
+	if (InteractingPawn == nullptr)
 	{
 		return;
 	}
@@ -140,10 +147,11 @@ void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 	{
 		MiningScreenHost::Close(ActiveStockpileWidget.Get());
 	}
+
 	ActiveStockpileWidget = nullptr;
 
-	APlayerController* PlayerController = Cast<APlayerController>(InteractingPawn->GetController());
-	if (!PlayerController || !PlayerController->IsLocalController() || !PlayerController->GetLocalPlayer())
+	APlayerController* const PlayerController = Cast<APlayerController>(InteractingPawn->GetController());
+	if (PlayerController == nullptr || !PlayerController->IsLocalController() || PlayerController->GetLocalPlayer() == nullptr)
 	{
 		return;
 	}
@@ -165,13 +173,11 @@ void AMiningSettlementStockpileActor::OpenStockpileMenu(APawn* InteractingPawn)
 		FInitializeFromStockpileParams Params{ this, InteractingPawn };
 		ActiveStockpileWidget.Get()->ProcessEvent(InitializeFunction, &Params);
 	}
-
-
 }
 
 void AMiningSettlementStockpileActor::ClearActiveStockpileWidget(UUserWidget* Widget)
 {
-	if (!Widget || ActiveStockpileWidget.Get() == Widget)
+	if (Widget == nullptr || ActiveStockpileWidget.Get() == Widget)
 	{
 		ActiveStockpileWidget = nullptr;
 	}
@@ -179,7 +185,7 @@ void AMiningSettlementStockpileActor::ClearActiveStockpileWidget(UUserWidget* Wi
 
 void AMiningSettlementStockpileActor::ServerWithdrawAllToPawn_Implementation(APawn* InteractingPawn)
 {
-	if (!InteractingPawn || !StorageComponent)
+	if (InteractingPawn == nullptr || StorageComponent == nullptr)
 	{
 		return;
 	}
@@ -193,7 +199,7 @@ void AMiningSettlementStockpileActor::ServerWithdrawAllToPawn_Implementation(APa
 
 void AMiningSettlementStockpileActor::ServerDepositAllFromPawn_Implementation(APawn* InteractingPawn)
 {
-	if (!InteractingPawn || !StorageComponent)
+	if (InteractingPawn == nullptr || StorageComponent == nullptr)
 	{
 		return;
 	}
@@ -207,7 +213,7 @@ void AMiningSettlementStockpileActor::ServerDepositAllFromPawn_Implementation(AP
 
 void AMiningSettlementStockpileActor::ServerTransferItemToPawn_Implementation(APawn* InteractingPawn, TSubclassOf<UACFItem> ItemClass, int32 Count)
 {
-	if (!InteractingPawn || !StorageComponent || !ItemClass || Count <= 0)
+	if (InteractingPawn == nullptr || StorageComponent == nullptr || !ItemClass || Count <= 0)
 	{
 		return;
 	}
@@ -223,9 +229,10 @@ void AMiningSettlementStockpileActor::ServerTransferItemToPawn_Implementation(AP
 
 			FInventoryItem TransferItem = Item;
 			TransferItem.Count = FMath::Min(Item.Count, Count);
-			TArray<FInventoryItem> TransferItems{ TransferItem };
+			const TArray<FInventoryItem> TransferItems{ TransferItem };
 			InventoryComponent->MoveItemsFromInventory(TransferItems, StorageComponent);
 			UpdateStatusText();
+
 			return;
 		}
 	}
@@ -233,7 +240,7 @@ void AMiningSettlementStockpileActor::ServerTransferItemToPawn_Implementation(AP
 
 void AMiningSettlementStockpileActor::ServerTransferItemFromPawn_Implementation(APawn* InteractingPawn, TSubclassOf<UACFItem> ItemClass, int32 Count)
 {
-	if (!InteractingPawn || !StorageComponent || !ItemClass || Count <= 0)
+	if (InteractingPawn == nullptr || StorageComponent == nullptr || !ItemClass || Count <= 0)
 	{
 		return;
 	}
@@ -249,9 +256,10 @@ void AMiningSettlementStockpileActor::ServerTransferItemFromPawn_Implementation(
 
 			FInventoryItem TransferItem = Item;
 			TransferItem.Count = FMath::Min(Item.Count, Count);
-			TArray<FInventoryItem> TransferItems{ TransferItem };
+			const TArray<FInventoryItem> TransferItems{ TransferItem };
 			StorageComponent->MoveItemsFromInventory(TransferItems, InventoryComponent);
 			UpdateStatusText();
+
 			return;
 		}
 	}
@@ -259,31 +267,23 @@ void AMiningSettlementStockpileActor::ServerTransferItemFromPawn_Implementation(
 
 void AMiningSettlementStockpileActor::OnInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
-	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile interacted. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile interacted. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 void AMiningSettlementStockpileActor::OnLocalInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
-	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile locally interacted. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile locally interacted. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 	OpenStockpileMenu(Pawn);
 }
 
 void AMiningSettlementStockpileActor::OnInteractableRegisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile registered. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile registered. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 void AMiningSettlementStockpileActor::OnInteractableUnregisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile unregistered. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningStockpile, Log, TEXT("Settlement stockpile unregistered. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 FText AMiningSettlementStockpileActor::GetInteractableName_Implementation()
@@ -299,12 +299,14 @@ bool AMiningSettlementStockpileActor::CanBeInteracted_Implementation(APawn* Pawn
 void AMiningSettlementStockpileActor::UpdateStatusText()
 {
 	MiningScreenHost::Refresh(ActiveStockpileWidget.Get(), this, TEXT("InitializeFromStockpile"));
-	if (!StockpileLabel || !StorageComponent)
+
+	if (StockpileLabel == nullptr || StorageComponent == nullptr)
 	{
 		return;
 	}
 
 	int32 TotalCount = 0;
+
 	for (const FInventoryItem& Item : StorageComponent->GetInventory())
 	{
 		TotalCount += Item.Count;
@@ -315,13 +317,14 @@ void AMiningSettlementStockpileActor::UpdateStatusText()
 
 void AMiningSettlementStockpileActor::RefreshLocalInteractionRegistration()
 {
-	if (!InteractionSphere)
+	if (InteractionSphere == nullptr)
 	{
 		return;
 	}
 
 	TArray<AActor*> OverlappingActors;
 	InteractionSphere->GetOverlappingActors(OverlappingActors, APawn::StaticClass());
+
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
 		if (APawn* OverlappingPawn = Cast<APawn>(OverlappingActor))
@@ -336,7 +339,7 @@ void AMiningSettlementStockpileActor::RefreshLocalInteractionRegistration()
 
 void AMiningSettlementStockpileActor::RegisterWithInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
@@ -347,19 +350,22 @@ void AMiningSettlementStockpileActor::RegisterWithInteractionComponent(UACFInter
 
 void AMiningSettlementStockpileActor::UnregisterFromInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
 
 	InteractionComponent->UnregisterInteractable(this);
-	RegisteredInteractionComponents.RemoveAll([InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry)
-	{
-		return Entry.Get() == InteractionComponent;
-	});
+	RegisteredInteractionComponents.RemoveAll(
+		[InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry) { return Entry.Get() == InteractionComponent; });
 }
 
-void AMiningSettlementStockpileActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void AMiningSettlementStockpileActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
@@ -367,7 +373,8 @@ void AMiningSettlementStockpileActor::HandleInteractionBegin(UPrimitiveComponent
 	}
 }
 
-void AMiningSettlementStockpileActor::HandleInteractionEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void AMiningSettlementStockpileActor::HandleInteractionEnd(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{

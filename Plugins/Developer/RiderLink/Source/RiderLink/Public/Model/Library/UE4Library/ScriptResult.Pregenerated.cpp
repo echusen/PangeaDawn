@@ -28,9 +28,9 @@ void ScriptResult::initialize()
 {
 }
 // primary ctor
-ScriptResult::ScriptResult(bool success_, FString output_, FString result_, FString error_) :
+ScriptResult::ScriptResult(bool success_, FString output_, FString result_, FString error_, bool aborted_, int32_t elapsedMs_) :
 rd::IPolymorphicSerializable()
-,success_(std::move(success_)), output_(std::move(output_)), result_(std::move(result_)), error_(std::move(error_))
+,success_(std::move(success_)), output_(std::move(output_)), result_(std::move(result_)), error_(std::move(error_)), aborted_(std::move(aborted_)), elapsedMs_(std::move(elapsedMs_))
 {
     initialize();
 }
@@ -43,7 +43,9 @@ ScriptResult ScriptResult::read(rd::SerializationCtx& ctx, rd::Buffer & buffer)
     auto output_ = rd::Polymorphic<FString>::read(ctx, buffer);
     auto result_ = rd::Polymorphic<FString>::read(ctx, buffer);
     auto error_ = rd::Polymorphic<FString>::read(ctx, buffer);
-    ScriptResult res{std::move(success_), std::move(output_), std::move(result_), std::move(error_)};
+    auto aborted_ = buffer.read_bool();
+    auto elapsedMs_ = buffer.read_integral<int32_t>();
+    ScriptResult res{std::move(success_), std::move(output_), std::move(result_), std::move(error_), std::move(aborted_), std::move(elapsedMs_)};
     return res;
 }
 // writer
@@ -53,6 +55,8 @@ void ScriptResult::write(rd::SerializationCtx& ctx, rd::Buffer& buffer) const
     rd::Polymorphic<std::decay_t<decltype(output_)>>::write(ctx, buffer, output_);
     rd::Polymorphic<std::decay_t<decltype(result_)>>::write(ctx, buffer, result_);
     rd::Polymorphic<std::decay_t<decltype(error_)>>::write(ctx, buffer, error_);
+    buffer.write_bool(aborted_);
+    buffer.write_integral(elapsedMs_);
 }
 // virtual init
 // identify
@@ -73,6 +77,14 @@ FString const & ScriptResult::get_error() const
 {
     return error_;
 }
+bool const & ScriptResult::get_aborted() const
+{
+    return aborted_;
+}
+int32_t const & ScriptResult::get_elapsedMs() const
+{
+    return elapsedMs_;
+}
 // intern
 // equals trait
 bool ScriptResult::equals(rd::ISerializable const& object) const
@@ -83,6 +95,8 @@ bool ScriptResult::equals(rd::ISerializable const& object) const
     if (this->output_ != other.output_) return false;
     if (this->result_ != other.result_) return false;
     if (this->error_ != other.error_) return false;
+    if (this->aborted_ != other.aborted_) return false;
+    if (this->elapsedMs_ != other.elapsedMs_) return false;
     
     return true;
 }
@@ -102,6 +116,8 @@ size_t ScriptResult::hashCode() const noexcept
     __r = __r * 31 + (rd::hash<FString>()(get_output()));
     __r = __r * 31 + (rd::hash<FString>()(get_result()));
     __r = __r * 31 + (rd::hash<FString>()(get_error()));
+    __r = __r * 31 + (rd::hash<bool>()(get_aborted()));
+    __r = __r * 31 + (rd::hash<int32_t>()(get_elapsedMs()));
     return __r;
 }
 // type name trait
@@ -129,6 +145,12 @@ std::string ScriptResult::toString() const
     res += '\n';
     res += "\terror = ";
     res += rd::to_string(error_);
+    res += '\n';
+    res += "\taborted = ";
+    res += rd::to_string(aborted_);
+    res += '\n';
+    res += "\telapsedMs = ";
+    res += rd::to_string(elapsedMs_);
     res += '\n';
     return res;
 }

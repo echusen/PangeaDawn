@@ -23,27 +23,58 @@ UMiningRoutineJobComponent::UMiningRoutineJobComponent()
 }
 
 bool UMiningRoutineJobComponent::ConfigureAssignment(UMiningSitePresentationCoordinatorComponent* InCoordinator,
-	APawn* Pawn, EMiningPresentationRole InRole, USmartObjectComponent* InStation,
-	const FVector& InPrimary, const FVector& InSecondary, float InDuration, float InNavigationTimeout, float InRetryDelay)
+	APawn* Pawn,
+	EMiningPresentationRole InRole,
+	USmartObjectComponent* InStation,
+	const FVector& InPrimary,
+	const FVector& InSecondary,
+	float InDuration,
+	float InNavigationTimeout,
+	float InRetryDelay)
 {
-	AACFAIController* Controller = Cast<AACFAIController>(GetOwner());
-	if (!Controller || !Controller->HasAuthority() || !IsValid(Pawn) || !Pawn->IsA<AACFCharacter>() || Controller->GetPawn() != Pawn || !IsValid(InCoordinator)) return false;
-	if (InPrimary.ContainsNaN() || InSecondary.ContainsNaN() || !FMath::IsFinite(InDuration) || !FMath::IsFinite(InNavigationTimeout) || !FMath::IsFinite(InRetryDelay)) return false;
+	AACFAIController* const Controller = Cast<AACFAIController>(GetOwner());
+	if (Controller == nullptr || !Controller->HasAuthority() || !IsValid(Pawn) || !Pawn->IsA<AACFCharacter>() || Controller->GetPawn() != Pawn
+		|| !IsValid(InCoordinator))
+	{
+		return false;
+	}
+
+	if (InPrimary.ContainsNaN() || InSecondary.ContainsNaN() || !FMath::IsFinite(InDuration) || !FMath::IsFinite(InNavigationTimeout)
+		|| !FMath::IsFinite(InRetryDelay))
+	{
+		return false;
+	}
+
 	NavigationTimeoutSeconds = FMath::Max(1.0f, InNavigationTimeout);
 	BlockedRetryDelaySeconds = FMath::Max(0.1f, InRetryDelay);
-	if (RuntimeRoutine)
+
+	if (RuntimeRoutine != nullptr)
 	{
 		// Never restart a duty at the site's movement refresh rate or take over an external routine.
-		if (AssignedPawn != Pawn || Coordinator != InCoordinator || Role != InRole || !Routine.IsValid() || Routine->GetRoutineDataAsset() != RuntimeRoutine) return false;
-		if (Station != InStation || !PrimaryTarget.Equals(InPrimary) || !SecondaryTarget.Equals(InSecondary)) CancelOperation();
+		if (AssignedPawn != Pawn || Coordinator != InCoordinator || Role != InRole || !Routine.IsValid() || Routine->GetRoutineDataAsset() != RuntimeRoutine)
+		{
+			return false;
+		}
+
+		if (Station != InStation || !PrimaryTarget.Equals(InPrimary) || !SecondaryTarget.Equals(InSecondary))
+		{
+			CancelOperation();
+		}
+
 		Station = InStation;
 		PrimaryTarget = InPrimary;
 		SecondaryTarget = InSecondary;
 		InteractionDuration = FMath::Max(0.1f, InDuration);
+
 		return true;
 	}
-	UACFAIRoutineComponent* RoutineComponent = Controller->FindComponentByClass<UACFAIRoutineComponent>();
-	if (!RoutineComponent || !Controller->GetBehaviorTree()) return false;
+
+	UACFAIRoutineComponent* const RoutineComponent = Controller->FindComponentByClass<UACFAIRoutineComponent>();
+	if (RoutineComponent == nullptr || !Controller->GetBehaviorTree())
+	{
+		return false;
+	}
+
 	Coordinator = InCoordinator;
 	AssignedPawn = Pawn;
 	Role = InRole;
@@ -53,6 +84,7 @@ bool UMiningRoutineJobComponent::ConfigureAssignment(UMiningSitePresentationCoor
 	InteractionDuration = FMath::Max(0.1f, InDuration);
 	Routine = RoutineComponent;
 	OriginalRoutine = RoutineComponent->GetRoutineDataAsset();
+
 	// ACF starts the task object stored in the definition. Give every controller its own
 	// definition AND instanced task, rather than sharing mutable UACFTask controller state.
 	RuntimeRoutine = NewObject<UACFAIRoutineDataAsset>(this, NAME_None, RF_Transient);
@@ -65,28 +97,38 @@ bool UMiningRoutineJobComponent::ConfigureAssignment(UMiningSitePresentationCoor
 	Controller->OnAIStateChanged.AddUniqueDynamic(this, &ThisClass::HandleAIStateChanged);
 	Status = EMiningRoutineJobStatus::WaitingForRoutine;
 	GetWorld()->GetTimerManager().SetTimer(UpdateTimer, this, &ThisClass::UpdateJob, 0.1f, true);
+
 	return true;
 }
 
 bool UMiningRoutineJobComponent::CanExecute() const
 {
-	const AACFAIController* Controller = Cast<AACFAIController>(GetOwner());
-	const AACFCharacter* Character = Controller ? Controller->GetBaseAICharacter() : nullptr;
-	return Controller && Controller->HasAuthority() && AssignedPawn.IsValid() && Controller->GetPawn() == AssignedPawn.Get()
-		&& Character && Character->IsAlive() && Coordinator.IsValid() && IsValid(Coordinator->GetOwner())
-		&& Routine.IsValid() && Routine->GetRoutineDataAsset() == RuntimeRoutine && !Controller->IsExecutingCommand()
+	const AACFAIController* const Controller = Cast<AACFAIController>(GetOwner());
+	const AACFCharacter* const Character = Controller != nullptr ? Controller->GetBaseAICharacter() : nullptr;
+
+	return Controller != nullptr && Controller->HasAuthority() && AssignedPawn.IsValid() && Controller->GetPawn() == AssignedPawn.Get() && Character != nullptr
+		&& Character->IsAlive() && Coordinator.IsValid() && IsValid(Coordinator->GetOwner()) && Routine.IsValid()
+		&& Routine->GetRoutineDataAsset() == RuntimeRoutine && !Controller->IsExecutingCommand()
 		&& Controller->GetAIState().MatchesTagExact(FGameplayTag::RequestGameplayTag(TEXT("AIState.Routine")));
 }
 
 void UMiningRoutineJobComponent::BeginRoutineJob(UACFTask* Task)
 {
-	if (!RuntimeRoutine || RuntimeRoutine->DailyTasks.IsEmpty() || RuntimeRoutine->DailyTasks[0].RoutineTask != Task) return;
+	if (RuntimeRoutine == nullptr || RuntimeRoutine->DailyTasks.IsEmpty() || RuntimeRoutine->DailyTasks[0].RoutineTask != Task)
+	{
+		return;
+	}
+
 	RequestedTask = Task;
 }
 
 void UMiningRoutineJobComponent::EndRoutineJob(UACFTask* Task)
 {
-	if (RequestedTask != Task) return;
+	if (RequestedTask != Task)
+	{
+		return;
+	}
+
 	RequestedTask = nullptr;
 	CancelOperation();
 	Status = EMiningRoutineJobStatus::WaitingForRoutine;
@@ -103,23 +145,43 @@ void UMiningRoutineJobComponent::HandleAIStateChanged(FGameplayTag State)
 
 void UMiningRoutineJobComponent::Present(EMiningPresentationState State, const FVector& Focus)
 {
-	if (Coordinator.IsValid() && AssignedPawn.IsValid()) Coordinator->ApplyRoutinePresentation(AssignedPawn.Get(), Role, State, Focus);
+	if (Coordinator.IsValid() && AssignedPawn.IsValid())
+	{
+		Coordinator->ApplyRoutinePresentation(AssignedPawn.Get(), Role, State, Focus);
+	}
 }
 
 void UMiningRoutineJobComponent::CancelOperation()
 {
-	UMiningSmartObjectInteractionTask* PendingInteraction = InteractionTask;
-	UAITask_MoveTo* PendingMove = MoveTask;
+	UMiningSmartObjectInteractionTask* const PendingInteraction = InteractionTask;
+	UAITask_MoveTo* const PendingMove = MoveTask;
 	InteractionTask = nullptr;
 	MoveTask = nullptr;
 	bTimedInteractionHold = false;
 	bWorkerRetrieving = false;
 	bOperationFinished = false;
 	bOperationSucceeded = false;
-	if (PendingInteraction) PendingInteraction->OnFinished.RemoveDynamic(this, &ThisClass::HandleInteractionFinished);
-	if (PendingMove) PendingMove->OnMoveTaskFinished.RemoveAll(this);
-	if (IsValid(PendingInteraction) && !PendingInteraction->IsFinished()) PendingInteraction->ExternalCancel();
-	if (IsValid(PendingMove) && !PendingMove->IsFinished()) PendingMove->ExternalCancel();
+
+	if (PendingInteraction != nullptr)
+	{
+		PendingInteraction->OnFinished.RemoveDynamic(this, &ThisClass::HandleInteractionFinished);
+	}
+
+	if (PendingMove != nullptr)
+	{
+		PendingMove->OnMoveTaskFinished.RemoveAll(this);
+	}
+
+	if (IsValid(PendingInteraction) && !PendingInteraction->IsFinished())
+	{
+		PendingInteraction->ExternalCancel();
+	}
+
+	if (IsValid(PendingMove) && !PendingMove->IsFinished())
+	{
+		PendingMove->ExternalCancel();
+	}
+
 	Present(EMiningPresentationState::Idle, AssignedPawn.IsValid() ? AssignedPawn->GetActorLocation() : FVector::ZeroVector);
 }
 
@@ -127,7 +189,7 @@ void UMiningRoutineJobComponent::HandleInteractionFinished()
 {
 	// Gameplay tasks mark themselves as garbage on completion. Cache the outcome
 	// synchronously so a GC between completion and the next timer cannot lose it.
-	bOperationSucceeded = InteractionTask && InteractionTask->DidSucceed();
+	bOperationSucceeded = InteractionTask != nullptr && InteractionTask->DidSucceed();
 	bOperationFinished = true;
 }
 
@@ -142,10 +204,11 @@ void UMiningRoutineJobComponent::Block(const TCHAR* Reason)
 float UMiningRoutineJobComponent::GetPhaseDuration(EMiningPresentationState State) const
 {
 	const float ClipDuration = Coordinator.IsValid() && AssignedPawn.IsValid()
-		? Coordinator->GetRoutinePresentationDuration(AssignedPawn.Get(), State, InteractionDuration) : InteractionDuration;
+		? Coordinator->GetRoutinePresentationDuration(AssignedPawn.Get(), State, InteractionDuration)
+		: InteractionDuration;
 	// Work/guard windows may loop; one-shot pickup/deposit must finish one full clip.
-	return State == EMiningPresentationState::Working || State == EMiningPresentationState::Guarding
-		? FMath::Max(InteractionDuration, ClipDuration) : FMath::Max(.1f, ClipDuration);
+	return State == EMiningPresentationState::Working || State == EMiningPresentationState::Guarding ? FMath::Max(InteractionDuration, ClipDuration)
+																									 : FMath::Max(.1f, ClipDuration);
 }
 
 void UMiningRoutineJobComponent::CompleteStationOperation()
@@ -159,8 +222,10 @@ void UMiningRoutineJobComponent::CompleteStationOperation()
 		Deadline = GetWorld()->GetTimeSeconds() + GetPhaseDuration(EMiningPresentationState::Retrieving);
 		Status = EMiningRoutineJobStatus::Interacting;
 		Present(EMiningPresentationState::Retrieving, SecondaryTarget);
+
 		return;
 	}
+
 	CancelOperation();
 	bSecondary = !bSecondary;
 	Status = EMiningRoutineJobStatus::WaitingForRoutine;
@@ -170,27 +235,74 @@ void UMiningRoutineJobComponent::UpdateJob()
 {
 	if (!CanExecute())
 	{
-		if (InteractionTask || MoveTask || bTimedInteractionHold) CancelOperation();
+		if (InteractionTask != nullptr || MoveTask != nullptr || bTimedInteractionHold)
+		{
+			CancelOperation();
+		}
+
 		Status = EMiningRoutineJobStatus::Suspended;
 		return;
 	}
+
 	// Keep ACF as the schedule authority. This is idempotent and does not force an AI state.
 	Routine->UpdateByTime();
-	if (!RequestedTask) { Status = EMiningRoutineJobStatus::WaitingForRoutine; return; }
+
+	if (RequestedTask == nullptr)
+	{
+		Status = EMiningRoutineJobStatus::WaitingForRoutine;
+		return;
+	}
+
 	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < RetryAt) return;
+	if (Now < RetryAt)
+	{
+		return;
+	}
+
 	const FVector Target = bSecondary ? SecondaryTarget : PrimaryTarget;
 	const FVector Focus = bSecondary ? PrimaryTarget : SecondaryTarget;
-	const EMiningPresentationState ActiveState = Role == EMiningPresentationRole::Worker
-		? (bWorkerRetrieving ? EMiningPresentationState::Retrieving : bSecondary ? EMiningPresentationState::Depositing : EMiningPresentationState::Working)
-		: Role == EMiningPresentationRole::Guard ? EMiningPresentationState::Guarding
-		: (bSecondary ? EMiningPresentationState::Unloading : EMiningPresentationState::Loading);
+	EMiningPresentationState ActiveState = EMiningPresentationState::Loading;
+
+	if (Role == EMiningPresentationRole::Worker)
+	{
+		if (bWorkerRetrieving)
+		{
+			ActiveState = EMiningPresentationState::Retrieving;
+		}
+		else if (bSecondary)
+		{
+			ActiveState = EMiningPresentationState::Depositing;
+		}
+		else
+		{
+			ActiveState = EMiningPresentationState::Working;
+		}
+	}
+	else if (Role == EMiningPresentationRole::Guard)
+	{
+		ActiveState = EMiningPresentationState::Guarding;
+	}
+	else if (bSecondary)
+	{
+		ActiveState = EMiningPresentationState::Unloading;
+	}
+	else
+	{
+		ActiveState = EMiningPresentationState::Loading;
+	}
+
 	if (bOperationFinished)
 	{
 		bOperationFinished = false;
 		InteractionTask = nullptr;
 		MoveTask = nullptr;
-		if (!bOperationSucceeded) { Block(TEXT("Duty navigation or interaction failed")); return; }
+
+		if (!bOperationSucceeded)
+		{
+			Block(TEXT("Duty navigation or interaction failed"));
+			return;
+		}
+
 		if (Role == EMiningPresentationRole::Courier)
 		{
 			bTimedInteractionHold = true;
@@ -198,28 +310,59 @@ void UMiningRoutineJobComponent::UpdateJob()
 			Status = EMiningRoutineJobStatus::Interacting;
 			Present(ActiveState, Focus);
 		}
-		else if (!bTimedInteractionHold) CompleteStationOperation();
+		else if (!bTimedInteractionHold)
+		{
+			CompleteStationOperation();
+		}
+
 		return;
 	}
+
 	if (bTimedInteractionHold)
 	{
-		if (Now >= Deadline) CompleteStationOperation();
-		else Present(ActiveState, Focus);
+		if (Now >= Deadline)
+		{
+			CompleteStationOperation();
+		}
+		else
+		{
+			Present(ActiveState, Focus);
+		}
+
 		return;
 	}
-	if (InteractionTask)
+
+	if (InteractionTask != nullptr)
 	{
 		if (InteractionTask->IsFinished())
 		{
 			const bool bSuccess = InteractionTask->DidSucceed();
 			InteractionTask = nullptr;
-			if (bSuccess) CompleteStationOperation();
-			else Block(TEXT("Workstation interaction or navigation failed"));
+
+			if (bSuccess)
+			{
+				CompleteStationOperation();
+			}
+			else
+			{
+				Block(TEXT("Workstation interaction or navigation failed"));
+			}
+
 			return;
 		}
+
 		const bool bAtStation = InteractionTask->IsInteracting();
-		if (!bAtStation && Now >= Deadline) { Block(TEXT("Travel timed out")); return; }
-		if (bAtStation && Status != EMiningRoutineJobStatus::Interacting) Deadline = Now + GetPhaseDuration(ActiveState);
+		if (!bAtStation && Now >= Deadline)
+		{
+			Block(TEXT("Travel timed out"));
+			return;
+		}
+
+		if (bAtStation && Status != EMiningRoutineJobStatus::Interacting)
+		{
+			Deadline = Now + GetPhaseDuration(ActiveState);
+		}
+
 		if (bAtStation && Now >= Deadline)
 		{
 			// Presentation trees may intentionally remain Running (the test trees have
@@ -227,25 +370,46 @@ void UMiningRoutineJobComponent::UpdateJob()
 			// Earlier terminal failures are handled above. Ending this session cancels
 			// its context/claim; it does NOT report StateTree success or grant resources.
 			CompleteStationOperation();
+
 			return;
 		}
+
 		Status = bAtStation ? EMiningRoutineJobStatus::Interacting : EMiningRoutineJobStatus::Traveling;
 		Present(bAtStation ? ActiveState : EMiningPresentationState::Traveling, bAtStation ? Focus : Target);
+
 		return;
 	}
-	if (MoveTask)
+
+	if (MoveTask != nullptr)
 	{
-		if (!MoveTask->IsFinished()) { if (Now >= Deadline) Block(TEXT("Courier travel timed out")); return; }
+		if (!MoveTask->IsFinished())
+		{
+			if (Now >= Deadline)
+			{
+				Block(TEXT("Courier travel timed out"));
+			}
+
+			return;
+		}
+
 		const bool bArrived = MoveTask->WasMoveSuccessful();
 		MoveTask = nullptr;
-		if (!bArrived) { Block(TEXT("No complete courier navigation path")); return; }
+
+		if (!bArrived)
+		{
+			Block(TEXT("No complete courier navigation path"));
+			return;
+		}
+
 		bTimedInteractionHold = true;
 		Deadline = Now + GetPhaseDuration(ActiveState); // Work starts at arrival, not move creation.
 		Status = EMiningRoutineJobStatus::Interacting;
 		Present(ActiveState, Focus);
+
 		return;
 	}
-	AACFAIController* Controller = CastChecked<AACFAIController>(GetOwner());
+
+	AACFAIController* const Controller = CastChecked<AACFAIController>(GetOwner());
 	BlockedReason.Reset();
 	Deadline = Now + NavigationTimeoutSeconds; // Independent from the short workstation animation duration.
 	if (Role == EMiningPresentationRole::Courier)
@@ -255,9 +419,15 @@ void UMiningRoutineJobComponent::UpdateJob()
 		Request.SetAllowPartialPath(false);
 		Request.SetAcceptanceRadius(60.0f);
 		MoveTask = UAITask::NewAITask<UAITask_MoveTo>(*Controller, EAITaskPriority::High);
-		if (!MoveTask) { Block(TEXT("Cannot create courier movement task")); return; }
+		if (MoveTask == nullptr)
+		{
+			Block(TEXT("Cannot create courier movement task"));
+			return;
+		}
+
 		MoveTask->SetUp(Controller, Request);
-		MoveTask->OnMoveTaskFinished.AddWeakLambda(this, [this](TEnumAsByte<EPathFollowingResult::Type> Result, AAIController*)
+		MoveTask->OnMoveTaskFinished.AddWeakLambda(this,
+			[this](TEnumAsByte<EPathFollowingResult::Type> Result, AAIController*)
 		{
 			bOperationSucceeded = Result == EPathFollowingResult::Success;
 			bOperationFinished = true;
@@ -265,28 +435,55 @@ void UMiningRoutineJobComponent::UpdateJob()
 		Present(EMiningPresentationState::Traveling, Target);
 		Status = EMiningRoutineJobStatus::Traveling;
 		MoveTask->ReadyForActivation();
+
 		return;
 	}
-	USmartObjectSubsystem* Subsystem = USmartObjectSubsystem::GetCurrent(GetWorld());
-	if (!Subsystem || !Station.IsValid() || !Station->IsSmartObjectEnabled()) { Block(TEXT("Workstation missing or disabled")); return; }
-	if (!Station->GetRegisteredHandle().IsValid()) { Block(TEXT("Workstation is not registered with SmartObjectSubsystem")); return; }
-	TArray<FSmartObjectSlotHandle> AllSlots, AvailableSlots;
+
+	USmartObjectSubsystem* const Subsystem = USmartObjectSubsystem::GetCurrent(GetWorld());
+	if (Subsystem == nullptr || !Station.IsValid() || !Station->IsSmartObjectEnabled())
+	{
+		Block(TEXT("Workstation missing or disabled"));
+		return;
+	}
+
+	if (!Station->GetRegisteredHandle().IsValid())
+	{
+		Block(TEXT("Workstation is not registered with SmartObjectSubsystem"));
+		return;
+	}
+
+	TArray<FSmartObjectSlotHandle> AllSlots;
+	TArray<FSmartObjectSlotHandle> AvailableSlots;
 	Subsystem->GetAllSlots(Station->GetRegisteredHandle(), AllSlots);
 	FSmartObjectRequestFilter Filter;
 	Filter.BehaviorDefinitionClasses.Add(UGameplayInteractionSmartObjectBehaviorDefinition::StaticClass());
 	Subsystem->FindSlots(Station->GetRegisteredHandle(), Filter, AvailableSlots);
 	const int32 SlotIndex = bSecondary ? 1 : 0;
+
 	// Do not silently perform another duty when the requested slot is busy/misconfigured.
-	if (!AllSlots.IsValidIndex(SlotIndex) || !AvailableSlots.Contains(AllSlots[SlotIndex])) { Block(TEXT("Required workstation slot unavailable (primary=0, secondary=1)")); return; }
-	const FSmartObjectClaimHandle Claim = USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsClaimed(this, AllSlots[SlotIndex], AssignedPawn.Get(), ESmartObjectClaimPriority::Normal);
-	if (!Claim.IsValid()) { Block(TEXT("Workstation claim failed")); return; }
+	if (!AllSlots.IsValidIndex(SlotIndex) || !AvailableSlots.Contains(AllSlots[SlotIndex]))
+	{
+		Block(TEXT("Required workstation slot unavailable (primary=0, secondary=1)"));
+		return;
+	}
+
+	const FSmartObjectClaimHandle Claim =
+		USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsClaimed(this, AllSlots[SlotIndex], AssignedPawn.Get(), ESmartObjectClaimPriority::Normal);
+	if (!Claim.IsValid())
+	{
+		Block(TEXT("Workstation claim failed"));
+		return;
+	}
+
 	InteractionTask = UMiningSmartObjectInteractionTask::MoveToAndUseClaimedSlot(Controller, Claim, true, false, InteractionDuration);
-	if (!InteractionTask)
+	if (InteractionTask == nullptr)
 	{
 		USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsFree(this, Claim);
 		Block(TEXT("Workstation requires a compiled GameplayInteraction StateTree"));
+
 		return;
 	}
+
 	Present(EMiningPresentationState::Traveling, Target);
 	Status = EMiningRoutineJobStatus::Traveling;
 	InteractionTask->OnFinished.AddDynamic(this, &ThisClass::HandleInteractionFinished);
@@ -295,15 +492,25 @@ void UMiningRoutineJobComponent::UpdateJob()
 
 void UMiningRoutineJobComponent::ReleaseAssignment()
 {
-	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(UpdateTimer);
-	if (AACFAIController* Controller = Cast<AACFAIController>(GetOwner())) Controller->OnAIStateChanged.RemoveDynamic(this, &ThisClass::HandleAIStateChanged);
+	if (GetWorld() != nullptr)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(UpdateTimer);
+	}
+
+	if (AACFAIController* Controller = Cast<AACFAIController>(GetOwner()))
+	{
+		Controller->OnAIStateChanged.RemoveDynamic(this, &ThisClass::HandleAIStateChanged);
+	}
+
 	RequestedTask = nullptr;
 	CancelOperation();
-	if (Routine.IsValid() && RuntimeRoutine && Routine->GetRoutineDataAsset() == RuntimeRoutine)
+
+	if (Routine.IsValid() && RuntimeRoutine != nullptr && Routine->GetRoutineDataAsset() == RuntimeRoutine)
 	{
 		Routine->StopAll();
 		Routine->SetRoutineDataAsset(OriginalRoutine); // Do not overwrite an externally replaced schedule.
 	}
+
 	Routine.Reset();
 	RuntimeRoutine = nullptr;
 	OriginalRoutine = nullptr;

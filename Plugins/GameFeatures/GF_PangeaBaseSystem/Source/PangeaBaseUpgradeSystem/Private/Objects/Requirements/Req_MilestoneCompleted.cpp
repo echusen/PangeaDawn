@@ -1,6 +1,5 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Objects/Requirements/Req_MilestoneCompleted.h"
 
 #include "Actors/VillageBase.h"
@@ -9,7 +8,7 @@
 
 bool UReq_MilestoneCompleted::IsRequirementMetForContext(const FBaseUpgradeContext& Context) const
 {
-	if (!RequiredMilestoneTag.IsValid() || !Context.UpgradeSystem)
+	if (!RequiredMilestoneTag.IsValid() || Context.UpgradeSystem == nullptr)
 	{
 		return false;
 	}
@@ -19,23 +18,22 @@ bool UReq_MilestoneCompleted::IsRequirementMetForContext(const FBaseUpgradeConte
 
 bool UReq_MilestoneCompleted::IsRequirementMet_Implementation(UObject* ContextObject) const
 {
-	if (!ContextObject)
+	if (ContextObject == nullptr)
 	{
 		return false;
 	}
 
-	AActor* OwnerActor = Cast<AActor>(ContextObject);
-	if (!OwnerActor)
+	AActor* const OwnerActor = Cast<AActor>(ContextObject);
+	if (OwnerActor == nullptr)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Req_MilestoneCompleted: ContextObject is not an Actor"));
 		return false;
 	}
 
-	UPangeaUpgradeSystemComponent* UpgradeComp = OwnerActor->FindComponentByClass<UPangeaUpgradeSystemComponent>();
-	if (!UpgradeComp)
+	UPangeaUpgradeSystemComponent* const UpgradeComp = OwnerActor->FindComponentByClass<UPangeaUpgradeSystemComponent>();
+	if (UpgradeComp == nullptr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Req_MilestoneCompleted: OwnerActor '%s' has no UpgradeSystemComponent"),
-			   *OwnerActor->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Req_MilestoneCompleted: OwnerActor '%s' has no UpgradeSystemComponent"), *OwnerActor->GetName());
 		return false;
 	}
 
@@ -49,10 +47,7 @@ bool UReq_MilestoneCompleted::IsRequirementMet_Implementation(UObject* ContextOb
 
 	if (!bCompleted)
 	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("Milestone requirement FAILED: %s is not completed on %s"),
-			*RequiredMilestoneTag.ToString(),
-			*OwnerActor->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Milestone requirement FAILED: %s is not completed on %s"), *RequiredMilestoneTag.ToString(), *OwnerActor->GetName());
 	}
 
 	return bCompleted;

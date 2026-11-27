@@ -1,6 +1,5 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Objects/UpgradeRequirement.h"
 
 bool UUpgradeRequirement::IsRequirementMetForContext(const FBaseUpgradeContext& Context) const

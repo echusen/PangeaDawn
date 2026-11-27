@@ -118,7 +118,7 @@ void UE4Library::connect(rd::Lifetime lifetime, rd::IProtocol const * protocol)
 // initializer
 void UE4Library::initialize()
 {
-    serializationHash = 5866506434476582004L;
+    serializationHash = -3973615768175983662L;
 }
 // primary ctor
 // secondary constructor

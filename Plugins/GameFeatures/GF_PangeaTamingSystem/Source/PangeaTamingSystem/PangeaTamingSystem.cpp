@@ -3,5 +3,4 @@
 #include "PangeaTamingSystem.h"
 #include "Modules/ModuleManager.h"
 
-IMPLEMENT_MODULE( FDefaultModuleImpl, PangeaTamingSystem );
- 
+IMPLEMENT_MODULE(FDefaultModuleImpl, PangeaTamingSystem);

@@ -4,17 +4,17 @@
 
 UObject* FBaseUpgradeContext::GetPreferredRequirementObject() const
 {
-	if (InteractingPawn)
+	if (InteractingPawn != nullptr)
 	{
 		return InteractingPawn;
 	}
 
-	if (Village)
+	if (Village != nullptr)
 	{
 		return Village;
 	}
 
-	if (SourceObject)
+	if (SourceObject != nullptr)
 	{
 		return SourceObject;
 	}
@@ -24,17 +24,17 @@ UObject* FBaseUpgradeContext::GetPreferredRequirementObject() const
 
 UObject* FBaseUpgradeContext::GetPreferredActionObject() const
 {
-	if (Village)
+	if (Village != nullptr)
 	{
 		return Village;
 	}
 
-	if (InteractingPawn)
+	if (InteractingPawn != nullptr)
 	{
 		return InteractingPawn;
 	}
 
-	if (SourceObject)
+	if (SourceObject != nullptr)
 	{
 		return SourceObject;
 	}

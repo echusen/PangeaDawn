@@ -1,66 +1,120 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
 #include "Components/ActorComponent.h"
+
 #include "Types/MiningTypes.h"
+
 #include "PangeaMiningTransportComponent.generated.h"
 
 class AACFCharacter;
+class AActor;
+class FLifetimeProperty;
 class UMiningSiteComponent;
 
+/** Stage of a hybrid mining shipment's round trip between the site and its settlement destination. */
 UENUM(BlueprintType)
-enum class EPangeaMiningShipmentPhase : uint8 { Idle, Outbound, AwaitingUnload, Returning };
+enum class EPangeaMiningShipmentPhase : uint8
+{
+	/** No shipment is active. */
+	Idle,
+	/** Carrying cargo from the mining site to the destination. */
+	Outbound,
+	/** At the destination with cargo that the destination storage has not yet fully accepted. */
+	AwaitingUnload,
+	/** Travelling back to the mining site with no cargo left in escrow. */
+	Returning
+};
 
 /** The authoritative cargo ledger. Presentation actors never own or duplicate its items. */
 USTRUCT(BlueprintType)
 struct GF_PANGEAMININGSYSTEMRUNTIME_API FPangeaMiningShipment
 {
 	GENERATED_BODY()
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+	/** Unique id of this manifest; physical convoy actors must present it to act on the shipment. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	FGuid Id;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Current stage of the round trip. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	EPangeaMiningShipmentPhase Phase = EPangeaMiningShipmentPhase::Idle;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Item and quantity still held in escrow by the shipment. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	FMiningStoredItem Cargo;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Actor whose transport storage component receives the cargo. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TObjectPtr<AActor> DestinationActor;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** World location of the mining site when the shipment was dispatched. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	FVector Origin = FVector::ZeroVector;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** World location where the cargo is unloaded. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	FVector Destination = FVector::ZeroVector;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Current ground position of the shipment, whether it is virtual or carried by a physical courier. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	FVector Position = FVector::ZeroVector;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Travel speed in cm/s, fixed when the shipment was dispatched. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	float Speed = 320.f;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Chance (0 to 1) of losing the cargo over a fully virtual outbound trip. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	float LossChance = 0.f;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Seconds of the outbound trip that were simulated without a physical courier. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	double VirtualTravelSeconds = 0.0;
+
+	/** Expected duration of the outbound trip in seconds; scales the hidden loss risk by virtual exposure. */
 	UPROPERTY(SaveGame)
 	double PlannedOutboundSeconds = 1.0;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Whether the hidden loss roll for this shipment has already been applied. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	bool bRiskResolved = false;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Whether the cargo was lost, either to the hidden risk roll or to a death in the physical convoy. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	bool bLost = false;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Units accepted so far by the destination storage. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	int32 DeliveredUnits = 0;
+
 	/** Convoy configuration is fixed for this manifest, not changed mid-trip by upgrades. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TSoftClassPtr<AActor> CourierClass;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Class of the escort characters spawned with the physical convoy. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TSoftClassPtr<AActor> EscortClass;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Optional class of the cosmetic cart attached to the convoy. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TSoftClassPtr<AActor> ChariotClass;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Optional class of the draft animal that tows the cart. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TSoftClassPtr<AActor> DraftAnimalClass;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Number of escort slots of this manifest (0 to 8). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	int32 EscortCount = 0;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category="Mining|Transport")
+
+	/** Escort slots whose escort died; they are not respawned for this manifest. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Mining|Transport")
 	TArray<int32> LostEscortSlots;
 };
 
 /** Hybrid logistics foundation. Enable only after the ACF physical-actor broker is configured. */
-UCLASS(ClassGroup=(Pangea), BlueprintType, meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Pangea), BlueprintType, meta = (BlueprintSpawnableComponent))
 class GF_PANGEAMININGSYSTEMRUNTIME_API UPangeaMiningTransportComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -70,34 +124,66 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UFUNCTION(BlueprintPure, Category="Mining|Transport")
+	/** True when the owner's mining site definition enables hybrid transport. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport")
 	bool IsHybridEnabled() const;
-	UFUNCTION(BlueprintPure, Category="Mining|Transport")
-	bool HasActiveShipment() const { return Shipment.Phase != EPangeaMiningShipmentPhase::Idle; }
-	UFUNCTION(BlueprintPure, Category="Mining|Transport")
-	FPangeaMiningShipment GetShipment() const { return Shipment; }
-	UFUNCTION(BlueprintPure, Category="Mining|Transport")
+
+	/** True while a shipment is in any phase other than Idle. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport")
+	bool HasActiveShipment() const
+	{
+		return Shipment.Phase != EPangeaMiningShipmentPhase::Idle;
+	}
+
+	/** Copy of the current shipment manifest. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport")
+	FPangeaMiningShipment GetShipment() const
+	{
+		return Shipment;
+	}
+
+	/** True when a shipment is active and a player pawn is within MaterializationRadius of its position. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport")
 	bool ShouldMaterializeCourier() const;
-	UFUNCTION(BlueprintPure, Category="Mining|Transport|Diagnostics")
-	bool IsAwaitingRestore() const { return bAwaitingRestore; }
-	UFUNCTION(BlueprintPure, Category="Mining|Transport|Diagnostics")
+
+	/** True between a SaveGame load and OnComponentLoaded; the ledger is frozen during that time. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport|Diagnostics")
+	bool IsAwaitingRestore() const
+	{
+		return bAwaitingRestore;
+	}
+
+	/** The physical courier currently bound to the shipment, or null while it travels virtually. */
+	UFUNCTION(BlueprintPure, Category = "Mining|Transport|Diagnostics")
 	AACFCharacter* GetPhysicalCourier() const;
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Mining|Transport")
+
+	/** Authority only. Reserves cargo from the mining site and starts an outbound shipment when none is active. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Mining|Transport")
 	bool TryDispatch();
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Mining|Transport")
+
+	/** Authority only. Makes a living courier that stands near the shipment position, and whose controller is owned by this actor, the physical carrier of the shipment. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Mining|Transport")
 	bool BindPhysicalCourier(AACFCharacter* Courier, FGuid ShipmentId);
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Mining|Transport")
+
+	/** Authority only. Returns the shipment to virtual travel at the courier's position; this is not a cargo loss. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Mining|Transport")
 	void UnbindPhysicalCourier(AACFCharacter* Courier);
+
 	/** Called after the physical unload animation, never merely on starting travel. */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Mining|Transport")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Mining|Transport")
 	bool CompletePhysicalLeg(AACFCharacter* Courier, FGuid ShipmentId);
+
 	/** Server broker records a real ACF escort death; culling must never call this. */
 	bool RecordEscortLoss(FGuid ShipmentId, int32 Slot);
-	UFUNCTION(BlueprintCallable, Category="Mining|Timing")
+
+	/** Post-load hook: validates the restored shipment and resumes the ledger. Invalid or unknown-version data stays frozen. */
+	UFUNCTION(BlueprintCallable, Category = "Mining|Timing")
 	void OnComponentLoaded();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mining|Transport", meta=(ClampMin="1.0", Units="cm"))
+	/** Distance from the shipment position within which a player pawn causes the physical convoy to be spawned. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mining|Transport", meta = (ClampMin = "1.0", Units = "cm"))
 	float MaterializationRadius = 2500.f;
+
 private:
 	friend class AMiningSiteActor;
 	friend class UPangeaMiningConvoyComponent;

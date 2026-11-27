@@ -1,15 +1,16 @@
 #include "Actors/MiningDiscoveryNodeActor.h"
 
-#include "Actors/MiningSiteActor.h"
-#include "Components/ACFInteractionComponent.h"
 #include "Components/SphereComponent.h"
-#include "Components/MiningSiteComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DataAssets/MiningSiteDefinition.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
+
+#include "Actors/MiningSiteActor.h"
+#include "Components/ACFInteractionComponent.h"
+#include "Components/MiningSiteComponent.h"
+#include "DataAssets/MiningSiteDefinition.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningDiscovery, Log, All);
 
@@ -66,18 +67,21 @@ TArray<UActorComponent*> AMiningDiscoveryNodeActor::GetComponentsToSave_Implemen
 
 void AMiningDiscoveryNodeActor::OnLoaded_Implementation()
 {
-	if (!EstablishedSite)
+	if (EstablishedSite == nullptr)
 	{
 		const FTransform ExpectedSiteTransform = SiteSpawnTransform * GetActorTransform();
+
 		for (TActorIterator<AMiningSiteActor> It(GetWorld()); It; ++It)
 		{
-			AMiningSiteActor* CandidateSite = *It;
-			if (!CandidateSite || !CandidateSite->MiningSiteComponent || CandidateSite->MiningSiteComponent->SiteDefinition != SiteDefinition)
+			AMiningSiteActor* const CandidateSite = *It;
+			if (CandidateSite == nullptr || CandidateSite->MiningSiteComponent == nullptr
+				|| CandidateSite->MiningSiteComponent->SiteDefinition != SiteDefinition)
 			{
 				continue;
 			}
 
-			const bool bNearExpectedSite = FVector::DistSquared(CandidateSite->GetActorLocation(), ExpectedSiteTransform.GetLocation()) <= FMath::Square(200.0f);
+			const bool bNearExpectedSite =
+				FVector::DistSquared(CandidateSite->GetActorLocation(), ExpectedSiteTransform.GetLocation()) <= FMath::Square(200.0f);
 			if (!bNearExpectedSite)
 			{
 				continue;
@@ -90,12 +94,12 @@ void AMiningDiscoveryNodeActor::OnLoaded_Implementation()
 
 	RefreshLocalInteractionRegistration();
 
-	if (EstablishedSite && SettlementResourceActor && EstablishedSite->SettlementResourceActor != SettlementResourceActor)
+	if (EstablishedSite != nullptr && SettlementResourceActor != nullptr && EstablishedSite->SettlementResourceActor != SettlementResourceActor)
 	{
 		EstablishedSite->SettlementResourceActor = SettlementResourceActor;
 	}
 
-	if (!EstablishedSite)
+	if (EstablishedSite == nullptr)
 	{
 		return;
 	}
@@ -112,7 +116,7 @@ void AMiningDiscoveryNodeActor::OnLoaded_Implementation()
 
 bool AMiningDiscoveryNodeActor::CanSetUpSite() const
 {
-	return bUnlocked && !EstablishedSite && SiteDefinition && MiningSiteActorClass;
+	return bUnlocked && EstablishedSite == nullptr && SiteDefinition != nullptr && MiningSiteActorClass;
 }
 
 void AMiningDiscoveryNodeActor::SetUnlocked(bool bInUnlocked)
@@ -133,7 +137,9 @@ void AMiningDiscoveryNodeActor::SetUnlocked(bool bInUnlocked)
 		}
 	}
 
-	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Mining discovery unlock state changed. Node=%s Unlocked=%s FacilityTag=%s"),
+	UE_LOG(LogPangeaMiningDiscovery,
+		Log,
+		TEXT("Mining discovery unlock state changed. Node=%s Unlocked=%s FacilityTag=%s"),
 		*GetNameSafe(this),
 		bUnlocked ? TEXT("true") : TEXT("false"),
 		*FacilityTag.ToString());
@@ -141,7 +147,7 @@ void AMiningDiscoveryNodeActor::SetUnlocked(bool bInUnlocked)
 
 AMiningSiteActor* AMiningDiscoveryNodeActor::SetUpSite()
 {
-	if (EstablishedSite)
+	if (EstablishedSite != nullptr)
 	{
 		UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("SetUpSite skipped. Node=%s"), *GetNameSafe(this));
 		return EstablishedSite;
@@ -153,32 +159,34 @@ AMiningSiteActor* AMiningDiscoveryNodeActor::SetUpSite()
 		return nullptr;
 	}
 
-	UWorld* World = GetWorld();
-	if (!World)
+	UWorld* const World = GetWorld();
+	if (World == nullptr)
 	{
 		UE_LOG(LogPangeaMiningDiscovery, Warning, TEXT("SetUpSite failed on %s: no world."), *GetNameSafe(this));
 		return nullptr;
 	}
 
 	const FTransform WorldTransform = SiteSpawnTransform * GetActorTransform();
-	AMiningSiteActor* NewSite = World->SpawnActorDeferred<AMiningSiteActor>(MiningSiteActorClass, WorldTransform, this);
-	if (!NewSite)
+	AMiningSiteActor* const NewSite = World->SpawnActorDeferred<AMiningSiteActor>(MiningSiteActorClass, WorldTransform, this);
+	if (NewSite == nullptr)
 	{
 		UE_LOG(LogPangeaMiningDiscovery, Warning, TEXT("SetUpSite failed on %s: SpawnActorDeferred returned null."), *GetNameSafe(this));
 		return nullptr;
 	}
 
-	if (NewSite->MiningSiteComponent)
+	if (NewSite->MiningSiteComponent != nullptr)
 	{
 		NewSite->MiningSiteComponent->SiteDefinition = SiteDefinition;
 	}
+
 	NewSite->SettlementResourceActor = SettlementResourceActor;
 
 	NewSite->FinishSpawning(WorldTransform);
 
-	if (NewSite->MiningSiteComponent && NewSite->MiningSiteComponent->EstablishSite())
+	if (NewSite->MiningSiteComponent != nullptr && NewSite->MiningSiteComponent->EstablishSite())
 	{
 		EstablishedSite = NewSite;
+
 		for (const TWeakObjectPtr<UACFInteractionComponent>& InteractionComponent : RegisteredInteractionComponents)
 		{
 			if (InteractionComponent.IsValid())
@@ -192,43 +200,39 @@ AMiningSiteActor* AMiningDiscoveryNodeActor::SetUpSite()
 		return EstablishedSite;
 	}
 
-	UE_LOG(LogPangeaMiningDiscovery, Warning, TEXT("SetUpSite spawned %s but EstablishSite failed. Destroying spawned site."),
-		*GetNameSafe(NewSite));
+	UE_LOG(LogPangeaMiningDiscovery, Warning, TEXT("SetUpSite spawned %s but EstablishSite failed. Destroying spawned site."), *GetNameSafe(NewSite));
 	NewSite->Destroy();
+
 	return nullptr;
 }
 
 void AMiningDiscoveryNodeActor::OnInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
 	(void)interactionType;
-	AMiningSiteActor* NewSite = SetUpSite();
-	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery interaction resolved. Node=%s Pawn=%s Result=%s Site=%s"),
+	AMiningSiteActor* const NewSite = SetUpSite();
+	UE_LOG(LogPangeaMiningDiscovery,
+		Log,
+		TEXT("Discovery interaction resolved. Node=%s Pawn=%s Result=%s Site=%s"),
 		*GetNameSafe(this),
 		*GetNameSafe(Pawn),
-		NewSite ? TEXT("true") : TEXT("false"),
+		NewSite != nullptr ? TEXT("true") : TEXT("false"),
 		*GetNameSafe(NewSite));
 }
 
 void AMiningDiscoveryNodeActor::OnLocalInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
 	(void)interactionType;
-	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery locally interacted. Node=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery locally interacted. Node=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 void AMiningDiscoveryNodeActor::OnInteractableRegisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery interactable registered. Node=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery interactable registered. Node=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 void AMiningDiscoveryNodeActor::OnInteractableUnregisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery interactable unregistered. Node=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningDiscovery, Log, TEXT("Discovery interactable unregistered. Node=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 FText AMiningDiscoveryNodeActor::GetInteractableName_Implementation()
@@ -243,13 +247,14 @@ bool AMiningDiscoveryNodeActor::CanBeInteracted_Implementation(APawn* Pawn)
 
 void AMiningDiscoveryNodeActor::RefreshLocalInteractionRegistration()
 {
-	if (!InteractionSphere)
+	if (InteractionSphere == nullptr)
 	{
 		return;
 	}
 
 	TArray<AActor*> OverlappingActors;
 	InteractionSphere->GetOverlappingActors(OverlappingActors, APawn::StaticClass());
+
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
 		if (APawn* OverlappingPawn = Cast<APawn>(OverlappingActor))
@@ -264,7 +269,7 @@ void AMiningDiscoveryNodeActor::RefreshLocalInteractionRegistration()
 
 void AMiningDiscoveryNodeActor::RegisterWithInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
@@ -275,19 +280,22 @@ void AMiningDiscoveryNodeActor::RegisterWithInteractionComponent(UACFInteraction
 
 void AMiningDiscoveryNodeActor::UnregisterFromInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
 
 	InteractionComponent->UnregisterInteractable(this);
-	RegisteredInteractionComponents.RemoveAll([InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry)
-	{
-		return Entry.Get() == InteractionComponent;
-	});
+	RegisteredInteractionComponents.RemoveAll(
+		[InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry) { return Entry.Get() == InteractionComponent; });
 }
 
-void AMiningDiscoveryNodeActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void AMiningDiscoveryNodeActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
@@ -296,7 +304,8 @@ void AMiningDiscoveryNodeActor::HandleInteractionBegin(UPrimitiveComponent* Over
 	}
 }
 
-void AMiningDiscoveryNodeActor::HandleInteractionEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void AMiningDiscoveryNodeActor::HandleInteractionEnd(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{

@@ -30,3 +30,34 @@
   are excluded from file protection so unmodified vendor code can still build.
   Only an explicitly requested vendor update may temporarily lift protection.
   After an update, audit the new vendor baseline and reapply `-Action Protect`.
+
+# Project index
+
+- Read `Docs/Index/INDEX.md` before scanning the repo. It is the table of
+  contents: tags and subtags mapped to code roots, assets and docs.
+- `Docs/Index/code.md` lists modules, dependencies and every reflected C++
+  type. `Docs/Index/content.md` lists project assets, maps and gameplay tags.
+  `Docs/Index/epics.md` lists epics and stories with status.
+- Update the matching index row when adding a module, reflected type, project
+  asset, gameplay tag or quest.
+
+# Coding standards
+
+- Before writing or reviewing Unreal C++, read
+  `.agents/rules/cpp-coding-standards.md` and `.agents/skills/ue5/SKILL.md`
+  and follow them. Before driving the Editor through Python (Blueprint graph,
+  Material or asset edits), read the guardrail sections of the same skill.
+- This file wins wherever those files conflict with it. In particular:
+  - **Vendor and engine code stay read only.** The engine is a launcher build
+    (5.8) and the vendor rules above forbid patching.
+  - **Copyright header (rule 2.2).** Match the header already used by the
+    surrounding module.
+  - **Source control is git.** Never clear a read-only attribute to edit a
+    file: in this project it marks vendor files. Commit or push only when the
+    user asks.
+  - **Asset saves** follow the vendor rules above: save only explicitly named
+    Pangea-owned packages, never Save All.
+- `.agents/rules/agent-workflow.md` is tool-specific (Antigravity). Other
+  agents ignore it.
+- Apply the standards to new and touched Pangea-owned code. Do not restyle
+  untouched code, and never restyle vendor code.

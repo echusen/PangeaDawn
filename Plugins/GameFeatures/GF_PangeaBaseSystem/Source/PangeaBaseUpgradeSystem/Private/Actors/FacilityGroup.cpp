@@ -7,15 +7,14 @@
 #include "Engine/StaticMeshActor.h"
 #include "GameFramework/Character.h"
 
-
 // ---------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------
 AFacilityGroup::AFacilityGroup()
 {
-    PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = false;
 
-    RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 }
 
 // ---------------------------------------------------------
@@ -23,8 +22,8 @@ AFacilityGroup::AFacilityGroup()
 // ---------------------------------------------------------
 void AFacilityGroup::BeginPlay()
 {
-    Super::BeginPlay();
-    SpawnAllSlots();
+	Super::BeginPlay();
+	SpawnAllSlots();
 }
 
 // ---------------------------------------------------------
@@ -32,13 +31,13 @@ void AFacilityGroup::BeginPlay()
 // ---------------------------------------------------------
 void AFacilityGroup::SpawnAllSlots()
 {
-    TArray<UFacilitySlotComponent*> Slots;
-    GetComponents<UFacilitySlotComponent>(Slots);
+	TArray<UFacilitySlotComponent*> Slots;
+	GetComponents<UFacilitySlotComponent>(Slots);
 
-    for (UFacilitySlotComponent* Slot : Slots)
-    {
-        SpawnFromSlot(Slot);
-    }
+	for (UFacilitySlotComponent* Slot : Slots)
+	{
+		SpawnFromSlot(Slot);
+	}
 }
 
 // ---------------------------------------------------------
@@ -46,142 +45,137 @@ void AFacilityGroup::SpawnAllSlots()
 // ---------------------------------------------------------
 void AFacilityGroup::SpawnFromSlot(UFacilitySlotComponent* Slot)
 {
-    if (!Slot)
-        return;
+	if (Slot == nullptr)
+	{
+		return;
+	}
 
-    UWorld* World = GetWorld();
-    if (!World)
-        return;
+	UWorld* const World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
 
-    // Base transform
-    FVector SpawnLoc = Slot->GetComponentLocation();
-    FRotator SpawnRot = Slot->GetComponentRotation();
+	// Base transform
+	FVector SpawnLoc = Slot->GetComponentLocation();
+	const FRotator SpawnRot = Slot->GetComponentRotation();
 
-    // -----------------------------------------------------
-    // Snap to ground
-    // -----------------------------------------------------
-    if (Slot->bSnapToGround)
-    {
-        FHitResult Hit;
-        FVector Start = SpawnLoc + FVector(0.f, 0.f, 500.f);
-        FVector End = SpawnLoc - FVector(0.f, 0.f, 2000.f);
+	// -----------------------------------------------------
+	// Snap to ground
+	// -----------------------------------------------------
+	if (Slot->bSnapToGround)
+	{
+		FHitResult Hit;
+		const FVector Start = SpawnLoc + FVector(0.f, 0.f, 500.f);
+		const FVector End = SpawnLoc - FVector(0.f, 0.f, 2000.f);
 
-        FCollisionQueryParams Params;
-        Params.AddIgnoredActor(this);
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
 
-        if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params))
-        {
-            SpawnLoc = Hit.Location;
-        }
-    }
+		if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params))
+		{
+			SpawnLoc = Hit.Location;
+		}
+	}
 
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = this;
-    SpawnParams.SpawnCollisionHandlingOverride =
-        ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-    AActor* Spawned = nullptr;
+	AActor* Spawned = nullptr;
 
-    // -----------------------------------------------------
-    // PRIORITY 1: ActorClass overrides everything
-    // NPCs, interactables, custom blueprints, etc.
-    // -----------------------------------------------------
-    if (Slot->ActorClass)
-    {
-        Spawned = World->SpawnActor<AActor>(
-            Slot->ActorClass,
-            SpawnLoc,
-            SpawnRot,
-            SpawnParams
-        );
-    }
+	// -----------------------------------------------------
+	// PRIORITY 1: ActorClass overrides everything
+	// NPCs, interactables, custom blueprints, etc.
+	// -----------------------------------------------------
+	if (Slot->ActorClass)
+	{
+		Spawned = World->SpawnActor<AActor>(Slot->ActorClass, SpawnLoc, SpawnRot, SpawnParams);
+	}
 
-    // -----------------------------------------------------
-    // PRIORITY 2: Decoration via Static Mesh
-    // -----------------------------------------------------
-    if (!Spawned)
-    {
-        if (UStaticMesh* StaticMesh = Cast<UStaticMesh>(Slot->DecorationAsset))
-        {
-            AStaticMeshActor* MeshActor =
-                World->SpawnActor<AStaticMeshActor>(SpawnLoc, SpawnRot, SpawnParams);
+	// -----------------------------------------------------
+	// PRIORITY 2: Decoration via Static Mesh
+	// -----------------------------------------------------
+	if (Spawned == nullptr)
+	{
+		if (UStaticMesh* StaticMesh = Cast<UStaticMesh>(Slot->DecorationAsset))
+		{
+			AStaticMeshActor* const MeshActor = World->SpawnActor<AStaticMeshActor>(SpawnLoc, SpawnRot, SpawnParams);
 
-            if (MeshActor)
-            {
-                MeshActor->GetStaticMeshComponent()->SetStaticMesh(StaticMesh);
-                Spawned = MeshActor;
-            }
-        }
-    }
+			if (MeshActor != nullptr)
+			{
+				MeshActor->GetStaticMeshComponent()->SetStaticMesh(StaticMesh);
+				Spawned = MeshActor;
+			}
+		}
+	}
 
-    // -----------------------------------------------------
-    // PRIORITY 3: Decoration via Skeletal Mesh
-    // -----------------------------------------------------
-    if (!Spawned)
-    {
-        if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(Slot->DecorationAsset))
-        {
-            ASkeletalMeshActor* SkelActor =
-                World->SpawnActor<ASkeletalMeshActor>(SpawnLoc, SpawnRot, SpawnParams);
+	// -----------------------------------------------------
+	// PRIORITY 3: Decoration via Skeletal Mesh
+	// -----------------------------------------------------
+	if (Spawned == nullptr)
+	{
+		if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(Slot->DecorationAsset))
+		{
+			ASkeletalMeshActor* const SkelActor = World->SpawnActor<ASkeletalMeshActor>(SpawnLoc, SpawnRot, SpawnParams);
 
-            if (SkelActor)
-            {
-                SkelActor->GetSkeletalMeshComponent()->SetSkeletalMesh(SkelMesh);
-                SkelActor->GetSkeletalMeshComponent()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-                Spawned = SkelActor;
-            }
-        }
-    }
+			if (SkelActor != nullptr)
+			{
+				SkelActor->GetSkeletalMeshComponent()->SetSkeletalMesh(SkelMesh);
+				SkelActor->GetSkeletalMeshComponent()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+				Spawned = SkelActor;
+			}
+		}
+	}
 
-    // -----------------------------------------------------
-    // Nothing spawned — invalid slot
-    // -----------------------------------------------------
-    if (!Spawned)
-        return;
+	// -----------------------------------------------------
+	// Nothing spawned — invalid slot
+	// -----------------------------------------------------
+	if (Spawned == nullptr)
+	{
+		return;
+	}
 
-    // -----------------------------------------------------
-    // Apply ground-adjusted location
-    // -----------------------------------------------------
-    // Final position correction for characters
-    if (ACharacter* Character = Cast<ACharacter>(Spawned))
-    {
-        UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
-        if (Capsule)
-        {
-            float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
-            FVector CorrectedLoc = SpawnLoc;
-            CorrectedLoc.Z += HalfHeight;   // Raise character so feet match ground
-            Spawned->SetActorLocation(CorrectedLoc);
-        }
-    }
-    else
-    {
-        // Non-character actors stay as-is
-        Spawned->SetActorLocation(SpawnLoc);
-    }
+	// -----------------------------------------------------
+	// Apply ground-adjusted location
+	// -----------------------------------------------------
+	// Final position correction for characters
+	if (ACharacter* Character = Cast<ACharacter>(Spawned))
+	{
+		UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+		if (Capsule != nullptr)
+		{
+			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+			FVector CorrectedLoc = SpawnLoc;
+			CorrectedLoc.Z += HalfHeight;	  // Raise character so feet match ground
+			Spawned->SetActorLocation(CorrectedLoc);
+		}
+	}
+	else
+	{
+		// Non-character actors stay as-is
+		Spawned->SetActorLocation(SpawnLoc);
+	}
 
-    // -----------------------------------------------------
-    // Attach to FacilityGroup
-    // -----------------------------------------------------
-    Spawned->AttachToComponent(
-        RootComponent,
-        FAttachmentTransformRules::KeepWorldTransform
-    );
+	// -----------------------------------------------------
+	// Attach to FacilityGroup
+	// -----------------------------------------------------
+	Spawned->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
 
-    // -----------------------------------------------------
-    // Hide / disable if not unlocked yet
-    // -----------------------------------------------------
-    if (Slot->bHideUntilUnlocked)
-    {
-        Spawned->SetActorHiddenInGame(true);
-        Spawned->SetActorEnableCollision(false);
-        Spawned->SetActorTickEnabled(false);
-    }
+	// -----------------------------------------------------
+	// Hide / disable if not unlocked yet
+	// -----------------------------------------------------
+	if (Slot->bHideUntilUnlocked)
+	{
+		Spawned->SetActorHiddenInGame(true);
+		Spawned->SetActorEnableCollision(false);
+		Spawned->SetActorTickEnabled(false);
+	}
 
-    // -----------------------------------------------------
-    // Track spawned actor for enabling/disabling
-    // -----------------------------------------------------
-    SpawnedActors.Add(Spawned);
+	// -----------------------------------------------------
+	// Track spawned actor for enabling/disabling
+	// -----------------------------------------------------
+	SpawnedActors.Add(Spawned);
 }
 
 // ---------------------------------------------------------
@@ -189,12 +183,15 @@ void AFacilityGroup::SpawnFromSlot(UFacilitySlotComponent* Slot)
 // ---------------------------------------------------------
 void AFacilityGroup::SetFacilityEnabled(bool bEnabled)
 {
-    for (AActor* Actor : SpawnedActors)
-    {
-        if (!Actor) continue;
+	for (AActor* Actor : SpawnedActors)
+	{
+		if (Actor == nullptr)
+		{
+			continue;
+		}
 
-        Actor->SetActorHiddenInGame(!bEnabled);
-        Actor->SetActorEnableCollision(bEnabled);
-        Actor->SetActorTickEnabled(bEnabled);
-    }
+		Actor->SetActorHiddenInGame(!bEnabled);
+		Actor->SetActorEnableCollision(bEnabled);
+		Actor->SetActorTickEnabled(bEnabled);
+	}
 }

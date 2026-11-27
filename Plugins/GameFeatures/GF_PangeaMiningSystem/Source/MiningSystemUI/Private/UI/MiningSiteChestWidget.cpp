@@ -1,30 +1,40 @@
 #include "UI/MiningSiteChestWidget.h"
 
-#include "Actors/MiningSiteChestActor.h"
-#include "Components/ACFStorageComponent.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Blueprint/WidgetTree.h"
-#include "UI/MiningUIPresentation.h"
 #include "GameFramework/PlayerController.h"
+
+#include "Actors/MiningSiteChestActor.h"
+#include "Components/ACFStorageComponent.h"
 #include "Items/ACFItem.h"
+#include "UI/MiningUIPresentation.h"
 
 void UMiningSiteChestWidget::InitializeFromChest(AMiningSiteChestActor* InChestActor, APawn* InInteractingPawn)
 {
 	ChestActor = InChestActor;
 	InteractingPawn = InInteractingPawn;
-    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
-    {
-        Page->OnActivated().RemoveAll(this);
-        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(ChestActor)) { FMiningUIPresentation::Close(this); return; }  RefreshUI(); });
 
-        Page->OnDeactivated().RemoveAll(this);
-        Page->OnDeactivated().AddWeakLambda(this, [this]()
-        {
-        });
-    }
+	if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+	{
+		Page->OnActivated().RemoveAll(this);
+		Page->OnActivated().AddWeakLambda(this,
+			[this]()
+		{
+			if (!IsValid(ChestActor))
+			{
+				FMiningUIPresentation::Close(this);
+				return;
+			}
+
+			RefreshUI();
+		});
+
+		Page->OnDeactivated().RemoveAll(this);
+		Page->OnDeactivated().AddWeakLambda(this, [this]() {});
+	}
 
 	RefreshUI();
 }
@@ -38,7 +48,7 @@ void UMiningSiteChestWidget::NativeOnInitialized()
 
 void UMiningSiteChestWidget::BuildWidgetTree()
 {
-	if (!WidgetTree || RootBox)
+	if (WidgetTree == nullptr || RootBox != nullptr)
 	{
 		return;
 	}
@@ -57,13 +67,15 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 		{
 			Slot->SetPadding(FMargin(8.0f));
 		}
+
 		return TextBlock;
 	};
 
-	auto AddButton = [this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
+	auto AddButton =
+		[this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
 	{
 		OutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), ButtonName);
-        FMiningUIPresentation::Button(OutButton);
+		FMiningUIPresentation::Button(OutButton);
 		OutText = FMiningUIPresentation::Text(WidgetTree, TextName);
 		OutText->SetText(Label);
 		OutText->SetJustification(ETextJustify::Center);
@@ -80,12 +92,12 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 	AddButton(TEXT("WithdrawAllButton"), TEXT("WithdrawAllButtonText"), FText::FromString(TEXT("Withdraw All")), WithdrawAllButton, WithdrawAllButtonText);
 	AddButton(TEXT("CloseButton"), TEXT("CloseButtonText"), FText::FromString(TEXT("Close")), CloseButton, CloseButtonText);
 
-	if (WithdrawAllButton)
+	if (WithdrawAllButton != nullptr)
 	{
 		WithdrawAllButton->OnClicked.AddDynamic(this, &ThisClass::OnWithdrawAllClicked);
 	}
 
-	if (CloseButton)
+	if (CloseButton != nullptr)
 	{
 		CloseButton->OnClicked.AddDynamic(this, &ThisClass::OnCloseClicked);
 	}
@@ -93,7 +105,7 @@ void UMiningSiteChestWidget::BuildWidgetTree()
 
 void UMiningSiteChestWidget::RefreshUI()
 {
-	if (!TitleText || !StatusText)
+	if (TitleText == nullptr || StatusText == nullptr)
 	{
 		return;
 	}
@@ -104,7 +116,7 @@ void UMiningSiteChestWidget::RefreshUI()
 
 FText UMiningSiteChestWidget::BuildStatusText() const
 {
-	if (!IsValid(ChestActor) || !ChestActor->StorageComponent)
+	if (!IsValid(ChestActor) || ChestActor->StorageComponent == nullptr)
 	{
 		return FText::FromString(TEXT("No chest storage."));
 	}
@@ -117,9 +129,11 @@ FText UMiningSiteChestWidget::BuildStatusText() const
 
 	TArray<FString> Parts;
 	Parts.Reserve(Items.Num());
+
 	for (const FInventoryItem& Item : Items)
 	{
 		FString ItemName = Item.ItemClass ? Item.ItemClass->GetName() : TEXT("Unknown");
+
 		if (Item.ItemClass)
 		{
 			if (const UACFItem* DefaultItem = Item.ItemClass->GetDefaultObject<UACFItem>())

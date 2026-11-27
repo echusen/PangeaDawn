@@ -6,15 +6,16 @@
 #include "GameplayTagContainer.h"
 #include "FacilityGroup.generated.h"
 
-
 class UFacilitySlotComponent;
 
-
+/**
+ * Actor that groups the slots of one facility (for example a blacksmith) under a single gameplay tag.
+ * It spawns an actor for each slot at BeginPlay, so the facility manager can show or hide the whole facility at once.
+ */
 UCLASS()
 class PANGEABASEUPGRADESYSTEM_API AFacilityGroup : public AActor
 {
 	GENERATED_BODY()
-
 
 public:
 	AFacilityGroup();
@@ -22,17 +23,19 @@ public:
 	virtual void BeginPlay() override;
 
 	/* The gameplay tag for this entire facility (e.g. Test.Village.Blacksmith) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Facility")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Facility")
 	FGameplayTag FacilityTag;
 
 	/* Called by FacilityManager to enable/disable all spawned actors */
 	void SetFacilityEnabled(bool bEnabled);
 
 	/* Accessor for FacilityManager */
-	const FGameplayTag& GetFacilityTag() const { return FacilityTag; }
+	const FGameplayTag& GetFacilityTag() const
+	{
+		return FacilityTag;
+	}
 
 protected:
-
 	/* Spawn actors for all slot components */
 	void SpawnAllSlots();
 

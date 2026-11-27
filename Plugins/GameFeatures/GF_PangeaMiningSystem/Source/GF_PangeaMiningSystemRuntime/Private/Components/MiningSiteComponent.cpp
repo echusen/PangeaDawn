@@ -16,6 +16,7 @@ UMiningSiteComponent::UMiningSiteComponent()
 void UMiningSiteComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
 	if (IsTimingReady() && !bTimingOperationInProgress && !bUpgradeInProgress)
 	{
 		TGuardValue<bool> Guard(bTimingOperationInProgress, true);
@@ -44,6 +45,7 @@ int32 UMiningSiteComponent::GetStorageCapacity() const
 int32 UMiningSiteComponent::GetStoredUnits() const
 {
 	int64 StoredUnits = 0;
+
 	for (const FMiningStoredItem& Item : StoredItems)
 	{
 		StoredUnits += FMath::Max(0, Item.Quantity);
@@ -60,12 +62,15 @@ int32 UMiningSiteComponent::GetAvailableStorage() const
 int32 UMiningSiteComponent::GetStoredQuantity(const FMiningItemQuantity& Item) const
 {
 	int64 Quantity = 0;
+
 	for (const FMiningStoredItem& StoredItem : StoredItems)
 	{
-		if ((Item.ItemClass && StoredItem.ItemClass == Item.ItemClass) ||
-			(!Item.ItemClass && Item.ItemTag.IsValid() && StoredItem.ItemTag == Item.ItemTag))
+		if ((Item.ItemClass && StoredItem.ItemClass == Item.ItemClass) || (!Item.ItemClass && Item.ItemTag.IsValid() && StoredItem.ItemTag == Item.ItemTag))
+		{
 			Quantity += FMath::Max(0, StoredItem.Quantity);
+		}
 	}
+
 	return static_cast<int32>(FMath::Min(Quantity, int64(MAX_int32)));
 }
 
@@ -77,12 +82,12 @@ float UMiningSiteComponent::GetManualMiningSpeedMultiplier() const
 
 bool UMiningSiteComponent::GetCurrentLevelDefinition(FMiningSiteLevelDefinition& OutDefinition) const
 {
-	return SiteDefinition ? SiteDefinition->GetLevelDefinition(CurrentLevel, OutDefinition) : false;
+	return SiteDefinition != nullptr ? SiteDefinition->GetLevelDefinition(CurrentLevel, OutDefinition) : false;
 }
 
 bool UMiningSiteComponent::GetNextLevelDefinition(FMiningSiteLevelDefinition& OutDefinition) const
 {
-	return SiteDefinition && CurrentLevel < MAX_int32 ? SiteDefinition->GetLevelDefinition(CurrentLevel + 1, OutDefinition) : false;
+	return SiteDefinition != nullptr && CurrentLevel < MAX_int32 ? SiteDefinition->GetLevelDefinition(CurrentLevel + 1, OutDefinition) : false;
 }
 
 void UMiningSiteComponent::GetNextUpgradeCost(TArray<FMiningItemQuantity>& OutCost) const
@@ -90,6 +95,7 @@ void UMiningSiteComponent::GetNextUpgradeCost(TArray<FMiningItemQuantity>& OutCo
 	OutCost.Reset();
 
 	FMiningSiteLevelDefinition NextLevel;
+
 	if (GetNextLevelDefinition(NextLevel))
 	{
 		OutCost = NextLevel.UpgradeCost;
@@ -98,8 +104,8 @@ void UMiningSiteComponent::GetNextUpgradeCost(TArray<FMiningItemQuantity>& OutCo
 
 bool UMiningSiteComponent::HasAuthority() const
 {
-	const AActor* Owner = GetOwner();
-	return Owner && Owner->HasAuthority();
+	const AActor* const Owner = GetOwner();
+	return Owner != nullptr && Owner->HasAuthority();
 }
 
 int32 UMiningSiteComponent::FindStoredItemIndex(const FMiningItemQuantity& Item) const
@@ -120,7 +126,7 @@ int32 UMiningSiteComponent::FindStoredItemIndex(const FMiningItemQuantity& Item)
 
 bool UMiningSiteComponent::CanStoreItem(const FMiningItemQuantity& Item) const
 {
-	if (!SiteDefinition || !Item.ItemTag.IsValid() || SiteDefinition->AllowedStorageItemTags.IsEmpty())
+	if (SiteDefinition == nullptr || !Item.ItemTag.IsValid() || SiteDefinition->AllowedStorageItemTags.IsEmpty())
 	{
 		return true;
 	}
@@ -138,8 +144,8 @@ bool UMiningSiteComponent::CanStoreItem(const FMiningItemQuantity& Item) const
 
 double UMiningSiteComponent::GetWorldSeconds() const
 {
-	const UWorld* World = GetWorld();
-	return World ? World->GetTimeSeconds() : 0.0;
+	const UWorld* const World = GetWorld();
+	return World != nullptr ? World->GetTimeSeconds() : 0.0;
 }
 
 void UMiningSiteComponent::HandleLinkedStorageChanged()

@@ -1,26 +1,26 @@
 #include "Components/MiningSitePresentationCoordinatorComponent.h"
 
-#include "Actors/MiningSiteActor.h"
 #include "AIController.h"
-#include "Components/ACFInteractionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+
+#include "Actors/MiningSiteActor.h"
+#include "Components/ACFInteractionComponent.h"
 #include "Runtime/MiningPresentationActorRetirement.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningPresentationActorSync, Log, All);
 
-namespace
+namespace MiningPresentationActorSyncHelpers
 {
-	static FName GetMiningSiteTag(const AMiningSiteActor& SiteActor)
-	{
-		return FName(*FString::Printf(TEXT("Mining.Site.%s"), *SiteActor.GetName()));
-	}
+static FName GetMiningSiteTag(const AMiningSiteActor& SiteActor)
+{
+	return FName(*FString::Printf(TEXT("Mining.Site.%s"), *SiteActor.GetName()));
 }
+} // namespace MiningPresentationActorSyncHelpers
 
-void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
-	AMiningSiteActor& SiteActor,
+void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(AMiningSiteActor& SiteActor,
 	TArray<TObjectPtr<AActor>>& ActorArray,
 	TSoftClassPtr<AActor> ActorClass,
 	int32 DesiredCount,
@@ -49,8 +49,8 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 		return;
 	}
 
-	UClass* LoadedClass = ActorClass.LoadSynchronous();
-	if (!LoadedClass)
+	UClass* const LoadedClass = ActorClass.LoadSynchronous();
+	if (LoadedClass == nullptr)
 	{
 		return;
 	}
@@ -61,18 +61,23 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 		const float AngleStep = DesiredCount > 1 ? 40.0f : 0.0f;
 		const FVector SpawnLocation = GetPresentationSlotLocation(SiteActor, Radius, AngleOffsetDegrees + (SpawnIndex * AngleStep));
 
-		AActor* SpawnedActor = SpawnConfiguredPresentationActor(SiteActor, LoadedClass, SpawnLocation);
-		if (!SpawnedActor)
+		AActor* const SpawnedActor = SpawnConfiguredPresentationActor(SiteActor, LoadedClass, SpawnLocation);
+		if (SpawnedActor == nullptr)
 		{
 			break;
 		}
 
-		const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+		const UMiningSitePresentationConfig* const Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
 		TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents;
-		if (!Config || !Config->bUseACFRoutineJobs) SpawnedActor->GetComponents(PrimitiveComponents);
+
+		if (Config == nullptr || !Config->bUseACFRoutineJobs)
+		{
+			SpawnedActor->GetComponents(PrimitiveComponents);
+		}
+
 		for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 		{
-			if (!PrimitiveComponent)
+			if (PrimitiveComponent == nullptr)
 			{
 				continue;
 			}
@@ -100,19 +105,28 @@ void UMiningSitePresentationCoordinatorComponent::SyncPresentationActorsForRole(
 		if (APawn* SpawnedPawn = Cast<APawn>(SpawnedActor))
 		{
 			SpawnedPawn->SpawnDefaultController();
-			UE_LOG(LogPangeaMiningPresentationActorSync, Log, TEXT("Spawned mining pawn controller sync. Site=%s Pawn=%s Controller=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(SpawnedPawn), *GetNameSafe(SpawnedPawn->GetController()));
+			UE_LOG(LogPangeaMiningPresentationActorSync,
+				Log,
+				TEXT("Spawned mining pawn controller sync. Site=%s Pawn=%s Controller=%s"),
+				*GetNameSafe(&SiteActor),
+				*GetNameSafe(SpawnedPawn),
+				*GetNameSafe(SpawnedPawn->GetController()));
 		}
 
 		PresentationRoutePhaseMap.Add(SpawnedActor, (SpawnIndex % 2) == 1);
 		PresentationTargetHoldStartedMap.Add(SpawnedActor, false);
 		ApplyAgentPresentation(SpawnedActor, Role, EMiningPresentationState::Idle);
 		ActorArray.Add(SpawnedActor);
-		UE_LOG(LogPangeaMiningPresentationActorSync, Log, TEXT("Spawned mining presentation actor. Site=%s Actor=%s Class=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(SpawnedActor), *GetNameSafe(LoadedClass));
+		UE_LOG(LogPangeaMiningPresentationActorSync,
+			Log,
+			TEXT("Spawned mining presentation actor. Site=%s Actor=%s Class=%s"),
+			*GetNameSafe(&SiteActor),
+			*GetNameSafe(SpawnedActor),
+			*GetNameSafe(LoadedClass));
 	}
 }
 
-void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
-	AMiningSiteActor& SiteActor,
+void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(AMiningSiteActor& SiteActor,
 	TObjectPtr<AActor>& SpawnedCourierActor,
 	TSoftClassPtr<AActor> ActorClass,
 	bool bShouldExist,
@@ -121,7 +135,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 {
 	if (!bShouldExist)
 	{
-		if (SpawnedCourierActor)
+		if (SpawnedCourierActor != nullptr)
 		{
 			ReleaseRoutineAssignment(SpawnedCourierActor);
 			ReleaseSmartObjectForActor(SpawnedCourierActor);
@@ -134,30 +148,37 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 			PangeaMiningPrivate::RetirePresentationActor(SpawnedCourierActor);
 			SpawnedCourierActor = nullptr;
 		}
+
 		return;
 	}
 
-	if (SpawnedCourierActor)
+	if (SpawnedCourierActor != nullptr)
 	{
 		return;
 	}
 
-	UClass* LoadedClass = ActorClass.LoadSynchronous();
-	if (!LoadedClass)
+	UClass* const LoadedClass = ActorClass.LoadSynchronous();
+	if (LoadedClass == nullptr)
 	{
 		return;
 	}
 
 	AActor* AdoptedCourierActor = nullptr;
 	TArray<AActor*> DuplicateCourierActors;
-	const FName SiteTag = GetMiningSiteTag(SiteActor);
+	const FName SiteTag = MiningPresentationActorSyncHelpers::GetMiningSiteTag(SiteActor);
+
 	for (TActorIterator<AActor> It(SiteActor.GetWorld(), LoadedClass); It; ++It)
 	{
-		AActor* Candidate = *It;
-		const UMiningSitePresentationConfig* CurrentConfig = GetPresentationConfig(SiteActor.MiningSiteComponent);
+		AActor* const Candidate = *It;
+		const UMiningSitePresentationConfig* const CurrentConfig = GetPresentationConfig(SiteActor.MiningSiteComponent);
+
 		// Hybrid actors are site-owned. Never adopt/destroy another site's courier.
-		if (CurrentConfig && CurrentConfig->bUseACFRoutineJobs) continue;
-		if (!Candidate || Candidate->IsPendingKillPending())
+		if (CurrentConfig != nullptr && CurrentConfig->bUseACFRoutineJobs)
+		{
+			continue;
+		}
+
+		if (Candidate == nullptr || Candidate->IsPendingKillPending())
 		{
 			continue;
 		}
@@ -170,7 +191,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 			continue;
 		}
 
-		if (!AdoptedCourierActor)
+		if (AdoptedCourierActor == nullptr)
 		{
 			AdoptedCourierActor = Candidate;
 		}
@@ -193,7 +214,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 		PangeaMiningPrivate::RetirePresentationActor(DuplicateCourier);
 	}
 
-	if (AdoptedCourierActor)
+	if (AdoptedCourierActor != nullptr)
 	{
 		SpawnedCourierActor = AdoptedCourierActor;
 		SpawnedCourierActor->SetOwner(&SiteActor);
@@ -211,6 +232,7 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 		{
 			PresentationRoutePhaseMap.Add(SpawnedCourierActor, false);
 		}
+
 		if (!PresentationTargetHoldStartedMap.Contains(SpawnedCourierActor))
 		{
 			PresentationTargetHoldStartedMap.Add(SpawnedCourierActor, false);
@@ -221,17 +243,22 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 	}
 
 	SpawnedCourierActor = SpawnConfiguredPresentationActor(SiteActor, LoadedClass, GetPresentationSlotLocation(SiteActor, Distance, AngleOffsetDegrees));
-	if (!SpawnedCourierActor)
+	if (SpawnedCourierActor == nullptr)
 	{
 		return;
 	}
 
-	const UMiningSitePresentationConfig* Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
+	const UMiningSitePresentationConfig* const Config = GetPresentationConfig(SiteActor.MiningSiteComponent);
 	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents;
-	if (!Config || !Config->bUseACFRoutineJobs) SpawnedCourierActor->GetComponents(PrimitiveComponents);
+
+	if (Config == nullptr || !Config->bUseACFRoutineJobs)
+	{
+		SpawnedCourierActor->GetComponents(PrimitiveComponents);
+	}
+
 	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
 	{
-		if (!PrimitiveComponent)
+		if (PrimitiveComponent == nullptr)
 		{
 			continue;
 		}
@@ -259,11 +286,21 @@ void UMiningSitePresentationCoordinatorComponent::SyncCourierPresentationActor(
 	if (APawn* SpawnedPawn = Cast<APawn>(SpawnedCourierActor))
 	{
 		SpawnedPawn->SpawnDefaultController();
-		UE_LOG(LogPangeaMiningPresentationActorSync, Log, TEXT("Spawned mining courier controller sync. Site=%s Pawn=%s Controller=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(SpawnedPawn), *GetNameSafe(SpawnedPawn->GetController()));
+		UE_LOG(LogPangeaMiningPresentationActorSync,
+			Log,
+			TEXT("Spawned mining courier controller sync. Site=%s Pawn=%s Controller=%s"),
+			*GetNameSafe(&SiteActor),
+			*GetNameSafe(SpawnedPawn),
+			*GetNameSafe(SpawnedPawn->GetController()));
 	}
 
 	PresentationRoutePhaseMap.Add(SpawnedCourierActor, false);
 	PresentationTargetHoldStartedMap.Add(SpawnedCourierActor, false);
 	ApplyAgentPresentation(SpawnedCourierActor, EMiningPresentationRole::Courier, EMiningPresentationState::Idle);
-	UE_LOG(LogPangeaMiningPresentationActorSync, Log, TEXT("Spawned mining courier presentation actor. Site=%s Actor=%s Class=%s"), *GetNameSafe(&SiteActor), *GetNameSafe(SpawnedCourierActor), *GetNameSafe(LoadedClass));
+	UE_LOG(LogPangeaMiningPresentationActorSync,
+		Log,
+		TEXT("Spawned mining courier presentation actor. Site=%s Actor=%s Class=%s"),
+		*GetNameSafe(&SiteActor),
+		*GetNameSafe(SpawnedCourierActor),
+		*GetNameSafe(LoadedClass));
 }

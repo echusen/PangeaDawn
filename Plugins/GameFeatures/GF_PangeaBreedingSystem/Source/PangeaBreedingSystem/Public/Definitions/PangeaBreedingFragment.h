@@ -9,69 +9,88 @@
 
 class AActor;
 class APangeaEggActor;
-class UPangeaGeneticStrategy;
-class UPangeaCreatureDefinition;
 class UGameplayEffect;
+class UPangeaCreatureDefinition;
+class UPangeaGeneticStrategy;
 
+/** Which ARS stat family an inherited stat tag belongs to. Decides how the value is read from a parent and applied to the offspring. */
 UENUM(BlueprintType)
 enum class EPangeaInheritedStatType : uint8
 {
-	Statistic UMETA(DisplayName="Statistic"),
-	PrimaryAttribute UMETA(DisplayName="Primary Attribute"),
-	Attribute UMETA(DisplayName="Attribute")
+	/** ARS statistic. The parent's maximum value of the statistic is inherited. */
+	Statistic UMETA(DisplayName = "Statistic"),
+	/** ARS primary attribute, applied to the offspring as a primary attribute modifier. */
+	PrimaryAttribute UMETA(DisplayName = "Primary Attribute"),
+	/** ARS (secondary) attribute, applied to the offspring as an attribute modifier. */
+	Attribute UMETA(DisplayName = "Attribute")
 };
 
+/** Designer rule describing how one stat is passed from two parents to their offspring when an egg is initialized. */
 USTRUCT(BlueprintType)
 struct FPangeaInheritedStatRule
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Set-by-caller tag of the stat to inherit. Rules with an invalid tag are skipped. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	FGameplayTag StatTag;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Stat family StatTag belongs to. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	EPangeaInheritedStatType StatType = EPangeaInheritedStatType::Statistic;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats", meta=(ClampMin="0.0", ClampMax="1.0"))
+	/** Blend between the parents' average (0) and the better parent's value (1). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BestParentBias = 0.65f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats", meta=(ClampMin="0.0", ClampMax="1.0"))
+	/** Probability that the inherited value is mutated by a random percentage. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MutationChance = 0.15f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Lower bound of the random mutation, as a fraction of the inherited value. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	float MutationPercentMin = -0.05f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Upper bound of the random mutation, as a fraction of the inherited value. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	float MutationPercentMax = 0.08f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Lower limit of the final value. Used with MaxValue as a range when MaxValue is greater, otherwise as a floor when above zero. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	float MinValue = 0.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Upper limit of the final value. Only applied when greater than MinValue. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	float MaxValue = 0.f;
 };
 
+/** One generated stat value of an offspring, stored so it is rolled once and survives save/load. */
 USTRUCT(BlueprintType)
 struct FPangeaInheritedStatValue
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
+	/** Set-by-caller tag of the inherited stat. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Breeding|Stats")
 	FGameplayTag StatTag;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
+	/** Stat family StatTag belongs to. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Breeding|Stats")
 	EPangeaInheritedStatType StatType = EPangeaInheritedStatType::Statistic;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
+	/** Value generated for the offspring from its parents. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Breeding|Stats")
 	float Value = 0.f;
 };
 
+/** Full set of inherited stat values generated for one offspring. Cached on the egg and kept by the hatched creature. */
 USTRUCT(BlueprintType)
 struct FPangeaInheritedStatProfile
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Breeding|Stats")
+	/** One entry per valid inheritance rule of the breeding fragment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Breeding|Stats")
 	TArray<FPangeaInheritedStatValue> Values;
 
 	bool IsEmpty() const
@@ -80,78 +99,103 @@ struct FPangeaInheritedStatProfile
 	}
 };
 
+/** Named group of vector (color) material parameters that are inherited from the parents. */
 USTRUCT(BlueprintType)
 struct FMaterialColorGeneticGroup
 {
 	GENERATED_BODY()
 
+	/** Name identifying this group of parameters. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName GroupName;
 
+	/** Vector material parameters read from each parent and blended for the offspring. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FName> ParameterNames;
 };
 
+/** Named group of scalar material parameters that are inherited from the parents. */
 USTRUCT(BlueprintType)
 struct FMaterialScalarGeneticGroup
 {
 	GENERATED_BODY()
 
+	/** Name identifying this group of parameters. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName GroupName;
 
+	/** Scalar material parameters read from each parent and blended for the offspring. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FName> ParameterNames;
 };
 
+/** Creature definition fragment holding the per-species breeding configuration: egg, offspring, incubation, fertility, stat and appearance inheritance. */
 UCLASS(BlueprintType, EditInlineNew)
 class PANGEABREEDINGSYSTEM_API UPangeaBreedingFragment : public UPangeaDefinitionFragment
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Egg")
+	/** Egg actor spawned when this species breeds. The farm's default egg class is used when unset. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Egg")
 	TSubclassOf<APangeaEggActor> EggActorClass;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Egg")
+	/** Definition given to the hatched creature. The parents' definition is used when unset. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Egg")
 	TObjectPtr<UPangeaCreatureDefinition> OffspringCreatureDefinition;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Genetics")
+	/** Strategy class that combines the parents' genetic traits. The farm's strategy is used when unset. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Genetics")
 	TSubclassOf<UPangeaGeneticStrategy> GeneticStrategyClass;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Gameplay effect that applies the inherited stat profile to the offspring. Must have an Infinite duration. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	TSubclassOf<UGameplayEffect> InheritedStatsGameplayEffect;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Stats")
+	/** Stats passed from the parents to the offspring and how each one is blended and mutated. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Stats")
 	TArray<FPangeaInheritedStatRule> InheritedStatRules;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding")
+	/** Incubation timing of eggs of this species. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding")
 	FIncubationConfig Incubation;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding")
+	/** Fertility cooldown applied to the parents after a successful breeding. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding")
 	FFertilityConfig Fertility;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Appearance")
+	/** Whether offspring inherit blended material parameters from their parents. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Appearance")
 	bool bInheritParentMaterials = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Appearance")
+	/** Skeletal mesh material slot the inherited parameters are read from and written to. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Appearance")
 	int32 InheritanceMaterialSlot = 1;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Breeding|Appearance")
+	/** Probability that a blended color or scalar receives a random mutation. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Breeding|Appearance")
 	float VisualMutationChance = 0.25f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Breeding|Appearance")
+	/** Exponent applied to the random blend factor between the two parents' values. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Breeding|Appearance")
 	float ParentBiasPower = 0.8f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Breeding|Appearance")
+	/** Upper bound of the strength of a visual mutation. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Breeding|Appearance")
 	float VisualMutationIntensity = 0.1f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Appearance")
+	/** Color parameter groups inherited by the offspring. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Appearance")
 	TArray<FMaterialColorGeneticGroup> MaterialColorGroups;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Appearance")
+	/** Scalar parameter groups inherited by the offspring. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breeding|Appearance")
 	TArray<FMaterialScalarGeneticGroup> MaterialScalarGroups;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Breeding|Appearance", meta=(DeprecatedProperty, DeprecationMessage="Use MaterialColorGroups instead."))
+	/** Legacy color groups, only read while MaterialColorGroups is empty. */
+	UPROPERTY(EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Breeding|Appearance",
+		meta = (DeprecatedProperty, DeprecationMessage = "Use MaterialColorGroups instead."))
 	TArray<FMaterialColorGeneticGroup> MaterialGeneticGroups;
 };

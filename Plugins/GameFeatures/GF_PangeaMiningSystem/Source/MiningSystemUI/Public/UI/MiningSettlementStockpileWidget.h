@@ -6,27 +6,35 @@
 
 class AMiningSettlementStockpileActor;
 class APawn;
-class UButton;
 class UACFInventoryComponent;
+class UACFItem;
+class UButton;
 class UTextBlock;
 class UVerticalBox;
+struct FInventoryItem;
 
+/**
+ * Settlement stockpile menu. Lists the interacting pawn's inventory next to the stockpile's storage
+ * and forwards deposit and withdraw requests to the stockpile actor.
+ */
 UCLASS()
 class MININGSYSTEMUI_API UMiningSettlementStockpileWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category="Mining")
+	/** Binds the menu to a stockpile and the pawn using it, then refreshes the lists. */
+	UFUNCTION(BlueprintCallable, Category = "Mining")
 	void InitializeFromStockpile(AMiningSettlementStockpileActor* InStockpileActor, APawn* InInteractingPawn);
 
-	void HandleTransferRequest(TSubclassOf<class UACFItem> ItemClass, int32 Count, bool bFromPlayerInventory);
+	/** Called by a row: asks the stockpile actor to move Count of ItemClass to or from the interacting pawn, then refreshes. */
+	void HandleTransferRequest(TSubclassOf<UACFItem> ItemClass, int32 Count, bool bFromPlayerInventory);
 
 protected:
 	virtual void NativeOnInitialized() override;
 
 private:
-	void RebuildSection(UVerticalBox* Container, const TArray<struct FInventoryItem>& Items, bool bFromPlayerInventory);
+	void RebuildSection(UVerticalBox* Container, const TArray<FInventoryItem>& Items, bool bFromPlayerInventory);
 	void BuildWidgetTree();
 	void RefreshUI();
 	void CloseMenu();

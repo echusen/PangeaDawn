@@ -9,31 +9,32 @@
 class UBoxComponent;
 class UPangeaBreedingFarmComponent;
 
+/** Placeable breeding farm: a box zone that detects creatures plus the farm component that runs the breeding logic for them. */
 UCLASS()
 class PANGEABREEDINGSYSTEM_API APangeaBreedingFarmActor : public AActor
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    // Sets default values for this actor's properties
-    APangeaBreedingFarmActor();
+	// Sets default values for this actor's properties
+	APangeaBreedingFarmActor();
 
-    /** Root scene to move the farm in the editor */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    TObjectPtr<USceneComponent> Root;
+	/** Root scene to move the farm in the editor */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent> Root;
 
-    /** Editable collision box to define the breeding zone */
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-    TObjectPtr<UBoxComponent> BreedingZone;
+	/** Editable collision box to define the breeding zone */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	TObjectPtr<UBoxComponent> BreedingZone;
 
-    /** The logic component that manages breeding */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    TObjectPtr<UPangeaBreedingFarmComponent> FarmLogic;
+	/** The logic component that manages breeding */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UPangeaBreedingFarmComponent> FarmLogic;
 
-    /** Visual debug color for the zone (optional) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visualization")
-    FColor ZoneColor = FColor(0, 255, 255, 64);
+	/** Visual debug color for the zone (optional) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+	FColor ZoneColor = FColor(0, 255, 255, 64);
 
 protected:
-    virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 };

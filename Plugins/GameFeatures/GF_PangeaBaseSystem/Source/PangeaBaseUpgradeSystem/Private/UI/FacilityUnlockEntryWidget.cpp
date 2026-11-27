@@ -1,6 +1,5 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "UI/FacilityUnlockEntryWidget.h"
 
 #include "Components/TextBlock.h"
@@ -9,7 +8,7 @@ void UFacilityUnlockEntryWidget::InitFromFacilityTag(FGameplayTag InTag)
 {
 	FacilityTag = InTag;
 
-	if (FacilityNameText)
+	if (FacilityNameText != nullptr)
 	{
 		FacilityNameText->SetText(FText::FromString(FacilityTag.ToString()));
 	}
@@ -19,7 +18,7 @@ void UFacilityUnlockEntryWidget::InitFromFacilityDisplayName(FGameplayTag InTag,
 {
 	FacilityTag = InTag;
 
-	if (FacilityNameText)
+	if (FacilityNameText != nullptr)
 	{
 		FacilityNameText->SetText(DisplayName);
 	}

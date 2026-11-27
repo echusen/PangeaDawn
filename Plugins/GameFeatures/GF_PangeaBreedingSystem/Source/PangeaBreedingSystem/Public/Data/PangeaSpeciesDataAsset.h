@@ -3,48 +3,59 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
+
 #include "Definitions/PangeaBreedingFragment.h"
 #include "Types/BreedingTypes.h"
-#include "Engine/DataAsset.h"
 #include "PangeaSpeciesDataAsset.generated.h"
 
 /**
- * 
+ * Standalone per-species breeding data asset. The breeding C++ in this module reads its configuration
+ * from UPangeaBreedingFragment on the creature definition and does not reference this asset type.
  */
 UCLASS()
 class PANGEABREEDINGSYSTEM_API UPangeaSpeciesDataAsset : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
-	
+
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    FName SpeciesID = NAME_None;
+	/** Identifier of the species this asset describes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName SpeciesID = NAME_None;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    TSubclassOf<AActor> CreatureClass;
+	/** Actor class of creatures of this species. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<AActor> CreatureClass;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    FIncubationConfig Incubation;
+	/** Incubation timing of eggs of this species. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FIncubationConfig Incubation;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    FFertilityConfig Fertility;
+	/** Fertility cooldown settings of this species. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FFertilityConfig Fertility;
 
-    // Whether offspring blend material colors between parents
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Breeding|Appearance")
-    bool bInheritParentMaterials = true;
+	// Whether offspring blend material colors between parents
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Breeding|Appearance")
+	bool bInheritParentMaterials = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Appearance")
-    int32 InheritanceMaterialSlot = 1;
-    
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Appearance")
-    float VisualMutationChance = 0.25f;
+	/** Skeletal mesh material slot that carries the inheritable parameters. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
+	int32 InheritanceMaterialSlot = 1;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Appearance")
-    float ParentBiasPower = 0.8f;
+	/** Probability that an inherited color receives a random mutation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	float VisualMutationChance = 0.25f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Appearance")
-    float VisualMutationIntensity = 0.1f;
+	/** Exponent that biases the blend between the two parents' colors. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	float ParentBiasPower = 0.8f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Breeding|Appearance")
-    TArray<FMaterialColorGeneticGroup> MaterialGeneticGroups;
+	/** Strength of a visual mutation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	float VisualMutationIntensity = 0.1f;
+
+	/** Color parameter groups that offspring inherit from their parents. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Breeding|Appearance")
+	TArray<FMaterialColorGeneticGroup> MaterialGeneticGroups;
 };

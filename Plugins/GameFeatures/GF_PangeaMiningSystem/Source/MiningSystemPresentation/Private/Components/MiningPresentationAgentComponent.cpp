@@ -6,8 +6,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Data/ACFCharacterInitializerComponent.h"
 #include "Net/UnrealNetwork.h"
+
+#include "Data/ACFCharacterInitializerComponent.h"
 
 UMiningPresentationAgentComponent::UMiningPresentationAgentComponent()
 {
@@ -16,8 +17,10 @@ UMiningPresentationAgentComponent::UMiningPresentationAgentComponent()
 	WorkerWorkLoopAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/Yarin/AS_Pangea_MiningStrike.AS_Pangea_MiningStrike")));
 	RetrievalAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/Yarin/AS_Pangea_MinerRetrieve.AS_Pangea_MinerRetrieve")));
 	DepositAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/Yarin/AS_Pangea_MinerDeposit.AS_Pangea_MinerDeposit")));
-	GuardHoldLoopAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/FullSample/Animations/Locomotion/Unarmed/MM_Unarmed_Idle_Ready.MM_Unarmed_Idle_Ready")));
-	CourierInteractionLoopAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/FullSample/Animations/Quaternius/AL_Anim_Rig_PickUp_Table.AL_Anim_Rig_PickUp_Table")));
+	GuardHoldLoopAnimation =
+		TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/FullSample/Animations/Locomotion/Unarmed/MM_Unarmed_Idle_Ready.MM_Unarmed_Idle_Ready")));
+	CourierInteractionLoopAnimation =
+		TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(TEXT("/Game/FullSample/Animations/Quaternius/AL_Anim_Rig_PickUp_Table.AL_Anim_Rig_PickUp_Table")));
 }
 
 void UMiningPresentationAgentComponent::SetTravelSpeedOverride(const EMiningPresentationRole Role, const float TravelSpeed)
@@ -29,17 +32,17 @@ void UMiningPresentationAgentComponent::SetTravelSpeedOverride(const EMiningPres
 
 	switch (Role)
 	{
-	case EMiningPresentationRole::Worker:
-		WorkerTravelSpeed = TravelSpeed;
-		break;
-	case EMiningPresentationRole::Guard:
-		GuardTravelSpeed = TravelSpeed;
-		break;
-	case EMiningPresentationRole::Courier:
-		CourierTravelSpeed = TravelSpeed;
-		break;
-	default:
-		break;
+		case EMiningPresentationRole::Worker:
+			WorkerTravelSpeed = TravelSpeed;
+			break;
+		case EMiningPresentationRole::Guard:
+			GuardTravelSpeed = TravelSpeed;
+			break;
+		case EMiningPresentationRole::Courier:
+			CourierTravelSpeed = TravelSpeed;
+			break;
+		default:
+			break;
 	}
 
 	ApplyMovementForState();
@@ -49,10 +52,12 @@ void UMiningPresentationAgentComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	CacheOwnerReferences();
+
 	if (UACFCharacterInitializerComponent* Initializer = GetOwner()->FindComponentByClass<UACFCharacterInitializerComponent>())
 	{
 		Initializer->OnAppearanceChanged.AddUniqueDynamic(this, &ThisClass::HandleAppearanceChanged);
 	}
+
 	PublishPresentationSnapshot();
 	ApplyMovementForState();
 	ApplyAnimationForState();
@@ -66,12 +71,16 @@ void UMiningPresentationAgentComponent::GetLifetimeReplicatedProps(TArray<FLifet
 
 bool UMiningPresentationAgentComponent::CanAuthorPresentation() const
 {
-	return GetOwner() && GetOwner()->HasAuthority();
+	return GetOwner() != nullptr && GetOwner()->HasAuthority();
 }
 
 void UMiningPresentationAgentComponent::PublishPresentationSnapshot()
 {
-	if (!CanAuthorPresentation()) return;
+	if (!CanAuthorPresentation())
+	{
+		return;
+	}
+
 	PresentationSnapshot.Role = CurrentRole;
 	PresentationSnapshot.State = CurrentState;
 	PresentationSnapshot.FocusLocation = CurrentFocusLocation;
@@ -97,9 +106,14 @@ void UMiningPresentationAgentComponent::HandleAppearanceChanged(UACFCharacterDat
 
 void UMiningPresentationAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (GetOwner())
+	if (GetOwner() != nullptr)
+	{
 		if (UACFCharacterInitializerComponent* Initializer = GetOwner()->FindComponentByClass<UACFCharacterInitializerComponent>())
+		{
 			Initializer->OnAppearanceChanged.RemoveDynamic(this, &ThisClass::HandleAppearanceChanged);
+		}
+	}
+
 	StopPresentationAnimation();
 	CurrentState = EMiningPresentationState::Idle;
 	ApplyMovementForState();
@@ -134,7 +148,11 @@ void UMiningPresentationAgentComponent::SetMiningPresentationState_Implementatio
 
 void UMiningPresentationAgentComponent::SetMiningPresentationFocus_Implementation(const FVector& WorldLocation)
 {
-	if (!CanAuthorPresentation() || WorldLocation.ContainsNaN()) return;
+	if (!CanAuthorPresentation() || WorldLocation.ContainsNaN())
+	{
+		return;
+	}
+
 	if (bHasFocus && CurrentFocusLocation.Equals(WorldLocation, 1.0f))
 	{
 		return;
@@ -147,10 +165,11 @@ void UMiningPresentationAgentComponent::SetMiningPresentationFocus_Implementatio
 
 void UMiningPresentationAgentComponent::CacheOwnerReferences()
 {
-	ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner());
+	ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
 	CachedCharacterOwner = CharacterOwner;
-	CachedMovementComponent = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
-	UAnimInstance* CurrentAnim = (CharacterOwner && CharacterOwner->GetMesh()) ? CharacterOwner->GetMesh()->GetAnimInstance() : nullptr;
+	CachedMovementComponent = CharacterOwner != nullptr ? CharacterOwner->GetCharacterMovement() : nullptr;
+	UAnimInstance* const CurrentAnim =
+		(CharacterOwner != nullptr && CharacterOwner->GetMesh() != nullptr) ? CharacterOwner->GetMesh()->GetAnimInstance() : nullptr;
 	if (CachedAnimInstance.Get() != CurrentAnim)
 	{
 		StopPresentationAnimation(); // Restore only the old instance's owned montage/root-motion override.
@@ -158,6 +177,7 @@ void UMiningPresentationAgentComponent::CacheOwnerReferences()
 		bHasSavedRootMotionMode = false;
 		CachedAnimInstance = CurrentAnim;
 	}
+
 	if (CachedMovementComponent.IsValid() && DefaultMaxWalkSpeed <= 0.0f)
 	{
 		DefaultMaxWalkSpeed = CachedMovementComponent->MaxWalkSpeed;
@@ -166,8 +186,13 @@ void UMiningPresentationAgentComponent::CacheOwnerReferences()
 
 void UMiningPresentationAgentComponent::ApplyMovementForState()
 {
-	if (!CanAuthorPresentation()) return; // Simulated proxies use CharacterMovement replication, never local duty steering.
+	if (!CanAuthorPresentation())
+	{
+		return; // Simulated proxies use CharacterMovement replication, never local duty steering.
+	}
+
 	CacheOwnerReferences();
+
 	if (!CachedMovementComponent.IsValid())
 	{
 		return;
@@ -175,10 +200,15 @@ void UMiningPresentationAgentComponent::ApplyMovementForState()
 
 	if (CurrentState == EMiningPresentationState::Traveling)
 	{
-		if (!bOwnsTravelSpeed) DefaultMaxWalkSpeed = CachedMovementComponent->MaxWalkSpeed;
+		if (!bOwnsTravelSpeed)
+		{
+			DefaultMaxWalkSpeed = CachedMovementComponent->MaxWalkSpeed;
+		}
+
 		AppliedTravelSpeed = GetTravelSpeedForRole();
 		CachedMovementComponent->MaxWalkSpeed = AppliedTravelSpeed;
 		bOwnsTravelSpeed = true;
+
 		return;
 	}
 
@@ -188,13 +218,19 @@ void UMiningPresentationAgentComponent::ApplyMovementForState()
 	{
 		CachedMovementComponent->MaxWalkSpeed = DefaultMaxWalkSpeed;
 	}
+
 	bOwnsTravelSpeed = false;
 }
 
 void UMiningPresentationAgentComponent::ApplyAnimationForState()
 {
-	if (GetNetMode() == NM_DedicatedServer) return;
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
 	CacheOwnerReferences();
+
 	if (!CachedAnimInstance.IsValid())
 	{
 		return;
@@ -203,7 +239,11 @@ void UMiningPresentationAgentComponent::ApplyAnimationForState()
 	float Rate;
 	int32 Loops;
 	TSoftObjectPtr<UAnimSequenceBase> Clip = SelectPresentationAnimation(CurrentState, Rate, Loops);
-	if (!Clip.IsNull() && PlayLoopingPresentationAnimation(Clip, Rate, Loops)) return;
+	if (!Clip.IsNull() && PlayLoopingPresentationAnimation(Clip, Rate, Loops))
+	{
+		return;
+	}
+
 	StopPresentationAnimation();
 }
 
@@ -212,29 +252,47 @@ TSoftObjectPtr<UAnimSequenceBase> UMiningPresentationAgentComponent::SelectPrese
 {
 	OutRate = 1.f;
 	OutLoopCount = 1;
+
 	if (CurrentRole == EMiningPresentationRole::Worker && State == EMiningPresentationState::Working)
 	{
 		OutRate = WorkerWorkLoopPlayRate;
 		OutLoopCount = WorkerWorkLoopCount;
+
 		return WorkerWorkLoopAnimation;
 	}
-	if (CurrentRole == EMiningPresentationRole::Worker && State == EMiningPresentationState::Retrieving) return RetrievalAnimation;
-	if (CurrentRole == EMiningPresentationRole::Worker && State == EMiningPresentationState::Depositing) return DepositAnimation;
+
+	if (CurrentRole == EMiningPresentationRole::Worker && State == EMiningPresentationState::Retrieving)
+	{
+		return RetrievalAnimation;
+	}
+
+	if (CurrentRole == EMiningPresentationRole::Worker && State == EMiningPresentationState::Depositing)
+	{
+		return DepositAnimation;
+	}
+
 	if (CurrentRole == EMiningPresentationRole::Guard && State == EMiningPresentationState::Guarding)
 	{
 		OutRate = GuardHoldLoopPlayRate;
 		OutLoopCount = GuardHoldLoopCount;
+
 		return GuardHoldLoopAnimation;
 	}
-	if (CurrentRole == EMiningPresentationRole::Courier &&
-		(State == EMiningPresentationState::Loading || State == EMiningPresentationState::Unloading))
+
+	if (CurrentRole == EMiningPresentationRole::Courier && (State == EMiningPresentationState::Loading || State == EMiningPresentationState::Unloading))
 	{
 		const TSoftObjectPtr<UAnimSequenceBase> Interaction = State == EMiningPresentationState::Loading ? RetrievalAnimation : DepositAnimation;
-		if (!Interaction.IsNull()) return Interaction;
+		if (!Interaction.IsNull())
+		{
+			return Interaction;
+		}
+
 		OutRate = CourierInteractionLoopPlayRate;
 		OutLoopCount = CourierInteractionLoopCount;
+
 		return CourierInteractionLoopAnimation; // Legacy optional fallback.
 	}
+
 	return {};
 }
 
@@ -242,11 +300,11 @@ float UMiningPresentationAgentComponent::GetMiningPresentationDuration_Implement
 {
 	float Rate;
 	int32 Loops;
-	TSoftObjectPtr<UAnimSequenceBase> Clip = SelectPresentationAnimation(State, Rate, Loops);
-	const UAnimSequenceBase* Animation = Clip.IsNull() ? nullptr : Clip.LoadSynchronous();
-	const float EffectiveRate = Animation ? FMath::Abs(Animation->RateScale * Rate) : 0.f;
-	return Animation && FMath::IsFinite(EffectiveRate) && EffectiveRate > UE_SMALL_NUMBER
-		? Animation->GetPlayLength() / EffectiveRate : 0.f;
+	const TSoftObjectPtr<UAnimSequenceBase> Clip = SelectPresentationAnimation(State, Rate, Loops);
+	const UAnimSequenceBase* const Animation = Clip.IsNull() ? nullptr : Clip.LoadSynchronous();
+	const float EffectiveRate = Animation != nullptr ? FMath::Abs(Animation->RateScale * Rate) : 0.f;
+
+	return Animation != nullptr && FMath::IsFinite(EffectiveRate) && EffectiveRate > UE_SMALL_NUMBER ? Animation->GetPlayLength() / EffectiveRate : 0.f;
 }
 
 bool UMiningPresentationAgentComponent::PlayLoopingPresentationAnimation(TSoftObjectPtr<UAnimSequenceBase>& AnimationAsset, float PlayRate, int32 LoopCount)
@@ -256,21 +314,26 @@ bool UMiningPresentationAgentComponent::PlayLoopingPresentationAnimation(TSoftOb
 		return false;
 	}
 
-	UAnimSequenceBase* Animation = AnimationAsset.LoadSynchronous();
-	if (!Animation)
+	UAnimSequenceBase* const Animation = AnimationAsset.LoadSynchronous();
+	if (Animation == nullptr)
 	{
 		return false;
 	}
 
-	if (ActivePresentationMontage && ActivePresentationAnimation.Get() == Animation && CachedAnimInstance->Montage_IsPlaying(ActivePresentationMontage))
+	if (ActivePresentationMontage != nullptr && ActivePresentationAnimation.Get() == Animation
+		&& CachedAnimInstance->Montage_IsPlaying(ActivePresentationMontage))
 	{
 		return true;
 	}
-	if (LoopCount == 1 && ActivePresentationMontage && ActivePresentationAnimation.Get() == Animation &&
-		ActiveAnimationState == CurrentState && ActiveAnimationRole == CurrentRole)
+
+	if (LoopCount == 1 && ActivePresentationMontage != nullptr && ActivePresentationAnimation.Get() == Animation && ActiveAnimationState == CurrentState
+		&& ActiveAnimationRole == CurrentRole)
+	{
 		return true; // Focus-only replication must not replay a completed one-shot.
+	}
 
 	StopPresentationAnimation();
+
 	if (!bHasSavedRootMotionMode)
 	{
 		SavedRootMotionMode = CachedAnimInstance->RootMotionMode;
@@ -279,29 +342,24 @@ bool UMiningPresentationAgentComponent::PlayLoopingPresentationAnimation(TSoftOb
 
 	CachedAnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
 	ActivePresentationMontage = CachedAnimInstance->PlaySlotAnimationAsDynamicMontage(
-		Animation,
-		PresentationMontageSlotName,
-		PresentationMontageBlendInTime,
-		PresentationMontageBlendOutTime,
-		PlayRate,
-		LoopCount,
-		-1.0f,
-		0.0f);
+		Animation, PresentationMontageSlotName, PresentationMontageBlendInTime, PresentationMontageBlendOutTime, PlayRate, LoopCount, -1.0f, 0.0f);
 	ActivePresentationAnimation = Animation;
 	ActiveAnimationState = CurrentState;
 	ActiveAnimationRole = CurrentRole;
+
 	return ActivePresentationMontage != nullptr;
 }
 
 void UMiningPresentationAgentComponent::StopPresentationAnimation()
 {
 	ActivePresentationAnimation.Reset();
+
 	if (!CachedAnimInstance.IsValid())
 	{
 		return;
 	}
 
-	if (ActivePresentationMontage)
+	if (ActivePresentationMontage != nullptr)
 	{
 		CachedAnimInstance->Montage_Stop(PresentationMontageBlendOutTime, ActivePresentationMontage);
 		ActivePresentationMontage = nullptr;
@@ -309,7 +367,11 @@ void UMiningPresentationAgentComponent::StopPresentationAnimation()
 
 	if (bHasSavedRootMotionMode)
 	{
-		if (CachedAnimInstance->RootMotionMode == ERootMotionMode::IgnoreRootMotion) CachedAnimInstance->SetRootMotionMode(SavedRootMotionMode);
+		if (CachedAnimInstance->RootMotionMode == ERootMotionMode::IgnoreRootMotion)
+		{
+			CachedAnimInstance->SetRootMotionMode(SavedRootMotionMode);
+		}
+
 		bHasSavedRootMotionMode = false;
 	}
 }
@@ -318,13 +380,13 @@ float UMiningPresentationAgentComponent::GetTravelSpeedForRole() const
 {
 	switch (CurrentRole)
 	{
-	case EMiningPresentationRole::Worker:
-		return WorkerTravelSpeed;
-	case EMiningPresentationRole::Guard:
-		return GuardTravelSpeed;
-	case EMiningPresentationRole::Courier:
-		return CourierTravelSpeed;
-	default:
-		return DefaultMaxWalkSpeed > 0.0f ? DefaultMaxWalkSpeed : WorkerTravelSpeed;
+		case EMiningPresentationRole::Worker:
+			return WorkerTravelSpeed;
+		case EMiningPresentationRole::Guard:
+			return GuardTravelSpeed;
+		case EMiningPresentationRole::Courier:
+			return CourierTravelSpeed;
+		default:
+			return DefaultMaxWalkSpeed > 0.0f ? DefaultMaxWalkSpeed : WorkerTravelSpeed;
 	}
 }

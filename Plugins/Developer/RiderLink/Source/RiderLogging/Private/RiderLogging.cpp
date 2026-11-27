@@ -1,4 +1,5 @@
 #include "RiderLogging.hpp"
+#include "RiderLogMacros.h"
 
 #include "BlueprintProvider.hpp"
 #include "IRiderLink.hpp"
@@ -93,30 +94,19 @@ void ScheduledSendMessage(FString* Msg, const JetBrains::EditorPlugin::LogMessag
 
 void FRiderLoggingModule::StartupModule()
 {
-	UE_LOG(FLogRiderLoggingModule, Verbose, TEXT("STARTUP START"));
-
-	static const auto START_TIME = FDateTime::UtcNow().ToUnixTimestamp();
-	static const auto GetTimeNow = [](double Time) -> rd::DateTime
-	{
-		return rd::DateTime(START_TIME + static_cast<int64>(Time));
-	};
+	RIDERLINK_LOG(FLogRiderLoggingModule, Verbose, "STARTUP START");
 
 	ModuleLifetimeDef = IRiderLinkModule::Get().CreateNestedLifetimeDefinition();
 	LoggingScheduler = MakeUnique<rd::SingleThreadScheduler>(ModuleLifetimeDef.lifetime, "LoggingScheduler");
 	ModuleLifetimeDef.lifetime->bracket(
 	[this]()
 	{
-		OutputDevice.Setup([this](const TCHAR* msg, ELogVerbosity::Type Type, const FName& Name, TOptional<double> Time)
+		OutputDevice.Setup([this](const TCHAR* msg, ELogVerbosity::Type Type, const FName& Name)
 		{
 			if (Type > ELogVerbosity::All) return;
-
-			rd::optional<rd::DateTime> DateTime;
-			if (Time)
-			{
-				DateTime = GetTimeNow(Time.GetValue());
-			}
+			int64 Seconds = FDateTime::UtcNow().ToUnixTimestamp();
 			const FString PlainName = Name.GetPlainNameString();
-			const JetBrains::EditorPlugin::LogMessageInfo MessageInfo{Type, PlainName, DateTime};
+			const JetBrains::EditorPlugin::LogMessageInfo MessageInfo{Type, PlainName, rd::DateTime(Seconds)};
 			
 			LoggingScheduler->queue([Msg = FString(msg), MessageInfo]() mutable
 			{
@@ -129,14 +119,14 @@ void FRiderLoggingModule::StartupModule()
 		OutputDevice.TearDown();
 	});
 
-	UE_LOG(FLogRiderLoggingModule, Verbose, TEXT("STARTUP FINISH"));
+	RIDERLINK_LOG(FLogRiderLoggingModule, Verbose, "STARTUP FINISH");
 }
 
 void FRiderLoggingModule::ShutdownModule()
 {
-	UE_LOG(FLogRiderLoggingModule, Verbose, TEXT("SHUTDOWN START"));
+	RIDERLINK_LOG(FLogRiderLoggingModule, Verbose, "SHUTDOWN START");
 	ModuleLifetimeDef.terminate();
-	UE_LOG(FLogRiderLoggingModule, Verbose, TEXT("SHUTDOWN FINISH"));
+	RIDERLINK_LOG(FLogRiderLoggingModule, Verbose, "SHUTDOWN FINISH");
 }
 
 #undef LOCTEXT_NAMESPACE

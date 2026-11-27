@@ -6,18 +6,23 @@
 
 class AMiningSiteActor;
 class APawn;
-class UButton;
 class UBorder;
+class UButton;
 class UTextBlock;
 class UVerticalBox;
 
+/**
+ * Mining site menu. Shows the site's level, storage, crew and next upgrade cost, refreshes on a
+ * timer while open, and forwards upgrade, recruit, sync and advance-day requests to the site actor.
+ */
 UCLASS()
 class MININGSYSTEMUI_API UMiningSiteMenuWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category="Mining")
+	/** Binds the menu to a mining site and the pawn using it, then refreshes every text and button. */
+	UFUNCTION(BlueprintCallable, Category = "Mining")
 	void InitializeFromSite(AMiningSiteActor* InSiteActor, APawn* InInteractingPawn);
 
 protected:

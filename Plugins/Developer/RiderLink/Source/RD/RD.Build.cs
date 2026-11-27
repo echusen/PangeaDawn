@@ -7,6 +7,7 @@ public class RD : ModuleRules
 	{
 		PublicDependencyModuleNames.Add("Core");
 		bUseRTTI = true;
+		bEnableExceptions = true;
 
 #if UE_5_2_OR_LATER
 		bDisableStaticAnalysis = true;
@@ -74,6 +75,30 @@ public class RD : ModuleRules
 		PublicDefinitions.Add(
 			"nssv_CONFIG_SELECT_STRING_VIEW=nssv_STRING_VIEW_NONSTD");
 		PublicDefinitions.Add("FMT_SHARED");
+
+		bool bIsMSVC = Target.Platform == UnrealTargetPlatform.Win64
+        #if UE_5_0_OR_LATER
+            && Target.WindowsPlatform.Compiler.IsMSVC();
+        #else
+            && Target.WindowsPlatform.Compiler != WindowsCompiler.Clang
+            && Target.WindowsPlatform.Compiler != WindowsCompiler.Intel;
+        #endif
+
+        if (bIsMSVC)
+		{
+			string[] disabledWarnings =
+			{
+				"_Pragma(\"warning(disable:4251)\")"
+			};
+			string packedWarnings = string.Join(" ", disabledWarnings);
+			PublicDefinitions.Add(string.Format("RD_PUSH_STL_EXPORTS_WARNINGS=_Pragma(\"warning(push)\") {0}", packedWarnings));
+			PublicDefinitions.Add("RD_POP_STL_EXPORTS_WARNINGS=_Pragma(\"warning(pop)\")");
+		}
+		else
+		{
+			PublicDefinitions.Add("RD_PUSH_STL_EXPORTS_WARNINGS=");
+			PublicDefinitions.Add("RD_POP_STL_EXPORTS_WARNINGS=");
+		}
 
 		string[] Paths =
 		{

@@ -61,7 +61,7 @@
 #endif
 
 /// <summary>
-/// <p>Generated from: UE4Library.kt:241</p>
+/// <p>Generated from: UE4Library.kt:245</p>
 /// </summary>
 namespace JetBrains {
 namespace EditorPlugin {

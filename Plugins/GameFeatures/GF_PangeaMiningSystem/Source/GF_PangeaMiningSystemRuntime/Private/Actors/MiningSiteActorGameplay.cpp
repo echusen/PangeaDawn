@@ -1,24 +1,27 @@
 #include "Actors/MiningSiteActor.h"
 
-#include "Actors/ACFCharacter.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/SphereComponent.h"
+#include "Components/TextRenderComponent.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 
+#include "Actors/ACFCharacter.h"
+#include "Actors/MiningScreenHost.h"
 #include "Components/ACFInteractionComponent.h"
 #include "Components/ACFStorageComponent.h"
 #include "Components/MiningSiteComponent.h"
-#include "Components/PrimitiveComponent.h"
-#include "Components/TextRenderComponent.h"
 #include "DataAssets/MiningSiteDefinition.h"
 #include "Items/ACFItem.h"
-#include "Blueprint/UserWidget.h"
-#include "Actors/MiningScreenHost.h"
-#include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningSiteActorInteraction, Log, All);
 
 void AMiningSiteActor::HandleSiteLevelChanged(int32 OldLevel, int32 NewLevel)
 {
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site actor received level change. Actor=%s OldLevel=%d NewLevel=%d"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("Mining site actor received level change. Actor=%s OldLevel=%d NewLevel=%d"),
 		*GetNameSafe(this),
 		OldLevel,
 		NewLevel);
@@ -32,17 +35,19 @@ void AMiningSiteActor::HandleSiteLevelChanged(int32 OldLevel, int32 NewLevel)
 
 void AMiningSiteActor::HandleShipmentResolved(const FMiningItemQuantity& RequestedShipment, int32 DeliveredQuantity, bool bLost)
 {
-	UACFStorageComponent* SettlementStorage = SettlementResourceActor ? SettlementResourceActor->FindComponentByClass<UACFStorageComponent>() : nullptr;
-	const TSubclassOf<UACFItem> DeliveredItemClass = RequestedShipment.ItemClass && RequestedShipment.ItemClass->IsChildOf(UACFItem::StaticClass())
-		? RequestedShipment.ItemClass.Get()
-		: nullptr;
+	UACFStorageComponent* const SettlementStorage =
+		SettlementResourceActor != nullptr ? SettlementResourceActor->FindComponentByClass<UACFStorageComponent>() : nullptr;
+	const TSubclassOf<UACFItem> DeliveredItemClass =
+		RequestedShipment.ItemClass && RequestedShipment.ItemClass->IsChildOf(UACFItem::StaticClass()) ? RequestedShipment.ItemClass.Get() : nullptr;
 
-	if (!bLost && DeliveredQuantity > 0 && SettlementStorage && DeliveredItemClass)
+	if (!bLost && DeliveredQuantity > 0 && SettlementStorage != nullptr && DeliveredItemClass)
 	{
 		SettlementStorage->AddItem(FBaseItem(DeliveredItemClass, DeliveredQuantity));
 	}
 
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site shipment handled. Actor=%s Settlement=%s ItemClass=%s Delivered=%d Lost=%s"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("Mining site shipment handled. Actor=%s Settlement=%s ItemClass=%s Delivered=%d Lost=%s"),
 		*GetNameSafe(this),
 		*GetNameSafe(SettlementResourceActor),
 		*GetNameSafe(DeliveredItemClass.Get()),
@@ -56,29 +61,41 @@ void AMiningSiteActor::OnInteractedByPawn_Implementation(APawn* Pawn, const FStr
 	{
 		// Routed by the pawn-owned ACF InteractionComponent, not an RPC on the unowned site.
 		if (HasAuthority() && CanRecruitFromInteraction(Pawn))
+		{
 			MiningSiteComponent->RecruitWorker(ResolveUpgradeCostContext(Pawn));
+		}
+
 		return;
 	}
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interaction accepted. Actor=%s Interactor=%s CanUpgrade=%s Level=%d"),
+
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("Mining site interaction accepted. Actor=%s Interactor=%s CanUpgrade=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(Pawn),
 		CanUpgradeFromInteraction(Pawn) ? TEXT("true") : TEXT("false"),
-		MiningSiteComponent ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE);
+		MiningSiteComponent != nullptr ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE);
 }
 
 void AMiningSiteActor::OnLocalInteractedByPawn_Implementation(APawn* Pawn, const FString& interactionType)
 {
-	if (interactionType == TEXT("Mining.RecruitWorker")) return;
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site locally interacted. Actor=%s Pawn=%s Level=%d"),
+	if (interactionType == TEXT("Mining.RecruitWorker"))
+	{
+		return;
+	}
+
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("Mining site locally interacted. Actor=%s Pawn=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(Pawn),
-		MiningSiteComponent ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE);
+		MiningSiteComponent != nullptr ? MiningSiteComponent->GetCurrentLevel() : INDEX_NONE);
 	OpenInteractionMenu(Pawn);
 }
 
 void AMiningSiteActor::UpdateStatusText()
 {
-	if (!StatusText || !MiningSiteComponent)
+	if (StatusText == nullptr || MiningSiteComponent == nullptr)
 	{
 		return;
 	}
@@ -91,21 +108,17 @@ void AMiningSiteActor::UpdateStatusText()
 
 void AMiningSiteActor::OnInteractableRegisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interactable registered. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interactable registered. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 void AMiningSiteActor::OnInteractableUnregisteredByPawn_Implementation(APawn* Pawn)
 {
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interactable unregistered. Actor=%s Pawn=%s"),
-		*GetNameSafe(this),
-		*GetNameSafe(Pawn));
+	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site interactable unregistered. Actor=%s Pawn=%s"), *GetNameSafe(this), *GetNameSafe(Pawn));
 }
 
 FText AMiningSiteActor::GetInteractableName_Implementation()
 {
-	if (!MiningSiteComponent || !MiningSiteComponent->IsEstablished())
+	if (MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished())
 	{
 		return FText::GetEmpty();
 	}
@@ -120,12 +133,12 @@ FText AMiningSiteActor::GetInteractableName_Implementation()
 
 bool AMiningSiteActor::CanBeInteracted_Implementation(APawn* Pawn)
 {
-	return Pawn != nullptr && MiningSiteComponent && MiningSiteComponent->IsEstablished();
+	return Pawn != nullptr && MiningSiteComponent != nullptr && MiningSiteComponent->IsEstablished();
 }
 
 void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 {
-	if (!InteractingPawn)
+	if (InteractingPawn == nullptr)
 	{
 		return;
 	}
@@ -134,10 +147,11 @@ void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 	{
 		MiningScreenHost::Close(ActiveMenuWidget.Get());
 	}
+
 	ActiveMenuWidget = nullptr;
 
-	APlayerController* PlayerController = Cast<APlayerController>(InteractingPawn->GetController());
-	if (!PlayerController || !PlayerController->IsLocalController() || !PlayerController->GetLocalPlayer())
+	APlayerController* const PlayerController = Cast<APlayerController>(InteractingPawn->GetController());
+	if (PlayerController == nullptr || !PlayerController->IsLocalController() || PlayerController->GetLocalPlayer() == nullptr)
 	{
 		return;
 	}
@@ -159,13 +173,11 @@ void AMiningSiteActor::OpenInteractionMenu(APawn* InteractingPawn)
 		FInitializeFromSiteParams Params{ this, InteractingPawn };
 		ActiveMenuWidget.Get()->ProcessEvent(InitializeFunction, &Params);
 	}
-
-
 }
 
 void AMiningSiteActor::ClearActiveMenuWidget(UUserWidget* Widget)
 {
-	if (!Widget || ActiveMenuWidget.Get() == Widget)
+	if (Widget == nullptr || ActiveMenuWidget.Get() == Widget)
 	{
 		ActiveMenuWidget = nullptr;
 	}
@@ -173,21 +185,24 @@ void AMiningSiteActor::ClearActiveMenuWidget(UUserWidget* Widget)
 
 bool AMiningSiteActor::CanUpgradeFromInteraction(APawn* InteractingPawn) const
 {
-	if (!MiningSiteComponent || !MiningSiteComponent->IsEstablished() || !MiningSiteComponent->CanUpgradeSite())
+	if (MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished() || !MiningSiteComponent->CanUpgradeSite())
 	{
 		return false;
 	}
 
 	TArray<FMiningItemQuantity> UpgradeCost;
 	MiningSiteComponent->GetNextUpgradeCost(UpgradeCost);
+
 	if (UpgradeCost.IsEmpty())
 	{
 		return true;
 	}
 
-	UObject* CostContext = const_cast<UObject*>(ResolveUpgradeCostContext(InteractingPawn));
+	UObject* const CostContext = const_cast<UObject*>(ResolveUpgradeCostContext(InteractingPawn));
 	const bool bCanUpgrade = MiningSiteComponent->CanPurchaseUpgrade(CostContext);
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Verbose, TEXT("CanUpgradeFromInteraction evaluated. Actor=%s Interactor=%s CostContext=%s Settlement=%s Result=%s Level=%d"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Verbose,
+		TEXT("CanUpgradeFromInteraction evaluated. Actor=%s Interactor=%s CostContext=%s Settlement=%s Result=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(InteractingPawn),
 		*GetNameSafe(CostContext),
@@ -199,14 +214,16 @@ bool AMiningSiteActor::CanUpgradeFromInteraction(APawn* InteractingPawn) const
 
 void AMiningSiteActor::ServerPurchaseNextUpgrade_Implementation(APawn* InteractingPawn)
 {
-	if (!MiningSiteComponent || !MiningSiteComponent->IsEstablished())
+	if (MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished())
 	{
 		return;
 	}
 
-	UObject* CostContext = ResolveUpgradeCostContext(InteractingPawn);
+	UObject* const CostContext = ResolveUpgradeCostContext(InteractingPawn);
 	const bool bResult = MiningSiteComponent->PurchaseUpgrade(CostContext);
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("ServerPurchaseNextUpgrade resolved. Actor=%s Interactor=%s CostContext=%s Result=%s Level=%d"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("ServerPurchaseNextUpgrade resolved. Actor=%s Interactor=%s CostContext=%s Result=%s Level=%d"),
 		*GetNameSafe(this),
 		*GetNameSafe(InteractingPawn),
 		*GetNameSafe(CostContext),
@@ -216,14 +233,16 @@ void AMiningSiteActor::ServerPurchaseNextUpgrade_Implementation(APawn* Interacti
 
 void AMiningSiteActor::ServerSyncProduction_Implementation()
 {
-	if (!MiningSiteComponent)
+	if (MiningSiteComponent == nullptr)
 	{
 		return;
 	}
 
 	MiningSiteComponent->SyncProductionFromWorldTime();
 	UpdateStatusText();
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("ServerSyncProduction resolved. Actor=%s Stored=%d/%d Level=%d"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("ServerSyncProduction resolved. Actor=%s Stored=%d/%d Level=%d"),
 		*GetNameSafe(this),
 		MiningSiteComponent->GetStoredUnits(),
 		MiningSiteComponent->GetStorageCapacity(),
@@ -232,7 +251,7 @@ void AMiningSiteActor::ServerSyncProduction_Implementation()
 
 void AMiningSiteActor::ServerAdvanceOneSimulatedDay_Implementation()
 {
-	if (!MiningSiteComponent || !MiningSiteComponent->SiteDefinition)
+	if (MiningSiteComponent == nullptr || MiningSiteComponent->SiteDefinition == nullptr)
 	{
 		return;
 	}
@@ -242,7 +261,9 @@ void AMiningSiteActor::ServerAdvanceOneSimulatedDay_Implementation()
 	MiningSiteComponent->TryAutoShipment();
 	UpdateStatusText();
 
-	UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("ServerAdvanceOneSimulatedDay resolved. Actor=%s Produced=%d Stored=%d/%d Level=%d"),
+	UE_LOG(LogPangeaMiningSiteActorInteraction,
+		Log,
+		TEXT("ServerAdvanceOneSimulatedDay resolved. Actor=%s Produced=%d Stored=%d/%d Level=%d"),
 		*GetNameSafe(this),
 		ProducedQuantity,
 		MiningSiteComponent->GetStoredUnits(),
@@ -252,13 +273,14 @@ void AMiningSiteActor::ServerAdvanceOneSimulatedDay_Implementation()
 
 void AMiningSiteActor::RefreshLocalInteractionRegistration()
 {
-	if (!InteractionSphere)
+	if (InteractionSphere == nullptr)
 	{
 		return;
 	}
 
 	TArray<AActor*> OverlappingActors;
 	InteractionSphere->GetOverlappingActors(OverlappingActors, APawn::StaticClass());
+
 	for (AActor* OverlappingActor : OverlappingActors)
 	{
 		if (APawn* OverlappingPawn = Cast<APawn>(OverlappingActor))
@@ -273,7 +295,7 @@ void AMiningSiteActor::RefreshLocalInteractionRegistration()
 
 void AMiningSiteActor::RegisterWithInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
@@ -284,21 +306,19 @@ void AMiningSiteActor::RegisterWithInteractionComponent(UACFInteractionComponent
 
 void AMiningSiteActor::UnregisterFromInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent)
+	if (InteractionComponent == nullptr)
 	{
 		return;
 	}
 
 	InteractionComponent->UnregisterInteractable(this);
-	RegisteredInteractionComponents.RemoveAll([InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry)
-	{
-		return Entry.Get() == InteractionComponent;
-	});
+	RegisteredInteractionComponents.RemoveAll(
+		[InteractionComponent](const TWeakObjectPtr<UACFInteractionComponent>& Entry) { return Entry.Get() == InteractionComponent; });
 }
 
 void AMiningSiteActor::RegisterChestWithInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent || !SpawnedSiteChest)
+	if (InteractionComponent == nullptr || SpawnedSiteChest == nullptr)
 	{
 		return;
 	}
@@ -308,7 +328,7 @@ void AMiningSiteActor::RegisterChestWithInteractionComponent(UACFInteractionComp
 
 void AMiningSiteActor::UnregisterChestFromInteractionComponent(UACFInteractionComponent* InteractionComponent)
 {
-	if (!InteractionComponent || !SpawnedSiteChest)
+	if (InteractionComponent == nullptr || SpawnedSiteChest == nullptr)
 	{
 		return;
 	}
@@ -318,7 +338,7 @@ void AMiningSiteActor::UnregisterChestFromInteractionComponent(UACFInteractionCo
 
 UObject* AMiningSiteActor::ResolveUpgradeCostContext(APawn* InteractingPawn) const
 {
-	if (SettlementResourceActor)
+	if (SettlementResourceActor != nullptr)
 	{
 		return SettlementResourceActor;
 	}
@@ -326,12 +346,21 @@ UObject* AMiningSiteActor::ResolveUpgradeCostContext(APawn* InteractingPawn) con
 	return InteractingPawn;
 }
 
-void AMiningSiteActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void AMiningSiteActor::HandleInteractionBegin(UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
 		RegisterWithInteractionComponent(OverlappingPawn->FindComponentByClass<UACFInteractionComponent>());
-		UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site overlap begin. Actor=%s Interactor=%s"), *GetNameSafe(this), *GetNameSafe(OverlappingPawn));
+		UE_LOG(LogPangeaMiningSiteActorInteraction,
+			Log,
+			TEXT("Mining site overlap begin. Actor=%s Interactor=%s"),
+			*GetNameSafe(this),
+			*GetNameSafe(OverlappingPawn));
 	}
 }
 
@@ -340,28 +369,42 @@ void AMiningSiteActor::HandleInteractionEnd(UPrimitiveComponent* OverlappedCompo
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
 		UnregisterFromInteractionComponent(OverlappingPawn->FindComponentByClass<UACFInteractionComponent>());
-		UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site overlap end. Actor=%s Interactor=%s"), *GetNameSafe(this), *GetNameSafe(OverlappingPawn));
+		UE_LOG(LogPangeaMiningSiteActorInteraction,
+			Log,
+			TEXT("Mining site overlap end. Actor=%s Interactor=%s"),
+			*GetNameSafe(this),
+			*GetNameSafe(OverlappingPawn));
 	}
 }
 
-void AMiningSiteActor::HandleSiteChestInteractionBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void AMiningSiteActor::HandleSiteChestInteractionBegin(UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
 		RegisterChestWithInteractionComponent(OverlappingPawn->FindComponentByClass<UACFInteractionComponent>());
-		UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site chest overlap begin. Site=%s Chest=%s Interactor=%s"),
+		UE_LOG(LogPangeaMiningSiteActorInteraction,
+			Log,
+			TEXT("Mining site chest overlap begin. Site=%s Chest=%s Interactor=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedSiteChest),
 			*GetNameSafe(OverlappingPawn));
 	}
 }
 
-void AMiningSiteActor::HandleSiteChestInteractionEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void AMiningSiteActor::HandleSiteChestInteractionEnd(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (APawn* OverlappingPawn = Cast<APawn>(OtherActor))
 	{
 		UnregisterChestFromInteractionComponent(OverlappingPawn->FindComponentByClass<UACFInteractionComponent>());
-		UE_LOG(LogPangeaMiningSiteActorInteraction, Log, TEXT("Mining site chest overlap end. Site=%s Chest=%s Interactor=%s"),
+		UE_LOG(LogPangeaMiningSiteActorInteraction,
+			Log,
+			TEXT("Mining site chest overlap end. Site=%s Chest=%s Interactor=%s"),
 			*GetNameSafe(this),
 			*GetNameSafe(SpawnedSiteChest),
 			*GetNameSafe(OverlappingPawn));

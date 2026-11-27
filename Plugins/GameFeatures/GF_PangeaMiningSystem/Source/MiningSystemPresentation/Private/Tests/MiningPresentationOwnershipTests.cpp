@@ -8,19 +8,32 @@
 #include "Misc/ScopeExit.h"
 #include "UObject/UnrealType.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningPresentationSpeedOwnershipTest, "Pangea.ACF.Mining.PresentationYieldsLocomotionOwnership",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningPresentationSpeedOwnershipTest,
+	"Pangea.ACF.Mining.PresentationYieldsLocomotionOwnership",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningPresentationSpeedOwnershipTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = UWorld::CreateWorld(EWorldType::Editor, false);
-	if (!World) return false;
-	ON_SCOPE_EXIT { World->DestroyWorld(false); };
-	ACharacter* Character = World->SpawnActor<ACharacter>();
-	if (!Character) return false;
-	UMiningPresentationAgentComponent* Agent = NewObject<UMiningPresentationAgentComponent>(Character);
+	UWorld* const World = UWorld::CreateWorld(EWorldType::Editor, false);
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	ON_SCOPE_EXIT
+	{
+		World->DestroyWorld(false);
+	};
+
+	ACharacter* const Character = World->SpawnActor<ACharacter>();
+	if (Character == nullptr)
+	{
+		return false;
+	}
+
+	UMiningPresentationAgentComponent* const Agent = NewObject<UMiningPresentationAgentComponent>(Character);
 	Character->AddInstanceComponent(Agent);
 	Agent->RegisterComponent();
-	UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+	UCharacterMovementComponent* const Movement = Character->GetCharacterMovement();
 	Movement->MaxWalkSpeed = 600.0f;
 	Agent->SetTravelSpeedOverride(EMiningPresentationRole::Worker, 220.0f);
 	Agent->SetMiningPresentationState_Implementation(EMiningPresentationState::Traveling);
@@ -31,31 +44,52 @@ bool FMiningPresentationSpeedOwnershipTest::RunTest(const FString& Parameters)
 	Agent->SetMiningPresentationState_Implementation(EMiningPresentationState::Traveling);
 	Agent->SetMiningPresentationState_Implementation(EMiningPresentationState::Idle);
 	TestEqual(TEXT("Next duty captures and restores the current speed, not startup defaults"), Movement->MaxWalkSpeed, 900.0f);
+
 	return !HasAnyErrors();
 }
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningPresentationReplicationContractTest, "Pangea.ACF.Mining.PresentationReplicationContract",
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMiningPresentationReplicationContractTest,
+	"Pangea.ACF.Mining.PresentationReplicationContract",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMiningPresentationReplicationContractTest::RunTest(const FString& Parameters)
 {
-	UWorld* World = UWorld::CreateWorld(EWorldType::Editor, false);
-	if (!World) return false;
-	ON_SCOPE_EXIT { World->DestroyWorld(false); };
-	ACharacter* ServerActor = World->SpawnActor<ACharacter>();
-	ACharacter* ClientActor = World->SpawnActor<ACharacter>();
-	if (!ServerActor || !ClientActor) return false;
-	auto AddAgent = [](ACharacter* Actor)
+	UWorld* const World = UWorld::CreateWorld(EWorldType::Editor, false);
+	if (World == nullptr)
 	{
-		UMiningPresentationAgentComponent* Agent = NewObject<UMiningPresentationAgentComponent>(Actor);
+		return false;
+	}
+
+	ON_SCOPE_EXIT
+	{
+		World->DestroyWorld(false);
+	};
+
+	ACharacter* const ServerActor = World->SpawnActor<ACharacter>();
+	ACharacter* const ClientActor = World->SpawnActor<ACharacter>();
+	if (ServerActor == nullptr || ClientActor == nullptr)
+	{
+		return false;
+	}
+
+	auto AddAgent = [](ACharacter* Actor) -> UMiningPresentationAgentComponent*
+	{
+		UMiningPresentationAgentComponent* const Agent = NewObject<UMiningPresentationAgentComponent>(Actor);
 		Actor->AddInstanceComponent(Agent);
 		Agent->RegisterComponent();
+
 		return Agent;
 	};
-	UMiningPresentationAgentComponent* Server = AddAgent(ServerActor);
-	UMiningPresentationAgentComponent* Client = AddAgent(ClientActor);
+
+	UMiningPresentationAgentComponent* const Server = AddAgent(ServerActor);
+	UMiningPresentationAgentComponent* const Client = AddAgent(ClientActor);
 	TestTrue(TEXT("Dynamic presentation components replicate by default"), Server->GetIsReplicated());
-	const FStructProperty* Snapshot = FindFProperty<FStructProperty>(Server->GetClass(), TEXT("PresentationSnapshot"));
-	UFunction* Notify = Client->FindFunction(TEXT("OnRep_PresentationSnapshot"));
-	if (!Snapshot || !Notify) return false;
+	const FStructProperty* const Snapshot = FindFProperty<FStructProperty>(Server->GetClass(), TEXT("PresentationSnapshot"));
+	UFunction* const Notify = Client->FindFunction(TEXT("OnRep_PresentationSnapshot"));
+	if (Snapshot == nullptr || Notify == nullptr)
+	{
+		return false;
+	}
+
 	TestTrue(TEXT("Snapshot is replicated with a RepNotify"), Snapshot->HasAllPropertyFlags(CPF_Net | CPF_RepNotify));
 	Server->SetMiningPresentationRole_Implementation(EMiningPresentationRole::Courier);
 	Server->SetMiningPresentationState_Implementation(EMiningPresentationState::Loading);
@@ -64,13 +98,18 @@ bool FMiningPresentationReplicationContractTest::RunTest(const FString& Paramete
 	const float OriginalClientSpeed = ClientActor->GetCharacterMovement()->MaxWalkSpeed;
 	Snapshot->CopyCompleteValue_InContainer(Client, Server);
 	Client->ProcessEvent(Notify, nullptr);
-	TestTrue(TEXT("A single snapshot reconstructs all cosmetic fields"), Client->GetCurrentRole() == EMiningPresentationRole::Courier && Client->GetCurrentState() == EMiningPresentationState::Loading && Client->HasPresentationFocus() && Client->GetPresentationFocusLocation().Equals(FVector(100, 200, 300)));
+	TestTrue(TEXT("A single snapshot reconstructs all cosmetic fields"),
+		Client->GetCurrentRole() == EMiningPresentationRole::Courier && Client->GetCurrentState() == EMiningPresentationState::Loading
+			&& Client->HasPresentationFocus() && Client->GetPresentationFocusLocation().Equals(FVector(100, 200, 300)));
 	Client->SetMiningPresentationRole_Implementation(EMiningPresentationRole::Guard);
 	Client->SetMiningPresentationState_Implementation(EMiningPresentationState::Traveling);
 	Client->SetMiningPresentationFocus_Implementation(FVector::ZeroVector);
 	Client->SetTravelSpeedOverride(EMiningPresentationRole::Courier, 9999);
-	TestTrue(TEXT("Client-side authoring is rejected"), Client->GetCurrentRole() == EMiningPresentationRole::Courier && Client->GetCurrentState() == EMiningPresentationState::Loading && Client->GetPresentationFocusLocation().Equals(FVector(100, 200, 300)));
+	TestTrue(TEXT("Client-side authoring is rejected"),
+		Client->GetCurrentRole() == EMiningPresentationRole::Courier && Client->GetCurrentState() == EMiningPresentationState::Loading
+			&& Client->GetPresentationFocusLocation().Equals(FVector(100, 200, 300)));
 	TestEqual(TEXT("Client snapshot/setters do not steer movement"), ClientActor->GetCharacterMovement()->MaxWalkSpeed, OriginalClientSpeed);
+
 	return !HasAnyErrors();
 }
 #endif

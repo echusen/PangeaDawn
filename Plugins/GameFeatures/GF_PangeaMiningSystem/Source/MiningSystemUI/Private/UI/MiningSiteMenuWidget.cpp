@@ -1,38 +1,61 @@
 #include "UI/MiningSiteMenuWidget.h"
 
-#include "Components/ACFInteractionComponent.h"
-#include "GameFramework/Pawn.h"
-
-#include "Actors/MiningSiteActor.h"
-#include "Components/Button.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
-#include "Components/MiningSiteComponent.h"
+#include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Items/ACFItem.h"
-#include "Blueprint/WidgetTree.h"
-#include "UI/MiningUIPresentation.h"
-#include "GameFramework/PlayerController.h"
-#include "GameFramework/Pawn.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
+
+#include "Actors/MiningSiteActor.h"
+#include "Components/ACFInteractionComponent.h"
+#include "Components/MiningSiteComponent.h"
+#include "Items/ACFItem.h"
+#include "UI/MiningUIPresentation.h"
 
 void UMiningSiteMenuWidget::InitializeFromSite(AMiningSiteActor* InSiteActor, APawn* InInteractingPawn)
 {
 	SiteActor = InSiteActor;
 	InteractingPawn = InInteractingPawn;
-    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
-    {
-        Page->OnActivated().RemoveAll(this);
-        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(SiteActor)) { FMiningUIPresentation::Close(this); return; } if (UWorld* World = GetWorld()) World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true); RefreshUI(); });
-        if (UWorld* World = GetWorld()) World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true);
-        Page->OnDeactivated().RemoveAll(this);
-        Page->OnDeactivated().AddWeakLambda(this, [this]()
-        {
-            if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(RefreshTimerHandle);
-        });
-    }
+
+	if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+	{
+		Page->OnActivated().RemoveAll(this);
+		Page->OnActivated().AddWeakLambda(this,
+			[this]()
+		{
+			if (!IsValid(SiteActor))
+			{
+				FMiningUIPresentation::Close(this);
+				return;
+			}
+
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true);
+			}
+
+			RefreshUI();
+		});
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(RefreshTimerHandle, this, &ThisClass::HandleRefreshTick, 0.25f, true);
+		}
+
+		Page->OnDeactivated().RemoveAll(this);
+		Page->OnDeactivated().AddWeakLambda(this,
+			[this]()
+		{
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().ClearTimer(RefreshTimerHandle);
+			}
+		});
+	}
 
 	RefreshUI();
 }
@@ -71,7 +94,7 @@ void UMiningSiteMenuWidget::NativeDestruct()
 
 void UMiningSiteMenuWidget::BuildWidgetTree()
 {
-	if (!WidgetTree || RootBorder)
+	if (WidgetTree == nullptr || RootBorder != nullptr)
 	{
 		return;
 	}
@@ -92,13 +115,15 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 		{
 			Slot->SetPadding(FMargin(8.0f));
 		}
+
 		return TextBlock;
 	};
 
-	auto AddButton = [this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
+	auto AddButton =
+		[this](const TCHAR* ButtonName, const TCHAR* TextName, const FText& Label, TObjectPtr<UButton>& OutButton, TObjectPtr<UTextBlock>& OutText) -> void
 	{
 		OutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), ButtonName);
-        FMiningUIPresentation::Button(OutButton);
+		FMiningUIPresentation::Button(OutButton);
 		OutText = FMiningUIPresentation::Text(WidgetTree, TextName);
 		OutText->SetText(Label);
 		OutText->SetJustification(ETextJustify::Center);
@@ -115,28 +140,36 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 	CostText = AddText(TEXT("CostText"), 18);
 
 	AddButton(TEXT("UpgradeButton"), TEXT("UpgradeButtonText"), FText::FromString(TEXT("Upgrade")), UpgradeButton, UpgradeButtonText);
-	AddButton(TEXT("RecruitWorkerButton"), TEXT("RecruitWorkerButtonText"), FText::FromString(TEXT("Recruit One Miner")), RecruitWorkerButton, RecruitWorkerButtonText);
+	AddButton(TEXT("RecruitWorkerButton"),
+		TEXT("RecruitWorkerButtonText"),
+		FText::FromString(TEXT("Recruit One Miner")),
+		RecruitWorkerButton,
+		RecruitWorkerButtonText);
 	RecruitWorkerButton->OnClicked.AddDynamic(this, &ThisClass::OnRecruitWorkerClicked);
-	AddButton(TEXT("SyncProductionButton"), TEXT("SyncProductionButtonText"), FText::FromString(TEXT("Sync Production")), SyncProductionButton, SyncProductionButtonText);
+	AddButton(TEXT("SyncProductionButton"),
+		TEXT("SyncProductionButtonText"),
+		FText::FromString(TEXT("Sync Production")),
+		SyncProductionButton,
+		SyncProductionButtonText);
 	AddButton(TEXT("AdvanceDayButton"), TEXT("AdvanceDayButtonText"), FText::FromString(TEXT("Advance Day")), AdvanceDayButton, AdvanceDayButtonText);
 	AddButton(TEXT("CloseButton"), TEXT("CloseButtonText"), FText::FromString(TEXT("Close")), CloseButton, CloseButtonText);
 
-	if (UpgradeButton)
+	if (UpgradeButton != nullptr)
 	{
 		UpgradeButton->OnClicked.AddDynamic(this, &ThisClass::OnUpgradeClicked);
 	}
 
-	if (SyncProductionButton)
+	if (SyncProductionButton != nullptr)
 	{
 		SyncProductionButton->OnClicked.AddDynamic(this, &ThisClass::OnSyncProductionClicked);
 	}
 
-	if (AdvanceDayButton)
+	if (AdvanceDayButton != nullptr)
 	{
 		AdvanceDayButton->OnClicked.AddDynamic(this, &ThisClass::OnAdvanceDayClicked);
 	}
 
-	if (CloseButton)
+	if (CloseButton != nullptr)
 	{
 		CloseButton->OnClicked.AddDynamic(this, &ThisClass::OnCloseClicked);
 	}
@@ -144,47 +177,55 @@ void UMiningSiteMenuWidget::BuildWidgetTree()
 
 void UMiningSiteMenuWidget::RefreshUI()
 {
-	if (!TitleText || !HintText || !StatusText || !CostText)
+	if (TitleText == nullptr || HintText == nullptr || StatusText == nullptr || CostText == nullptr)
 	{
 		return;
 	}
 
 	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
-	const int32 CurrentLevel = SiteComponent ? SiteComponent->GetCurrentLevel() : INDEX_NONE;
+	const int32 CurrentLevel = SiteComponent != nullptr ? SiteComponent->GetCurrentLevel() : INDEX_NONE;
 
-	TitleText->SetText(FText::Format(
-		FText::FromString(TEXT("Mining Site Level {0}")),
-		FText::AsNumber(FMath::Max(0, CurrentLevel))));
+	TitleText->SetText(FText::Format(FText::FromString(TEXT("Mining Site Level {0}")), FText::AsNumber(FMath::Max(0, CurrentLevel))));
 	HintText->SetText(BuildHintText());
 	StatusText->SetText(BuildStatusText());
 	CostText->SetText(BuildCostText());
 	UpdateActionLabels();
-	if (RecruitWorkerButtonText)
+
+	if (RecruitWorkerButtonText != nullptr)
 	{
 		FMiningSiteLevelDefinition Level;
 		TArray<FString> Costs;
-		if (SiteComponent && SiteComponent->GetCurrentLevelDefinition(Level))
+
+		if (SiteComponent != nullptr && SiteComponent->GetCurrentLevelDefinition(Level))
+		{
 			for (const FMiningItemQuantity& Item : Level.WorkerRecruitmentCost)
+			{
 				Costs.Add(FString::Printf(TEXT("%s x%d"), *GetNameSafe(Item.ItemClass.Get()), Item.Quantity));
-		RecruitWorkerButtonText->SetText(FText::FromString(Costs.IsEmpty() ? TEXT("Recruitment cost not configured") :
-			FString::Printf(TEXT("Recruit One Miner: %s"), *FString::Join(Costs, TEXT(", ")))));
+			}
+		}
+
+		RecruitWorkerButtonText->SetText(FText::FromString(
+			Costs.IsEmpty() ? TEXT("Recruitment cost not configured") : FString::Printf(TEXT("Recruit One Miner: %s"), *FString::Join(Costs, TEXT(", ")))));
 	}
 
-	if (UpgradeButton)
+	if (UpgradeButton != nullptr)
 	{
 		const bool bCanUpgrade = IsValid(SiteActor) && SiteActor->CanUpgradeFromInteraction(InteractingPawn);
 		UpgradeButton->SetIsEnabled(bCanUpgrade);
 	}
 
-	if (SyncProductionButton)
+	if (SyncProductionButton != nullptr)
 	{
 		SyncProductionButton->SetIsEnabled(SiteActor != nullptr);
 	}
-	if (RecruitWorkerButton)
-		RecruitWorkerButton->SetIsEnabled(IsValid(SiteActor) && IsValid(InteractingPawn) &&
-			InteractingPawn->FindComponentByClass<UACFInteractionComponent>() && SiteActor->CanRecruitFromInteraction(InteractingPawn));
 
-	if (AdvanceDayButton)
+	if (RecruitWorkerButton != nullptr)
+	{
+		RecruitWorkerButton->SetIsEnabled(IsValid(SiteActor) && IsValid(InteractingPawn)
+			&& InteractingPawn->FindComponentByClass<UACFInteractionComponent>() != nullptr && SiteActor->CanRecruitFromInteraction(InteractingPawn));
+	}
+
+	if (AdvanceDayButton != nullptr)
 	{
 		AdvanceDayButton->SetIsEnabled(SiteActor != nullptr);
 	}
@@ -193,7 +234,7 @@ void UMiningSiteMenuWidget::RefreshUI()
 FText UMiningSiteMenuWidget::BuildStatusText() const
 {
 	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
-	if (!SiteComponent)
+	if (SiteComponent == nullptr)
 	{
 		return FText::FromString(TEXT("No mining site data."));
 	}
@@ -208,7 +249,8 @@ FText UMiningSiteMenuWidget::BuildStatusText() const
 	const int32 WorkerDeathPercent = bHasLevel ? FMath::RoundToInt(CurrentLevel.WorkerDeathChance * 100.0f) : 0;
 
 	return FText::Format(
-		FText::FromString(TEXT("Stored: {0}/{1}\nManual Speed: {2}x\nFull-Crew Production: {3}/day (scales with living miners)\nLiving Workers: {4}  Guards: {5}  Couriers: {6}\nShipment Loss: {7}%  Day-End Death Chance: {8}% per living miner, unattended only\nVacancies: {9}  Completed Mining Days: {10}")),
+		FText::FromString(TEXT(
+			"Stored: {0}/{1}\nManual Speed: {2}x\nFull-Crew Production: {3}/day (scales with living miners)\nLiving Workers: {4}  Guards: {5}  Couriers: {6}\nShipment Loss: {7}%  Day-End Death Chance: {8}% per living miner, unattended only\nVacancies: {9}  Completed Mining Days: {10}")),
 		FText::AsNumber(SiteComponent->GetStoredUnits()),
 		FText::AsNumber(SiteComponent->GetStorageCapacity()),
 		FText::AsNumber(SiteComponent->GetManualMiningSpeedMultiplier()),
@@ -225,13 +267,14 @@ FText UMiningSiteMenuWidget::BuildStatusText() const
 FText UMiningSiteMenuWidget::BuildCostText() const
 {
 	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
-	if (!SiteComponent)
+	if (SiteComponent == nullptr)
 	{
 		return FText::GetEmpty();
 	}
 
 	TArray<FMiningItemQuantity> UpgradeCost;
 	SiteComponent->GetNextUpgradeCost(UpgradeCost);
+
 	if (UpgradeCost.IsEmpty())
 	{
 		return FText::FromString(TEXT("No further upgrades."));
@@ -239,9 +282,11 @@ FText UMiningSiteMenuWidget::BuildCostText() const
 
 	TArray<FString> Parts;
 	Parts.Reserve(UpgradeCost.Num());
+
 	for (const FMiningItemQuantity& CostEntry : UpgradeCost)
 	{
 		FString ItemName = CostEntry.ItemTag.IsValid() ? CostEntry.ItemTag.ToString() : TEXT("Unknown");
+
 		if (const UClass* ItemClass = CostEntry.ItemClass.Get())
 		{
 			if (const UACFItem* DefaultItem = ItemClass->GetDefaultObject<UACFItem>())
@@ -263,7 +308,7 @@ FText UMiningSiteMenuWidget::BuildCostText() const
 FText UMiningSiteMenuWidget::BuildHintText() const
 {
 	const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
-	if (!IsValid(SiteActor) || !SiteComponent)
+	if (!IsValid(SiteActor) || SiteComponent == nullptr)
 	{
 		return FText::FromString(TEXT("No site selected."));
 	}
@@ -271,10 +316,10 @@ FText UMiningSiteMenuWidget::BuildHintText() const
 	const FString SettlementName = GetNameSafe(SiteActor->SettlementResourceActor);
 
 	FMiningSiteLevelDefinition NextLevel;
+
 	if (SiteComponent->GetNextLevelDefinition(NextLevel))
 	{
-		return FText::Format(
-			FText::FromString(TEXT("Settlement: {0}\nNext Level: {1}  Storage: {2}  Auto/Day: {3}")),
+		return FText::Format(FText::FromString(TEXT("Settlement: {0}\nNext Level: {1}  Storage: {2}  Auto/Day: {3}")),
 			FText::FromString(SettlementName.IsEmpty() ? TEXT("None") : SettlementName),
 			FText::AsNumber(NextLevel.Level),
 			FText::AsNumber(NextLevel.StorageCapacity),
@@ -282,17 +327,17 @@ FText UMiningSiteMenuWidget::BuildHintText() const
 	}
 
 	return FText::Format(
-		FText::FromString(TEXT("Settlement: {0}\nSite is at max level.")),
-		FText::FromString(SettlementName.IsEmpty() ? TEXT("None") : SettlementName));
+		FText::FromString(TEXT("Settlement: {0}\nSite is at max level.")), FText::FromString(SettlementName.IsEmpty() ? TEXT("None") : SettlementName));
 }
 
 void UMiningSiteMenuWidget::UpdateActionLabels()
 {
-	if (UpgradeButtonText)
+	if (UpgradeButtonText != nullptr)
 	{
 		const UMiningSiteComponent* SiteComponent = IsValid(SiteActor) ? SiteActor->MiningSiteComponent : nullptr;
 		FMiningSiteLevelDefinition NextLevel;
-		if (SiteComponent && SiteComponent->GetNextLevelDefinition(NextLevel))
+
+		if (SiteComponent != nullptr && SiteComponent->GetNextLevelDefinition(NextLevel))
 		{
 			UpgradeButtonText->SetText(FText::Format(FText::FromString(TEXT("Upgrade To Level {0}")), FText::AsNumber(NextLevel.Level)));
 		}
@@ -302,12 +347,12 @@ void UMiningSiteMenuWidget::UpdateActionLabels()
 		}
 	}
 
-	if (SyncProductionButtonText)
+	if (SyncProductionButtonText != nullptr)
 	{
 		SyncProductionButtonText->SetText(FText::FromString(TEXT("Sync Elapsed Production")));
 	}
 
-	if (AdvanceDayButtonText)
+	if (AdvanceDayButtonText != nullptr)
 	{
 		AdvanceDayButtonText->SetText(FText::FromString(TEXT("Advance One Simulated Day")));
 	}
@@ -340,12 +385,17 @@ void UMiningSiteMenuWidget::OnUpgradeClicked()
 
 void UMiningSiteMenuWidget::OnRecruitWorkerClicked()
 {
-	if (!IsValid(SiteActor) || !IsValid(InteractingPawn)) return;
+	if (!IsValid(SiteActor) || !IsValid(InteractingPawn))
+	{
+		return;
+	}
+
 	if (UACFInteractionComponent* Interaction = InteractingPawn->FindComponentByClass<UACFInteractionComponent>())
 	{
 		Interaction->SetCurrentBestInteractable(SiteActor);
 		Interaction->Interact(TEXT("Mining.RecruitWorker")); // Owned-pawn RPC; server validates cost/vacancy/range.
 	}
+
 	RefreshUI();
 }
 

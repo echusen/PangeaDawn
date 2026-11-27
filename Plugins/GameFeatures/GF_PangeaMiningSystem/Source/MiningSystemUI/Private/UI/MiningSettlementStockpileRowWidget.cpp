@@ -1,13 +1,15 @@
 #include "UI/MiningSettlementStockpileRowWidget.h"
 
-#include "UI/MiningSettlementStockpileWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
-#include "Blueprint/WidgetTree.h"
-#include "UI/MiningUIPresentation.h"
-#include "Items/ACFItem.h"
 
-void UMiningSettlementStockpileRowWidget::InitializeRow(UMiningSettlementStockpileWidget* InOwnerWidget, TSubclassOf<UACFItem> InItemClass, int32 InCount, bool bInFromPlayerInventory, const FString& InLabel)
+#include "Items/ACFItem.h"
+#include "UI/MiningSettlementStockpileWidget.h"
+#include "UI/MiningUIPresentation.h"
+
+void UMiningSettlementStockpileRowWidget::InitializeRow(
+	UMiningSettlementStockpileWidget* InOwnerWidget, TSubclassOf<UACFItem> InItemClass, int32 InCount, bool bInFromPlayerInventory, const FString& InLabel)
 {
 	OwnerWidget = InOwnerWidget;
 	ItemClass = InItemClass;
@@ -15,7 +17,7 @@ void UMiningSettlementStockpileRowWidget::InitializeRow(UMiningSettlementStockpi
 	bFromPlayerInventory = bInFromPlayerInventory;
 	LabelText = InLabel;
 
-	if (TransferButtonText)
+	if (TransferButtonText != nullptr)
 	{
 		TransferButtonText->SetText(FText::FromString(LabelText));
 	}
@@ -29,13 +31,13 @@ void UMiningSettlementStockpileRowWidget::NativeOnInitialized()
 
 void UMiningSettlementStockpileRowWidget::BuildWidgetTree()
 {
-	if (!WidgetTree || TransferButton)
+	if (WidgetTree == nullptr || TransferButton != nullptr)
 	{
 		return;
 	}
 
 	TransferButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("TransferButton"));
-    FMiningUIPresentation::Button(TransferButton);
+	FMiningUIPresentation::Button(TransferButton);
 	WidgetTree->RootWidget = TransferButton;
 
 	TransferButtonText = FMiningUIPresentation::Text(WidgetTree, TEXT("TransferButtonText"));
@@ -47,7 +49,7 @@ void UMiningSettlementStockpileRowWidget::BuildWidgetTree()
 
 void UMiningSettlementStockpileRowWidget::OnTransferClicked()
 {
-	if (OwnerWidget && ItemClass && Count > 0)
+	if (OwnerWidget != nullptr && ItemClass && Count > 0)
 	{
 		OwnerWidget->HandleTransferRequest(ItemClass, Count, bFromPlayerInventory);
 	}

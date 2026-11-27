@@ -6,6 +6,8 @@
 #include "UObject/Interface.h"
 #include "PangeaFarmInterface.generated.h"
 
+class APlayerController;
+
 // This class does not need to be modified.
 UINTERFACE(MinimalAPI)
 class UPangeaFarmInterface : public UInterface
@@ -14,7 +16,8 @@ class UPangeaFarmInterface : public UInterface
 };
 
 /**
- * 
+ * Implemented by breeding farms so other systems can open the farm UI for a player
+ * without depending on a concrete farm class.
  */
 class PANGEABREEDINGSYSTEM_API IPangeaFarmInterface
 {
@@ -22,6 +25,7 @@ class PANGEABREEDINGSYSTEM_API IPangeaFarmInterface
 
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
-    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Breeding")
-    void OpenFarmUI(APlayerController* Player);
+	/** Opens the breeding farm UI for the given player. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Breeding")
+	void OpenFarmUI(APlayerController* Player);
 };

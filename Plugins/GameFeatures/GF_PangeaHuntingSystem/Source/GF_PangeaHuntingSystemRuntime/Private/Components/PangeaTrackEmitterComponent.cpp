@@ -1,31 +1,32 @@
 #include "Components/PangeaTrackEmitterComponent.h"
 
+#include "Engine/Engine.h"
+#include "Net/UnrealNetwork.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
+
 #include "Actors/ACFCharacter.h"
 #include "Actors/PangeaHuntClueActor.h"
+#include "ARSFunctionLibrary.h"
 #include "Components/ACFCharacterMovementComponent.h"
 #include "DataAssets/HuntSpeciesConfig.h"
 #include "Definitions/PangeaCreatureDefinition.h"
 #include "Definitions/PangeaHuntingFragment.h"
-#include "Engine/Engine.h"
 #include "Interfaces/PDDefinitionProviderInterface.h"
-#include "ARSFunctionLibrary.h"
-#include "Net/UnrealNetwork.h"
-#include "PhysicalMaterials/PhysicalMaterial.h"
 
 namespace PangeaHuntingDefaults
 {
-	static constexpr float MinDistanceBetweenTracks = 150.f;
-	static constexpr float MinSpeedToLeaveTracks = 50.f;
-	static constexpr float TrackLifetime = 120.f;
-	static constexpr int32 MaxTrackPoints = 32;
-	static constexpr float RevealRadius = 2500.f;
-	static constexpr float TrackZOffset = 5.f;
-}
+static constexpr float MinDistanceBetweenTracks = 150.f;
+static constexpr float MinSpeedToLeaveTracks = 50.f;
+static constexpr float TrackLifetime = 120.f;
+static constexpr int32 MaxTrackPoints = 32;
+static constexpr float RevealRadius = 2500.f;
+static constexpr float TrackZOffset = 5.f;
+} // namespace PangeaHuntingDefaults
 
 namespace PangeaHuntingDebug
 {
-	static int32 TrackDebugMessageKey = 460100;
-}
+static int32 TrackDebugMessageKey = 460100;
+} // namespace PangeaHuntingDebug
 
 UPangeaTrackEmitterComponent::UPangeaTrackEmitterComponent()
 {
@@ -38,28 +39,33 @@ void UPangeaTrackEmitterComponent::BeginPlay()
 	Super::BeginPlay();
 
 	ResolveConfigFromDefinition();
-	if (HuntSpeciesConfig)
+
+	if (HuntSpeciesConfig != nullptr)
 	{
 		bEnableDebugMessages = HuntSpeciesConfig->bEnableDebugMessages;
 	}
 
-	LastTrackLocation = GetOwner() ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
+	LastTrackLocation = GetOwner() != nullptr ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
 
-	if (!GetOwner() || !GetOwner()->HasAuthority())
+	if (GetOwner() == nullptr || !GetOwner()->HasAuthority())
 	{
 		SetComponentTickEnabled(false);
 	}
 
 	PrintDebugMessage(FString::Printf(TEXT("Track emitter ready on %s. Config=%s"),
-		*GetNameSafe(GetOwner()),
-		HuntSpeciesConfig ? *GetNameSafe(HuntSpeciesConfig) : TEXT("FallbackDefaults")), FColor::Yellow, true);
+						  *GetNameSafe(GetOwner()),
+						  HuntSpeciesConfig != nullptr ? *GetNameSafe(HuntSpeciesConfig) : TEXT("FallbackDefaults")),
+		FColor::Yellow,
+		true);
 
 	if (AActor* Owner = GetOwner())
 	{
 		PrintDebugMessage(FString::Printf(TEXT("Injection confirmed on %s. Authority=%s Replicates=%s"),
-			*GetNameSafe(Owner),
-			Owner->HasAuthority() ? TEXT("true") : TEXT("false"),
-			GetIsReplicated() ? TEXT("true") : TEXT("false")), FColor::Cyan, true);
+							  *GetNameSafe(Owner),
+							  Owner->HasAuthority() ? TEXT("true") : TEXT("false"),
+							  GetIsReplicated() ? TEXT("true") : TEXT("false")),
+			FColor::Cyan,
+			true);
 	}
 }
 
@@ -67,14 +73,14 @@ void UPangeaTrackEmitterComponent::TickComponent(float DeltaTime, ELevelTick Tic
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	AActor* Owner = GetOwner();
-	UWorld* World = GetWorld();
-	if (!Owner || !World || !Owner->HasAuthority())
+	AActor* const Owner = GetOwner();
+	UWorld* const World = GetWorld();
+	if (Owner == nullptr || World == nullptr || !Owner->HasAuthority())
 	{
 		return;
 	}
 
-	if (HuntSpeciesConfig && !HuntSpeciesConfig->bLeavesTracks)
+	if (HuntSpeciesConfig != nullptr && !HuntSpeciesConfig->bLeavesTracks)
 	{
 		return;
 	}
@@ -98,10 +104,7 @@ void UPangeaTrackEmitterComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	TrackPoints.Add(BuildTrackPoint(CurrentTimeSeconds));
 	LastTrackLocation = CurrentLocation;
 	bNextTrackIsLeft = !bNextTrackIsLeft;
-	PrintDebugMessage(FString::Printf(TEXT("%s emitted track #%d at speed %.1f"),
-		*GetNameSafe(Owner),
-		TrackPoints.Num(),
-		CurrentSpeed), FColor::Orange);
+	PrintDebugMessage(FString::Printf(TEXT("%s emitted track #%d at speed %.1f"), *GetNameSafe(Owner), TrackPoints.Num(), CurrentSpeed), FColor::Orange);
 
 	if (TrackPoints.Last().ClueType != EHuntClueType::Footprint)
 	{
@@ -109,7 +112,7 @@ void UPangeaTrackEmitterComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		LastSpecialClueTime = CurrentTimeSeconds;
 	}
 
-	const int32 MaxTrackPoints = HuntSpeciesConfig ? HuntSpeciesConfig->MaxTrackPoints : GetDefaultMaxTrackPoints();
+	const int32 MaxTrackPoints = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MaxTrackPoints : GetDefaultMaxTrackPoints();
 	if (TrackPoints.Num() > MaxTrackPoints)
 	{
 		const int32 ExcessTrackCount = TrackPoints.Num() - MaxTrackPoints;
@@ -124,7 +127,13 @@ void UPangeaTrackEmitterComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 	// Feature deactivation must remove this emitter's transient clues too, not
 	// leave interactable clue actors alive until their independent lifespan expires.
 	for (const TWeakObjectPtr<APangeaHuntClueActor>& Clue : SpawnedClues)
-		if (Clue.IsValid()) Clue->Destroy();
+	{
+		if (Clue.IsValid())
+		{
+			Clue->Destroy();
+		}
+	}
+
 	SpawnedClues.Empty();
 	Super::EndPlay(EndPlayReason);
 }
@@ -146,25 +155,25 @@ void UPangeaTrackEmitterComponent::GetLifetimeReplicatedProps(TArray<FLifetimePr
 
 float UPangeaTrackEmitterComponent::GetRevealRadius() const
 {
-	return HuntSpeciesConfig ? HuntSpeciesConfig->RevealRadius : GetDefaultRevealRadius();
+	return HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->RevealRadius : GetDefaultRevealRadius();
 }
 
 bool UPangeaTrackEmitterComponent::IsClueTypeIdentified(const EHuntClueType ClueType) const
 {
 	switch (ClueType)
 	{
-	case EHuntClueType::Footprint:
-		return bFootprintsIdentified;
-	case EHuntClueType::Blood:
-		return bBloodIdentified;
-	case EHuntClueType::BrokenFoliage:
-		return bBrokenFoliageIdentified;
-	case EHuntClueType::EatenFood:
-		return bEatenFoodIdentified;
-	case EHuntClueType::Droppings:
-		return bDroppingsIdentified;
-	default:
-		return false;
+		case EHuntClueType::Footprint:
+			return bFootprintsIdentified;
+		case EHuntClueType::Blood:
+			return bBloodIdentified;
+		case EHuntClueType::BrokenFoliage:
+			return bBrokenFoliageIdentified;
+		case EHuntClueType::EatenFood:
+			return bEatenFoodIdentified;
+		case EHuntClueType::Droppings:
+			return bDroppingsIdentified;
+		default:
+			return false;
 	}
 }
 
@@ -188,18 +197,22 @@ void UPangeaTrackEmitterComponent::MarkTrackSetIdentified(AActor* Identifier)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Footprint, Identifier);
 	}
+
 	if (bBloodChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Blood, Identifier);
 	}
+
 	if (bBrokenFoliageChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::BrokenFoliage, Identifier);
 	}
+
 	if (bEatenFoodChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::EatenFood, Identifier);
 	}
+
 	if (bDroppingsChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Droppings, Identifier);
@@ -216,8 +229,7 @@ void UPangeaTrackEmitterComponent::MarkTrackSetIdentified(AActor* Identifier)
 void UPangeaTrackEmitterComponent::MarkClueTypeIdentified(const EHuntClueType ClueType, AActor* Identifier)
 {
 	const bool bPrimaryChanged = SetClueTypeIdentified(ClueType);
-	const bool bFootprintChanged = (ClueType == EHuntClueType::Blood || ClueType == EHuntClueType::BrokenFoliage)
-		&& HasTrackType(EHuntClueType::Footprint)
+	const bool bFootprintChanged = (ClueType == EHuntClueType::Blood || ClueType == EHuntClueType::BrokenFoliage) && HasTrackType(EHuntClueType::Footprint)
 		&& SetClueTypeIdentified(EHuntClueType::Footprint);
 	const bool bChanged = bPrimaryChanged || bFootprintChanged;
 
@@ -227,14 +239,17 @@ void UPangeaTrackEmitterComponent::MarkClueTypeIdentified(const EHuntClueType Cl
 	}
 
 	bTrackSetIdentified = bFootprintsIdentified || bBloodIdentified || bBrokenFoliageIdentified || bEatenFoodIdentified || bDroppingsIdentified;
+
 	if (bPrimaryChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, ClueType, Identifier);
 	}
+
 	if (bFootprintChanged)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Footprint, Identifier);
 	}
+
 	if (bTrackSetIdentified)
 	{
 		OnTrackSetIdentified.Broadcast(this, Identifier);
@@ -254,6 +269,7 @@ void UPangeaTrackEmitterComponent::SetTrackEmissionEnabled(const bool bEnabled)
 	}
 
 	bRuntimeTrackEmissionEnabled = bEnabled;
+
 	if (AActor* Owner = GetOwner())
 	{
 		Owner->ForceNetUpdate();
@@ -308,18 +324,22 @@ void UPangeaTrackEmitterComponent::OnRep_TrackIdentificationState()
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Footprint, nullptr);
 	}
+
 	if (bBloodIdentified)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Blood, nullptr);
 	}
+
 	if (bBrokenFoliageIdentified)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::BrokenFoliage, nullptr);
 	}
+
 	if (bEatenFoodIdentified)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::EatenFood, nullptr);
 	}
+
 	if (bDroppingsIdentified)
 	{
 		OnTrackTypeIdentified.Broadcast(this, EHuntClueType::Droppings, nullptr);
@@ -328,19 +348,19 @@ void UPangeaTrackEmitterComponent::OnRep_TrackIdentificationState()
 
 void UPangeaTrackEmitterComponent::ResolveConfigFromDefinition()
 {
-	if (HuntSpeciesConfig)
+	if (HuntSpeciesConfig != nullptr)
 	{
 		return;
 	}
 
-	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->GetClass()->ImplementsInterface(UPDDefinitionProviderInterface::StaticClass()))
+	AActor* const Owner = GetOwner();
+	if (Owner == nullptr || !Owner->GetClass()->ImplementsInterface(UPDDefinitionProviderInterface::StaticClass()))
 	{
 		return;
 	}
 
-	UPangeaCreatureDefinition* Definition = IPDDefinitionProviderInterface::Execute_GetCreatureDefinition(Owner);
-	if (!Definition)
+	UPangeaCreatureDefinition* const Definition = IPDDefinitionProviderInterface::Execute_GetCreatureDefinition(Owner);
+	if (Definition == nullptr)
 	{
 		return;
 	}
@@ -354,11 +374,9 @@ void UPangeaTrackEmitterComponent::ResolveConfigFromDefinition()
 void UPangeaTrackEmitterComponent::RemoveExpiredTracks(const float CurrentTimeSeconds)
 {
 	const int32 RemovedCount = TrackPoints.RemoveAll([CurrentTimeSeconds](const FHuntTrackPoint& TrackPoint)
-	{
-		return TrackPoint.Lifetime > 0.f && CurrentTimeSeconds >= (TrackPoint.CreatedServerTime + TrackPoint.Lifetime);
-	});
+	{ return TrackPoint.Lifetime > 0.f && CurrentTimeSeconds >= (TrackPoint.CreatedServerTime + TrackPoint.Lifetime); });
 
-	if (RemovedCount > 0 && GetOwner())
+	if (RemovedCount > 0 && GetOwner() != nullptr)
 	{
 		GetOwner()->ForceNetUpdate();
 	}
@@ -366,8 +384,9 @@ void UPangeaTrackEmitterComponent::RemoveExpiredTracks(const float CurrentTimeSe
 
 bool UPangeaTrackEmitterComponent::ShouldEmitTrack(const FVector& CurrentLocation, const float CurrentSpeed) const
 {
-	const float MinSpeedToLeaveTracks = HuntSpeciesConfig ? HuntSpeciesConfig->MinSpeedToLeaveTracks : GetDefaultMinSpeedToLeaveTracks();
-	const float MinDistanceBetweenTracks = HuntSpeciesConfig ? HuntSpeciesConfig->MinDistanceBetweenTracks : GetDefaultMinDistanceBetweenTracks();
+	const float MinSpeedToLeaveTracks = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MinSpeedToLeaveTracks : GetDefaultMinSpeedToLeaveTracks();
+	const float MinDistanceBetweenTracks = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MinDistanceBetweenTracks : GetDefaultMinDistanceBetweenTracks();
+
 	if (CurrentSpeed < MinSpeedToLeaveTracks)
 	{
 		return false;
@@ -379,14 +398,14 @@ bool UPangeaTrackEmitterComponent::ShouldEmitTrack(const FVector& CurrentLocatio
 FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float CurrentTimeSeconds) const
 {
 	FHuntTrackPoint TrackPoint;
-	AActor* Owner = GetOwner();
+	AActor* const Owner = GetOwner();
 
-	if (!Owner)
+	if (Owner == nullptr)
 	{
 		return TrackPoint;
 	}
 
-	const float TrackZOffset = HuntSpeciesConfig ? HuntSpeciesConfig->TrackZOffset : GetDefaultTrackZOffset();
+	const float TrackZOffset = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->TrackZOffset : GetDefaultTrackZOffset();
 	const FVector OwnerLocation = Owner->GetActorLocation();
 	const FVector OwnerForward = Owner->GetActorForwardVector();
 
@@ -399,6 +418,7 @@ FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float Curren
 	TrackPoint.Strength = 1.f;
 
 	bool bResolvedGround = false;
+
 	if (AACFCharacter* ACFCharacter = Cast<AACFCharacter>(Owner))
 	{
 		if (UACFCharacterMovementComponent* MovementComponent = ACFCharacter->GetACFCharacterMovementComponent())
@@ -424,7 +444,7 @@ FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float Curren
 				}
 
 				const FVector ProjectedRight = FVector::VectorPlaneProject(Owner->GetActorRightVector(), GroundNormal).GetSafeNormal();
-				const float FootOffset = HuntSpeciesConfig ? HuntSpeciesConfig->FootLateralOffset : 28.f;
+				const float FootOffset = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->FootLateralOffset : 28.f;
 				const FVector FootLateralOffset = ProjectedRight * (bNextTrackIsLeft ? -FootOffset : FootOffset);
 				TrackPoint.Location = GroundInfo.GroundHitResult.ImpactPoint + FootLateralOffset + (GroundNormal * TrackZOffset);
 				TrackPoint.Rotation = FRotationMatrix::MakeFromXZ(ProjectedForward, GroundNormal).Rotator();
@@ -435,8 +455,8 @@ FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float Curren
 
 	if (!bResolvedGround)
 	{
-		UWorld* World = GetWorld();
-		if (World)
+		UWorld* const World = GetWorld();
+		if (World != nullptr)
 		{
 			FHitResult GroundHit;
 			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PangeaHuntingTrackSnap), false, Owner);
@@ -453,7 +473,7 @@ FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float Curren
 				}
 
 				const FVector ProjectedRight = FVector::VectorPlaneProject(Owner->GetActorRightVector(), GroundNormal).GetSafeNormal();
-				const float FootOffset = HuntSpeciesConfig ? HuntSpeciesConfig->FootLateralOffset : 28.f;
+				const float FootOffset = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->FootLateralOffset : 28.f;
 				const FVector FootLateralOffset = ProjectedRight * (bNextTrackIsLeft ? -FootOffset : FootOffset);
 				TrackPoint.Location = GroundHit.ImpactPoint + FootLateralOffset + (GroundNormal * TrackZOffset);
 				TrackPoint.Rotation = FRotationMatrix::MakeFromXZ(ProjectedForward, GroundNormal).Rotator();
@@ -466,23 +486,23 @@ FHuntTrackPoint UPangeaTrackEmitterComponent::BuildTrackPoint(const float Curren
 
 EHuntClueType UPangeaTrackEmitterComponent::DetermineClueType(const float CurrentTimeSeconds) const
 {
-	const float MinSpecialClueInterval = HuntSpeciesConfig ? HuntSpeciesConfig->MinSpecialClueInterval : 4.0f;
-	const float MaxSpecialClueInterval = HuntSpeciesConfig && HuntSpeciesConfig->bUseRandomSpecialClueInterval
+	const float MinSpecialClueInterval = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MinSpecialClueInterval : 4.0f;
+	const float MaxSpecialClueInterval = HuntSpeciesConfig != nullptr && HuntSpeciesConfig->bUseRandomSpecialClueInterval
 		? FMath::Max(MinSpecialClueInterval, HuntSpeciesConfig->MaxSpecialClueInterval)
 		: MinSpecialClueInterval;
-	const float RequiredSpecialClueInterval = MaxSpecialClueInterval > MinSpecialClueInterval
-		? FMath::FRandRange(MinSpecialClueInterval, MaxSpecialClueInterval)
-		: MinSpecialClueInterval;
+	const float RequiredSpecialClueInterval =
+		MaxSpecialClueInterval > MinSpecialClueInterval ? FMath::FRandRange(MinSpecialClueInterval, MaxSpecialClueInterval) : MinSpecialClueInterval;
 	if ((CurrentTimeSeconds - LastSpecialClueTime) < RequiredSpecialClueInterval)
 	{
 		return EHuntClueType::Footprint;
 	}
 
-	const AACFCharacter* ACFCharacter = Cast<AACFCharacter>(GetOwner());
-	const UACFCharacterMovementComponent* MovementComponent = ACFCharacter ? ACFCharacter->GetACFCharacterMovementComponent() : nullptr;
-	const UACFGASStatisticsComponent* StatisticsComponent = GetOwner() ? GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
+	const AACFCharacter* const ACFCharacter = Cast<AACFCharacter>(GetOwner());
+	const UACFCharacterMovementComponent* const MovementComponent = ACFCharacter != nullptr ? ACFCharacter->GetACFCharacterMovementComponent() : nullptr;
+	const UACFGASStatisticsComponent* const StatisticsComponent =
+		GetOwner() != nullptr ? GetOwner()->FindComponentByClass<UACFGASStatisticsComponent>() : nullptr;
 
-	if (StatisticsComponent && HuntSpeciesConfig && HuntSpeciesConfig->bSpawnBloodClues)
+	if (StatisticsComponent != nullptr && HuntSpeciesConfig != nullptr && HuntSpeciesConfig->bSpawnBloodClues)
 	{
 		const float NormalizedHealth = StatisticsComponent->GetNormalizedValueForStatitstic(UARSFunctionLibrary::GetHealthTag());
 		if (NormalizedHealth > 0.f && NormalizedHealth <= HuntSpeciesConfig->BloodHealthThreshold)
@@ -491,7 +511,7 @@ EHuntClueType UPangeaTrackEmitterComponent::DetermineClueType(const float Curren
 		}
 	}
 
-	if (MovementComponent && HuntSpeciesConfig && HuntSpeciesConfig->bSpawnBrokenFoliageClues && MovementComponent->IsSprinting())
+	if (MovementComponent != nullptr && HuntSpeciesConfig != nullptr && HuntSpeciesConfig->bSpawnBrokenFoliageClues && MovementComponent->IsSprinting())
 	{
 		return EHuntClueType::BrokenFoliage;
 	}
@@ -506,8 +526,8 @@ EHuntClueType UPangeaTrackEmitterComponent::DetermineClueType(const float Curren
 
 FString UPangeaTrackEmitterComponent::ResolveSourceCreatureName() const
 {
-	AActor* Owner = GetOwner();
-	if (!Owner)
+	AActor* const Owner = GetOwner();
+	if (Owner == nullptr)
 	{
 		return TEXT("Unknown Creature");
 	}
@@ -533,13 +553,13 @@ void UPangeaTrackEmitterComponent::SpawnSpecialClueActor(const FHuntTrackPoint& 
 		return;
 	}
 
-	UWorld* World = GetWorld();
-	if (!World || !GetOwner() || !GetOwner()->HasAuthority())
+	UWorld* const World = GetWorld();
+	if (World == nullptr || GetOwner() == nullptr || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
 
-	TSubclassOf<APangeaHuntClueActor> ClueActorClass = HuntSpeciesConfig && HuntSpeciesConfig->SpecialClueActorClass
+	TSubclassOf<APangeaHuntClueActor> ClueActorClass = HuntSpeciesConfig != nullptr && HuntSpeciesConfig->SpecialClueActorClass
 		? HuntSpeciesConfig->SpecialClueActorClass
 		: TSubclassOf<APangeaHuntClueActor>(APangeaHuntClueActor::StaticClass());
 
@@ -553,13 +573,13 @@ void UPangeaTrackEmitterComponent::SpawnSpecialClueActor(const FHuntTrackPoint& 
 		SpawnedClues.RemoveAll([](const TWeakObjectPtr<APangeaHuntClueActor>& Clue) { return !Clue.IsValid(); });
 		SpawnedClues.Add(ClueActor);
 
-		if (TrackPoint.ClueType == EHuntClueType::Blood && HuntSpeciesConfig)
+		if (TrackPoint.ClueType == EHuntClueType::Blood && HuntSpeciesConfig != nullptr)
 		{
 			ClueActor->SetBloodDecalMaterial(HuntSpeciesConfig->BloodDecalMaterial.Get());
 			ClueActor->SetBloodDecalSize(HuntSpeciesConfig->BloodDecalSize);
 			ClueActor->SetInteractionRadius(HuntSpeciesConfig->BloodInteractionRadius);
 		}
-		else if (TrackPoint.ClueType == EHuntClueType::BrokenFoliage && HuntSpeciesConfig)
+		else if (TrackPoint.ClueType == EHuntClueType::BrokenFoliage && HuntSpeciesConfig != nullptr)
 		{
 			ClueActor->SetBrokenFoliageDecalMaterial(HuntSpeciesConfig->BrokenFoliageDecalMaterial.Get());
 			ClueActor->SetBrokenFoliageDecalSize(HuntSpeciesConfig->BrokenFoliageDecalSize);
@@ -576,51 +596,51 @@ void UPangeaTrackEmitterComponent::SpawnSpecialClueActor(const FHuntTrackPoint& 
 
 const FHuntSpecialClueConfig* UPangeaTrackEmitterComponent::FindAdditionalClueConfig(const EHuntClueType ClueType) const
 {
-	if (!HuntSpeciesConfig)
+	if (HuntSpeciesConfig == nullptr)
 	{
 		return nullptr;
 	}
 
-	return HuntSpeciesConfig->AdditionalSpecialClues.FindByPredicate([ClueType](const FHuntSpecialClueConfig& ClueConfig)
-	{
-		return ClueConfig.ClueType == ClueType;
-	});
+	return HuntSpeciesConfig->AdditionalSpecialClues.FindByPredicate(
+		[ClueType](const FHuntSpecialClueConfig& ClueConfig) { return ClueConfig.ClueType == ClueType; });
 }
 
 float UPangeaTrackEmitterComponent::GetTrackLifetimeForClueType(const EHuntClueType ClueType) const
 {
-	if (!HuntSpeciesConfig)
+	if (HuntSpeciesConfig == nullptr)
 	{
 		return GetDefaultTrackLifetime();
 	}
 
 	switch (ClueType)
 	{
-	case EHuntClueType::Blood:
-		return HuntSpeciesConfig->BloodClueLifetime;
-	case EHuntClueType::BrokenFoliage:
-		return HuntSpeciesConfig->BrokenFoliageClueLifetime;
-	case EHuntClueType::Footprint:
-		return HuntSpeciesConfig->TrackLifetime;
-	default:
-		if (const FHuntSpecialClueConfig* ClueConfig = FindAdditionalClueConfig(ClueType))
-		{
-			return ClueConfig->Lifetime;
-		}
-		return HuntSpeciesConfig->TrackLifetime;
+		case EHuntClueType::Blood:
+			return HuntSpeciesConfig->BloodClueLifetime;
+		case EHuntClueType::BrokenFoliage:
+			return HuntSpeciesConfig->BrokenFoliageClueLifetime;
+		case EHuntClueType::Footprint:
+			return HuntSpeciesConfig->TrackLifetime;
+		default:
+			if (const FHuntSpecialClueConfig* ClueConfig = FindAdditionalClueConfig(ClueType))
+			{
+				return ClueConfig->Lifetime;
+			}
+
+			return HuntSpeciesConfig->TrackLifetime;
 	}
 }
 
 EHuntClueType UPangeaTrackEmitterComponent::DetermineAdditionalClueType(const float CurrentTimeSeconds) const
 {
-	if (!HuntSpeciesConfig)
+	if (HuntSpeciesConfig == nullptr)
 	{
 		return EHuntClueType::Footprint;
 	}
 
 	for (const FHuntSpecialClueConfig& ClueConfig : HuntSpeciesConfig->AdditionalSpecialClues)
 	{
-		if (!ClueConfig.bEnabled || ClueConfig.ClueType == EHuntClueType::Footprint || ClueConfig.ClueType == EHuntClueType::Blood || ClueConfig.ClueType == EHuntClueType::BrokenFoliage)
+		if (!ClueConfig.bEnabled || ClueConfig.ClueType == EHuntClueType::Footprint || ClueConfig.ClueType == EHuntClueType::Blood
+			|| ClueConfig.ClueType == EHuntClueType::BrokenFoliage)
 		{
 			continue;
 		}
@@ -644,37 +664,35 @@ EHuntClueType UPangeaTrackEmitterComponent::DetermineAdditionalClueType(const fl
 
 bool UPangeaTrackEmitterComponent::HasTrackType(const EHuntClueType ClueType) const
 {
-	return TrackPoints.ContainsByPredicate([ClueType](const FHuntTrackPoint& TrackPoint)
-	{
-		return TrackPoint.ClueType == ClueType;
-	});
+	return TrackPoints.ContainsByPredicate([ClueType](const FHuntTrackPoint& TrackPoint) { return TrackPoint.ClueType == ClueType; });
 }
 
 bool UPangeaTrackEmitterComponent::SetClueTypeIdentified(const EHuntClueType ClueType)
 {
 	bool* IdentificationFlag = nullptr;
+
 	switch (ClueType)
 	{
-	case EHuntClueType::Footprint:
-		IdentificationFlag = &bFootprintsIdentified;
-		break;
-	case EHuntClueType::Blood:
-		IdentificationFlag = &bBloodIdentified;
-		break;
-	case EHuntClueType::BrokenFoliage:
-		IdentificationFlag = &bBrokenFoliageIdentified;
-		break;
-	case EHuntClueType::EatenFood:
-		IdentificationFlag = &bEatenFoodIdentified;
-		break;
-	case EHuntClueType::Droppings:
-		IdentificationFlag = &bDroppingsIdentified;
-		break;
-	default:
-		break;
+		case EHuntClueType::Footprint:
+			IdentificationFlag = &bFootprintsIdentified;
+			break;
+		case EHuntClueType::Blood:
+			IdentificationFlag = &bBloodIdentified;
+			break;
+		case EHuntClueType::BrokenFoliage:
+			IdentificationFlag = &bBrokenFoliageIdentified;
+			break;
+		case EHuntClueType::EatenFood:
+			IdentificationFlag = &bEatenFoodIdentified;
+			break;
+		case EHuntClueType::Droppings:
+			IdentificationFlag = &bDroppingsIdentified;
+			break;
+		default:
+			break;
 	}
 
-	if (!IdentificationFlag || *IdentificationFlag)
+	if (IdentificationFlag == nullptr || *IdentificationFlag)
 	{
 		return false;
 	}
@@ -697,37 +715,27 @@ void UPangeaTrackEmitterComponent::DebugWhyTrackWasSkipped(const FVector& Curren
 
 	LastSkipDebugTime = CurrentTimeSeconds;
 
-	const float MinSpeedToLeaveTracks = HuntSpeciesConfig ? HuntSpeciesConfig->MinSpeedToLeaveTracks : GetDefaultMinSpeedToLeaveTracks();
-	const float MinDistanceBetweenTracks = HuntSpeciesConfig ? HuntSpeciesConfig->MinDistanceBetweenTracks : GetDefaultMinDistanceBetweenTracks();
+	const float MinSpeedToLeaveTracks = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MinSpeedToLeaveTracks : GetDefaultMinSpeedToLeaveTracks();
+	const float MinDistanceBetweenTracks = HuntSpeciesConfig != nullptr ? HuntSpeciesConfig->MinDistanceBetweenTracks : GetDefaultMinDistanceBetweenTracks();
 	const float DistanceSinceLastTrack = FVector::Dist2D(CurrentLocation, LastTrackLocation);
 
 	if (CurrentSpeed < MinSpeedToLeaveTracks)
 	{
 		PrintDebugMessage(
-			FString::Printf(TEXT("%s skipping track: speed %.1f < %.1f"),
-				*GetNameSafe(GetOwner()),
-				CurrentSpeed,
-				MinSpeedToLeaveTracks),
-			FColor::Red);
+			FString::Printf(TEXT("%s skipping track: speed %.1f < %.1f"), *GetNameSafe(GetOwner()), CurrentSpeed, MinSpeedToLeaveTracks), FColor::Red);
 		return;
 	}
 
 	if (DistanceSinceLastTrack < MinDistanceBetweenTracks)
 	{
 		PrintDebugMessage(
-			FString::Printf(TEXT("%s skipping track: distance %.1f < %.1f"),
-				*GetNameSafe(GetOwner()),
-				DistanceSinceLastTrack,
-				MinDistanceBetweenTracks),
+			FString::Printf(TEXT("%s skipping track: distance %.1f < %.1f"), *GetNameSafe(GetOwner()), DistanceSinceLastTrack, MinDistanceBetweenTracks),
 			FColor::Red);
 		return;
 	}
 
 	PrintDebugMessage(
-		FString::Printf(TEXT("%s skipping track: unknown reason, speed %.1f distance %.1f"),
-			*GetNameSafe(GetOwner()),
-			CurrentSpeed,
-			DistanceSinceLastTrack),
+		FString::Printf(TEXT("%s skipping track: unknown reason, speed %.1f distance %.1f"), *GetNameSafe(GetOwner()), CurrentSpeed, DistanceSinceLastTrack),
 		FColor::Red);
 }
 

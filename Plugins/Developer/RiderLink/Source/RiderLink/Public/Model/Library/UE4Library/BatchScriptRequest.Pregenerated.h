@@ -61,7 +61,7 @@
 #endif
 
 /// <summary>
-/// <p>Generated from: UE4Library.kt:229</p>
+/// <p>Generated from: UE4Library.kt:232</p>
 /// </summary>
 namespace JetBrains {
 namespace EditorPlugin {
@@ -79,6 +79,7 @@ protected:
     // fields
     TArray<FString> scripts_;
     int32_t startFrom_{0};
+    int32_t timeoutMs_{0};
     
 
 private:
@@ -87,16 +88,17 @@ private:
 
 public:
     // primary ctor
-    BatchScriptRequest(TArray<FString> scripts_, int32_t startFrom_);
+    BatchScriptRequest(TArray<FString> scripts_, int32_t startFrom_, int32_t timeoutMs_);
     
     // deconstruct trait
     #ifdef __cpp_structured_bindings
     template <size_t I>
     decltype(auto) get() const
     {
-        if constexpr (I < 0 || I >= 2) static_assert (I < 0 || I >= 2, "I < 0 || I >= 2");
+        if constexpr (I < 0 || I >= 3) static_assert (I < 0 || I >= 3, "I < 0 || I >= 3");
         else if constexpr (I==0)  return static_cast<const TArray<FString>&>(get_scripts());
         else if constexpr (I==1)  return static_cast<const int32_t&>(get_startFrom());
+        else if constexpr (I==2)  return static_cast<const int32_t&>(get_timeoutMs());
     }
     #endif
     
@@ -127,6 +129,7 @@ public:
     // getters
     TArray<FString> const & get_scripts() const;
     int32_t const & get_startFrom() const;
+    int32_t const & get_timeoutMs() const;
     
     // intern
 
@@ -174,7 +177,7 @@ struct hash<JetBrains::EditorPlugin::BatchScriptRequest> {
 namespace std {
 
 template <>
-class tuple_size<JetBrains::EditorPlugin::BatchScriptRequest> : public integral_constant<size_t, 2> {};
+class tuple_size<JetBrains::EditorPlugin::BatchScriptRequest> : public integral_constant<size_t, 3> {};
 
 template <size_t I>
 class tuple_element<I, JetBrains::EditorPlugin::BatchScriptRequest> {

@@ -1,6 +1,5 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "UI/RequirementEntryWidget.h"
 
 #include "Components/TextBlock.h"
@@ -10,14 +9,13 @@ void URequirementEntryWidget::InitFromRequirement(UUpgradeRequirement* InRequire
 {
 	Requirement = InRequirement;
 
-	if (RequirementText && Requirement)
+	if (RequirementText != nullptr && Requirement != nullptr)
 	{
 		RequirementText->SetText(Requirement->GetRequirementDescription());
 	}
 
-	if (StatusText)
+	if (StatusText != nullptr)
 	{
-		StatusText->SetText(bMet ? FText::FromString(TEXT("Met"))
-								 : FText::FromString(TEXT("Not Met")));
+		StatusText->SetText(bMet ? FText::FromString(TEXT("Met")) : FText::FromString(TEXT("Not Met")));
 	}
 }

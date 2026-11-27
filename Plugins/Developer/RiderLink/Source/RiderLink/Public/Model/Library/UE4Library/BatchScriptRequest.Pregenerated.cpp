@@ -28,9 +28,9 @@ void BatchScriptRequest::initialize()
 {
 }
 // primary ctor
-BatchScriptRequest::BatchScriptRequest(TArray<FString> scripts_, int32_t startFrom_) :
+BatchScriptRequest::BatchScriptRequest(TArray<FString> scripts_, int32_t startFrom_, int32_t timeoutMs_) :
 rd::IPolymorphicSerializable()
-,scripts_(std::move(scripts_)), startFrom_(std::move(startFrom_))
+,scripts_(std::move(scripts_)), startFrom_(std::move(startFrom_)), timeoutMs_(std::move(timeoutMs_))
 {
     initialize();
 }
@@ -44,7 +44,8 @@ BatchScriptRequest BatchScriptRequest::read(rd::SerializationCtx& ctx, rd::Buffe
     { return rd::Polymorphic<FString>::read(ctx, buffer); }
     );
     auto startFrom_ = buffer.read_integral<int32_t>();
-    BatchScriptRequest res{std::move(scripts_), std::move(startFrom_)};
+    auto timeoutMs_ = buffer.read_integral<int32_t>();
+    BatchScriptRequest res{std::move(scripts_), std::move(startFrom_), std::move(timeoutMs_)};
     return res;
 }
 // writer
@@ -55,6 +56,7 @@ void BatchScriptRequest::write(rd::SerializationCtx& ctx, rd::Buffer& buffer) co
     { rd::Polymorphic<std::decay_t<decltype(it)>>::write(ctx, buffer, it); }
     );
     buffer.write_integral(startFrom_);
+    buffer.write_integral(timeoutMs_);
 }
 // virtual init
 // identify
@@ -67,6 +69,14 @@ int32_t const & BatchScriptRequest::get_startFrom() const
 {
     return startFrom_;
 }
+int32_t const & BatchScriptRequest::get_timeoutMs() const
+{
+    
+    /**
+     * Time budget for the whole request. 0 means no deadline.
+     */
+    return timeoutMs_;
+}
 // intern
 // equals trait
 bool BatchScriptRequest::equals(rd::ISerializable const& object) const
@@ -75,6 +85,7 @@ bool BatchScriptRequest::equals(rd::ISerializable const& object) const
     if (this == &other) return true;
     if (this->scripts_ != other.scripts_) return false;
     if (this->startFrom_ != other.startFrom_) return false;
+    if (this->timeoutMs_ != other.timeoutMs_) return false;
     
     return true;
 }
@@ -92,6 +103,7 @@ size_t BatchScriptRequest::hashCode() const noexcept
     size_t __r = 0;
     __r = __r * 31 + (rd::contentDeepHashCode(get_scripts()));
     __r = __r * 31 + (rd::hash<int32_t>()(get_startFrom()));
+    __r = __r * 31 + (rd::hash<int32_t>()(get_timeoutMs()));
     return __r;
 }
 // type name trait
@@ -113,6 +125,9 @@ std::string BatchScriptRequest::toString() const
     res += '\n';
     res += "\tstartFrom = ";
     res += rd::to_string(startFrom_);
+    res += '\n';
+    res += "\ttimeoutMs = ";
+    res += rd::to_string(timeoutMs_);
     res += '\n';
     return res;
 }

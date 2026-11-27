@@ -5,15 +5,24 @@
 #include "Types/HuntingTypes.h"
 #include "PangeaTrackEmitterComponent.generated.h"
 
-struct FHuntSpecialClueConfig;
-class UHuntSpeciesConfig;
 class APangeaHuntClueActor;
+class UHuntSpeciesConfig;
 class UPangeaTrackEmitterComponent;
+struct FHuntSpecialClueConfig;
 
+/** Broadcast when a creature's track set becomes identified. Identifier is null when the change arrived through replication. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPangeaTrackSetIdentifiedSignature, UPangeaTrackEmitterComponent*, TrackEmitter, AActor*, Identifier);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPangeaTrackTypeIdentifiedSignature, UPangeaTrackEmitterComponent*, TrackEmitter, EHuntClueType, ClueType, AActor*, Identifier);
 
-UCLASS(ClassGroup=(Hunting), meta=(BlueprintSpawnableComponent))
+/** Broadcast when one clue type of a creature becomes identified. Identifier is null when the change arrived through replication. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FPangeaTrackTypeIdentifiedSignature, UPangeaTrackEmitterComponent*, TrackEmitter, EHuntClueType, ClueType, AActor*, Identifier);
+
+/**
+ * Creature-side half of the hunting system. On the server it records a replicated trail of
+ * track points while the owner moves, spawns clue actors for special clues and keeps the
+ * replicated state of which clue types have been identified by hunters.
+ */
+UCLASS(ClassGroup = (Hunting), meta = (BlueprintSpawnableComponent))
 class GF_PANGEAHUNTINGSYSTEMRUNTIME_API UPangeaTrackEmitterComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -24,86 +33,124 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
-	const TArray<FHuntTrackPoint>& GetTrackPoints() const { return TrackPoints; }
+	/** Track points currently recorded for the owner, oldest first. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
+	const TArray<FHuntTrackPoint>& GetTrackPoints() const
+	{
+		return TrackPoints;
+	}
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
-	const UHuntSpeciesConfig* GetHuntSpeciesConfig() const { return HuntSpeciesConfig; }
+	/** Hunting configuration of the owner's species. Can be null, in which case built-in defaults apply. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
+	const UHuntSpeciesConfig* GetHuntSpeciesConfig() const
+	{
+		return HuntSpeciesConfig;
+	}
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
+	/** Distance within which a hunter can see this creature's tracks, before hunter bonuses. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
 	float GetRevealRadius() const;
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
-	bool IsTrackSetIdentified() const { return bTrackSetIdentified; }
+	/** True once the track set as a whole or any single clue type of this creature has been identified. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
+	bool IsTrackSetIdentified() const
+	{
+		return bTrackSetIdentified;
+	}
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
+	/** True once the given clue type has been identified. Always false for Scent and Custom. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
 	bool IsClueTypeIdentified(EHuntClueType ClueType) const;
 
-	UFUNCTION(BlueprintCallable, Category="Hunting")
+	/** Marks every clue type that has at least one recorded track point as identified and broadcasts the changes. */
+	UFUNCTION(BlueprintCallable, Category = "Hunting")
 	void MarkTrackSetIdentified(AActor* Identifier);
 
-	UFUNCTION(BlueprintCallable, Category="Hunting")
+	/** Marks one clue type as identified. Blood and Broken Foliage also identify recorded footprints. */
+	UFUNCTION(BlueprintCallable, Category = "Hunting")
 	void MarkClueTypeIdentified(EHuntClueType ClueType, AActor* Identifier);
 
-	UFUNCTION(BlueprintPure, Category="Hunting")
-	bool IsTrackEmissionEnabled() const { return bRuntimeTrackEmissionEnabled; }
+	/** Whether the owner is currently allowed to leave new tracks. */
+	UFUNCTION(BlueprintPure, Category = "Hunting")
+	bool IsTrackEmissionEnabled() const
+	{
+		return bRuntimeTrackEmissionEnabled;
+	}
 
-	UFUNCTION(BlueprintCallable, Category="Hunting")
+	/** Turns track emission on or off at runtime. Existing tracks are kept. */
+	UFUNCTION(BlueprintCallable, Category = "Hunting")
 	void SetTrackEmissionEnabled(bool bEnabled);
 
-	UPROPERTY(BlueprintAssignable, Category="Hunting")
+	/** Broadcast when the track set becomes identified. */
+	UPROPERTY(BlueprintAssignable, Category = "Hunting")
 	FPangeaTrackSetIdentifiedSignature OnTrackSetIdentified;
 
-	UPROPERTY(BlueprintAssignable, Category="Hunting")
+	/** Broadcast when one clue type becomes identified. */
+	UPROPERTY(BlueprintAssignable, Category = "Hunting")
 	FPangeaTrackTypeIdentifiedSignature OnTrackTypeIdentified;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category="Hunting|Config", SaveGame)
+	/** Hunting configuration of the owner. When unset, BeginPlay takes it from the owner's creature definition. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Hunting|Config", SaveGame)
 	TObjectPtr<UHuntSpeciesConfig> HuntSpeciesConfig = nullptr;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackPoints, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** Track points recorded for the owner, oldest first. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackPoints, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	TArray<FHuntTrackPoint> TrackPoints;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** Owner location when the last track point was recorded. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	FVector LastTrackLocation = FVector::ZeroVector;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** Side of the next track. Flips after every recorded track point. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bNextTrackIsLeft = true;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** World time in seconds when the last special clue was recorded. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	float LastSpecialClueTime = -1000.f;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackSetIdentified, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the track set as a whole or any single clue type has been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackSetIdentified, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bTrackSetIdentified = false;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the footprints have been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bFootprintsIdentified = false;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the blood clues have been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bBloodIdentified = false;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the broken foliage clues have been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bBrokenFoliageIdentified = false;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the eaten food clues have been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bEatenFoodIdentified = false;
 
-	UPROPERTY(ReplicatedUsing=OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** True once the droppings clues have been identified. */
+	UPROPERTY(ReplicatedUsing = OnRep_TrackIdentificationState, VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bDroppingsIdentified = false;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category="Hunting|Tracks")
+	/** Runtime switch for leaving new tracks. Changed through SetTrackEmissionEnabled. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Hunting|Tracks")
 	bool bRuntimeTrackEmissionEnabled = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hunting|Debug")
+	/** Prints the track emitter debug messages on screen. Overwritten at BeginPlay by the species config when one is set. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hunting|Debug")
 	bool bEnableDebugMessages = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hunting|Debug", meta=(ClampMin="0.01"))
+	/** Seconds each debug message stays on screen. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hunting|Debug", meta = (ClampMin = "0.01"))
 	float DebugMessageDuration = 2.0f;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Hunting|Debug")
+	/** World time in seconds of the last skipped-track debug message. Limits those messages to one per second. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hunting|Debug")
 	float LastSkipDebugTime = -1000.f;
 
 	UFUNCTION()

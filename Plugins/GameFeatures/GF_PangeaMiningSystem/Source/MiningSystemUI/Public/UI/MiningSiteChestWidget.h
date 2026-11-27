@@ -10,13 +10,18 @@ class UButton;
 class UTextBlock;
 class UVerticalBox;
 
+/**
+ * Mining site chest menu. Shows what the chest's storage holds and lets the
+ * interacting pawn withdraw everything at once.
+ */
 UCLASS()
 class MININGSYSTEMUI_API UMiningSiteChestWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category="Mining")
+	/** Binds the menu to a chest and the pawn using it, then refreshes the status text. */
+	UFUNCTION(BlueprintCallable, Category = "Mining")
 	void InitializeFromChest(AMiningSiteChestActor* InChestActor, APawn* InInteractingPawn);
 
 protected:

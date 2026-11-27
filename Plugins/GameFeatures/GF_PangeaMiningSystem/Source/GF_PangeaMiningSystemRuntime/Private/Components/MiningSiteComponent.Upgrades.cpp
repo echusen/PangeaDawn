@@ -6,11 +6,11 @@
 #include "Items/ACFItem.h"
 #include "Misc/AutomationTest.h"
 
-namespace
+namespace MiningSiteComponentUpgradesHelpers
 {
 UACFInventoryComponent* ResolveInventoryComponentFromContext(UObject* UpgradeContext)
 {
-	if (!UpgradeContext)
+	if (UpgradeContext == nullptr)
 	{
 		return nullptr;
 	}
@@ -38,22 +38,23 @@ bool BuildRequiredItems(const TArray<FMiningItemQuantity>& Cost, TArray<FBaseIte
 
 	for (const FMiningItemQuantity& CostEntry : Cost)
 	{
-		UClass* RawItemClass = CostEntry.ItemClass.Get();
-		UClass* ACFItemClass = RawItemClass && RawItemClass->IsChildOf(UACFItem::StaticClass()) ? RawItemClass : nullptr;
-		if (!ACFItemClass || CostEntry.Quantity <= 0)
+		UClass* const RawItemClass = CostEntry.ItemClass.Get();
+		UClass* const ACFItemClass = RawItemClass != nullptr && RawItemClass->IsChildOf(UACFItem::StaticClass()) ? RawItemClass : nullptr;
+		if (ACFItemClass == nullptr || CostEntry.Quantity <= 0)
 		{
 			return false;
 		}
 
 		// Multiple lines for the same resource are one cost, not independent checks
 		// against the same stack (which allowed purchasing with too few items).
-		FBaseItem* Existing = OutItems.FindByPredicate([ACFItemClass](const FBaseItem& Item)
+		FBaseItem* const Existing = OutItems.FindByPredicate([ACFItemClass](const FBaseItem& Item) { return Item.ItemClass == ACFItemClass; });
+		if (Existing != nullptr)
 		{
-			return Item.ItemClass == ACFItemClass;
-		});
-		if (Existing)
-		{
-			if (Existing->Count > MAX_int32 - CostEntry.Quantity) return false;
+			if (Existing->Count > MAX_int32 - CostEntry.Quantity)
+			{
+				return false;
+			}
+
 			Existing->Count += CostEntry.Quantity;
 		}
 		else
@@ -64,11 +65,11 @@ bool BuildRequiredItems(const TArray<FMiningItemQuantity>& Cost, TArray<FBaseIte
 
 	return true;
 }
-}
+} // namespace MiningSiteComponentUpgradesHelpers
 
 #if WITH_DEV_AUTOMATION_TESTS
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaMiningCostTest, "Pangea.ACF.Mining.AggregatesInventoryCosts",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPangeaMiningCostTest, "Pangea.ACF.Mining.AggregatesInventoryCosts", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPangeaMiningCostTest::RunTest(const FString& Parameters)
 {
@@ -76,27 +77,35 @@ bool FPangeaMiningCostTest::RunTest(const FString& Parameters)
 	FMiningItemQuantity Cost;
 	Cost.ItemClass = UACFItem::StaticClass();
 	Cost.Quantity = 3;
-	TestTrue(TEXT("Valid duplicate costs are accepted"), BuildRequiredItems({Cost, Cost}, Items));
+	TestTrue(TEXT("Valid duplicate costs are accepted"), MiningSiteComponentUpgradesHelpers::BuildRequiredItems({ Cost, Cost }, Items));
 	TestEqual(TEXT("Duplicate classes have one combined requirement"), Items.Num(), 1);
-	if (Items.Num() == 1) TestEqual(TEXT("Both lines must be paid"), Items[0].Count, 6);
+
+	if (Items.Num() == 1)
+	{
+		TestEqual(TEXT("Both lines must be paid"), Items[0].Count, 6);
+	}
+
 	Cost.Quantity = MAX_int32;
-	TestFalse(TEXT("An overflowing combined cost is rejected"), BuildRequiredItems({Cost, Cost}, Items));
+	TestFalse(TEXT("An overflowing combined cost is rejected"), MiningSiteComponentUpgradesHelpers::BuildRequiredItems({ Cost, Cost }, Items));
 	Cost.Quantity = 0;
-	TestFalse(TEXT("Zero costs are rejected"), BuildRequiredItems({Cost}, Items));
+	TestFalse(TEXT("Zero costs are rejected"), MiningSiteComponentUpgradesHelpers::BuildRequiredItems({ Cost }, Items));
 	Cost.Quantity = 1;
 	Cost.ItemClass = UObject::StaticClass();
-	TestFalse(TEXT("Non-ACF item classes are rejected"), BuildRequiredItems({Cost}, Items));
-	TestTrue(TEXT("An empty cost is valid"), BuildRequiredItems({}, Items));
+	TestFalse(TEXT("Non-ACF item classes are rejected"), MiningSiteComponentUpgradesHelpers::BuildRequiredItems({ Cost }, Items));
+	TestTrue(TEXT("An empty cost is valid"), MiningSiteComponentUpgradesHelpers::BuildRequiredItems({}, Items));
 	TestEqual(TEXT("Output is reset for an empty cost"), Items.Num(), 0);
+
 	return true;
 }
 #endif
 
 bool UMiningSiteComponent::EstablishSite()
 {
-	if (!HasAuthority() || bEstablished || !SiteDefinition)
+	if (!HasAuthority() || bEstablished || SiteDefinition == nullptr)
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("EstablishSite blocked. Owner=%s HasAuthority=%s bEstablished=%s SiteDefinition=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("EstablishSite blocked. Owner=%s HasAuthority=%s bEstablished=%s SiteDefinition=%s"),
 			*GetNameSafe(GetOwner()),
 			HasAuthority() ? TEXT("true") : TEXT("false"),
 			bEstablished ? TEXT("true") : TEXT("false"),
@@ -105,9 +114,12 @@ bool UMiningSiteComponent::EstablishSite()
 	}
 
 	FMiningSiteLevelDefinition LevelZero;
+
 	if (!SiteDefinition->GetLevelDefinition(0, LevelZero))
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("EstablishSite failed on %s: site definition %s has no level 0."),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("EstablishSite failed on %s: site definition %s has no level 0."),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(SiteDefinition));
 		return false;
@@ -126,19 +138,22 @@ bool UMiningSiteComponent::EstablishSite()
 	LastAccountingWorldSeconds = GetWorldSeconds();
 	bClockInitialized = true;
 	bAwaitingTimingRestore = false;
-	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining site established. Owner=%s Definition=%s Level=%d StorageCapacity=%d ManualSpeed=%.2f"),
+	UE_LOG(LogPangeaMiningSite,
+		Log,
+		TEXT("Mining site established. Owner=%s Definition=%s Level=%d StorageCapacity=%d ManualSpeed=%.2f"),
 		*GetNameSafe(GetOwner()),
 		*GetNameSafe(SiteDefinition),
 		CurrentLevel,
 		LevelZero.StorageCapacity,
 		LevelZero.ManualMiningSpeedMultiplier);
 	OnSiteLevelChanged.Broadcast(INDEX_NONE, CurrentLevel);
+
 	return true;
 }
 
 bool UMiningSiteComponent::CanUpgradeSite() const
 {
-	if (!bEstablished || bAwaitingTimingRestore || MiningTimingVersion != 1 || !SiteDefinition || bTimingOperationInProgress || bUpgradeInProgress)
+	if (!bEstablished || bAwaitingTimingRestore || MiningTimingVersion != 1 || SiteDefinition == nullptr || bTimingOperationInProgress || bUpgradeInProgress)
 	{
 		return false;
 	}
@@ -151,7 +166,9 @@ bool UMiningSiteComponent::UpgradeSite()
 {
 	if (!HasAuthority() || !CanUpgradeSite())
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("UpgradeSite blocked. Owner=%s HasAuthority=%s CurrentLevel=%d Definition=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("UpgradeSite blocked. Owner=%s HasAuthority=%s CurrentLevel=%d Definition=%s"),
 			*GetNameSafe(GetOwner()),
 			HasAuthority() ? TEXT("true") : TEXT("false"),
 			CurrentLevel,
@@ -165,26 +182,42 @@ bool UMiningSiteComponent::UpgradeSite()
 
 bool UMiningSiteComponent::UpgradeSiteInternal()
 {
-	FMiningSiteLevelDefinition Previous, Next;
-	if (!GetCurrentLevelDefinition(Previous) || !GetNextLevelDefinition(Next)) return false;
+	FMiningSiteLevelDefinition Previous;
+	FMiningSiteLevelDefinition Next;
+
+	if (!GetCurrentLevelDefinition(Previous) || !GetNextLevelDefinition(Next))
+	{
+		return false;
+	}
+
 	{
 		TGuardValue<bool> Guard(bTimingOperationInProgress, true);
 		AccountElapsedTime(); // Settle the OLD rate/capacity, never retroactively the new one.
 	}
+
 	const int32 OldLevel = CurrentLevel;
 	++CurrentLevel;
 	WorkerVacancies = FMath::Min(WorkerVacancies, FMath::Max(0, Next.WorkerCount)); // Upgrades never refill existing vacancies.
 	if (Previous.PrimaryOutput.ItemClass != Next.PrimaryOutput.ItemClass || Previous.PrimaryOutput.ItemTag != Next.PrimaryOutput.ItemTag)
+	{
 		ProductionRemainder = 0.0; // A fraction of one resource cannot become another.
-	ShipmentCooldownRemaining = !Previous.bShipmentUnlocked && Next.bShipmentUnlocked
-		? GetConfiguredShipmentInterval() : FMath::Min(ShipmentCooldownRemaining, GetConfiguredShipmentInterval());
+	}
+
+	ShipmentCooldownRemaining = !Previous.bShipmentUnlocked && Next.bShipmentUnlocked ? GetConfiguredShipmentInterval()
+																					  : FMath::Min(ShipmentCooldownRemaining, GetConfiguredShipmentInterval());
 	OnSiteLevelChanged.Broadcast(OldLevel, CurrentLevel);
-	UE_LOG(LogPangeaMiningSite, Log, TEXT("Mining site upgraded. Owner=%s OldLevel=%d NewLevel=%d StorageCapacity=%d AutoPerDay=%d"),
+	UE_LOG(LogPangeaMiningSite,
+		Log,
+		TEXT("Mining site upgraded. Owner=%s OldLevel=%d NewLevel=%d StorageCapacity=%d AutoPerDay=%d"),
 		*GetNameSafe(GetOwner()),
 		OldLevel,
 		CurrentLevel,
 		GetStorageCapacity(),
-		[&]() { FMiningSiteLevelDefinition Definition; return GetCurrentLevelDefinition(Definition) ? Definition.AutomatedMineralsPerDay : 0; }());
+		[this]()
+	{
+		FMiningSiteLevelDefinition Definition;
+		return GetCurrentLevelDefinition(Definition) ? Definition.AutomatedMineralsPerDay : 0;
+	}());
 	return true;
 }
 
@@ -197,6 +230,7 @@ bool UMiningSiteComponent::CanPurchaseUpgrade(UObject* UpgradeContext) const
 
 	TArray<FMiningItemQuantity> Cost;
 	GetNextUpgradeCost(Cost);
+
 	return CanPayUpgradeCost(UpgradeContext, Cost);
 }
 
@@ -210,6 +244,7 @@ bool UMiningSiteComponent::PurchaseUpgrade(UObject* UpgradeContext)
 	TGuardValue<bool> Guard(bUpgradeInProgress, true);
 	TArray<FMiningItemQuantity> Cost;
 	GetNextUpgradeCost(Cost);
+
 	return CanPayUpgradeCost(UpgradeContext, Cost) && ConsumeUpgradeCost(UpgradeContext, Cost) && UpgradeSiteInternal();
 }
 
@@ -220,29 +255,37 @@ bool UMiningSiteComponent::CanPayUpgradeCost_Implementation(UObject* UpgradeCont
 		return true;
 	}
 
-	UACFInventoryComponent* InventoryComponent = ResolveInventoryComponentFromContext(UpgradeContext);
-	if (!InventoryComponent)
+	UACFInventoryComponent* const InventoryComponent = MiningSiteComponentUpgradesHelpers::ResolveInventoryComponentFromContext(UpgradeContext);
+	if (InventoryComponent == nullptr)
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("CanPayUpgradeCost failed: no inventory component. Owner=%s UpgradeContext=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("CanPayUpgradeCost failed: no inventory component. Owner=%s UpgradeContext=%s"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UpgradeContext));
 		return false;
 	}
 
 	TArray<FBaseItem> RequiredItems;
-	if (!BuildRequiredItems(Cost, RequiredItems))
+
+	if (!MiningSiteComponentUpgradesHelpers::BuildRequiredItems(Cost, RequiredItems))
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("CanPayUpgradeCost failed: invalid required items. Owner=%s UpgradeContext=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("CanPayUpgradeCost failed: invalid required items. Owner=%s UpgradeContext=%s"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UpgradeContext));
 		return false;
 	}
 
 	bool bHasEnoughItems = true;
+
 	for (const FBaseItem& RequiredItem : RequiredItems)
 	{
 		const int32 AvailableCount = InventoryComponent->GetTotalCountOfItemsByClass(RequiredItem.ItemClass);
-		UE_LOG(LogPangeaMiningSite, Log, TEXT("CanPayUpgradeCost item check. Owner=%s UpgradeContext=%s ItemClass=%s Required=%d Available=%d"),
+		UE_LOG(LogPangeaMiningSite,
+			Log,
+			TEXT("CanPayUpgradeCost item check. Owner=%s UpgradeContext=%s ItemClass=%s Required=%d Available=%d"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UpgradeContext),
 			*GetNameSafe(RequiredItem.ItemClass.Get()),
@@ -254,7 +297,9 @@ bool UMiningSiteComponent::CanPayUpgradeCost_Implementation(UObject* UpgradeCont
 		}
 	}
 
-	UE_LOG(LogPangeaMiningSite, Log, TEXT("CanPayUpgradeCost resolved. Owner=%s UpgradeContext=%s Result=%s"),
+	UE_LOG(LogPangeaMiningSite,
+		Log,
+		TEXT("CanPayUpgradeCost resolved. Owner=%s UpgradeContext=%s Result=%s"),
 		*GetNameSafe(GetOwner()),
 		*GetNameSafe(UpgradeContext),
 		bHasEnoughItems ? TEXT("true") : TEXT("false"));
@@ -268,19 +313,24 @@ bool UMiningSiteComponent::ConsumeUpgradeCost_Implementation(UObject* UpgradeCon
 		return true;
 	}
 
-	UACFInventoryComponent* InventoryComponent = ResolveInventoryComponentFromContext(UpgradeContext);
-	if (!InventoryComponent)
+	UACFInventoryComponent* const InventoryComponent = MiningSiteComponentUpgradesHelpers::ResolveInventoryComponentFromContext(UpgradeContext);
+	if (InventoryComponent == nullptr)
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("ConsumeUpgradeCost failed: no inventory component. Owner=%s UpgradeContext=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("ConsumeUpgradeCost failed: no inventory component. Owner=%s UpgradeContext=%s"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UpgradeContext));
 		return false;
 	}
 
 	TArray<FBaseItem> RequiredItems;
-	if (!BuildRequiredItems(Cost, RequiredItems) || !InventoryComponent->HasEnoughItemsOfType(RequiredItems))
+
+	if (!MiningSiteComponentUpgradesHelpers::BuildRequiredItems(Cost, RequiredItems) || !InventoryComponent->HasEnoughItemsOfType(RequiredItems))
 	{
-		UE_LOG(LogPangeaMiningSite, Warning, TEXT("ConsumeUpgradeCost failed: insufficient items. Owner=%s UpgradeContext=%s"),
+		UE_LOG(LogPangeaMiningSite,
+			Warning,
+			TEXT("ConsumeUpgradeCost failed: insufficient items. Owner=%s UpgradeContext=%s"),
 			*GetNameSafe(GetOwner()),
 			*GetNameSafe(UpgradeContext));
 		return false;
@@ -309,7 +359,9 @@ bool UMiningSiteComponent::ConsumeUpgradeCost_Implementation(UObject* UpgradeCon
 
 		if (RemainingToConsume > 0)
 		{
-			UE_LOG(LogPangeaMiningSite, Error, TEXT("ConsumeUpgradeCost incomplete removal. Owner=%s UpgradeContext=%s ItemClass=%s Requested=%d Remaining=%d"),
+			UE_LOG(LogPangeaMiningSite,
+				Error,
+				TEXT("ConsumeUpgradeCost incomplete removal. Owner=%s UpgradeContext=%s ItemClass=%s Requested=%d Remaining=%d"),
 				*GetNameSafe(GetOwner()),
 				*GetNameSafe(UpgradeContext),
 				*GetNameSafe(RequiredItem.ItemClass.Get()),

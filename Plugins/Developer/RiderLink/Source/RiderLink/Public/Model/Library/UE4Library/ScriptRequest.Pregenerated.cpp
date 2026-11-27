@@ -28,9 +28,9 @@ void ScriptRequest::initialize()
 {
 }
 // primary ctor
-ScriptRequest::ScriptRequest(FString script_, bool isolated_) :
+ScriptRequest::ScriptRequest(FString script_, bool isolated_, int32_t timeoutMs_) :
 rd::IPolymorphicSerializable()
-,script_(std::move(script_)), isolated_(std::move(isolated_))
+,script_(std::move(script_)), isolated_(std::move(isolated_)), timeoutMs_(std::move(timeoutMs_))
 {
     initialize();
 }
@@ -41,7 +41,8 @@ ScriptRequest ScriptRequest::read(rd::SerializationCtx& ctx, rd::Buffer & buffer
 {
     auto script_ = rd::Polymorphic<FString>::read(ctx, buffer);
     auto isolated_ = buffer.read_bool();
-    ScriptRequest res{std::move(script_), std::move(isolated_)};
+    auto timeoutMs_ = buffer.read_integral<int32_t>();
+    ScriptRequest res{std::move(script_), std::move(isolated_), std::move(timeoutMs_)};
     return res;
 }
 // writer
@@ -49,6 +50,7 @@ void ScriptRequest::write(rd::SerializationCtx& ctx, rd::Buffer& buffer) const
 {
     rd::Polymorphic<std::decay_t<decltype(script_)>>::write(ctx, buffer, script_);
     buffer.write_bool(isolated_);
+    buffer.write_integral(timeoutMs_);
 }
 // virtual init
 // identify
@@ -61,6 +63,14 @@ bool const & ScriptRequest::get_isolated() const
 {
     return isolated_;
 }
+int32_t const & ScriptRequest::get_timeoutMs() const
+{
+    
+    /**
+     * Time budget for the whole request. 0 means no deadline.
+     */
+    return timeoutMs_;
+}
 // intern
 // equals trait
 bool ScriptRequest::equals(rd::ISerializable const& object) const
@@ -69,6 +79,7 @@ bool ScriptRequest::equals(rd::ISerializable const& object) const
     if (this == &other) return true;
     if (this->script_ != other.script_) return false;
     if (this->isolated_ != other.isolated_) return false;
+    if (this->timeoutMs_ != other.timeoutMs_) return false;
     
     return true;
 }
@@ -86,6 +97,7 @@ size_t ScriptRequest::hashCode() const noexcept
     size_t __r = 0;
     __r = __r * 31 + (rd::hash<FString>()(get_script()));
     __r = __r * 31 + (rd::hash<bool>()(get_isolated()));
+    __r = __r * 31 + (rd::hash<int32_t>()(get_timeoutMs()));
     return __r;
 }
 // type name trait
@@ -107,6 +119,9 @@ std::string ScriptRequest::toString() const
     res += '\n';
     res += "\tisolated = ";
     res += rd::to_string(isolated_);
+    res += '\n';
+    res += "\ttimeoutMs = ";
+    res += rd::to_string(timeoutMs_);
     res += '\n';
     return res;
 }

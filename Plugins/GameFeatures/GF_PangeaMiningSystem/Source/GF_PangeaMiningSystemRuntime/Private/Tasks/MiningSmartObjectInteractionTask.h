@@ -5,8 +5,10 @@
 #include "Tasks/AITask.h"
 #include "MiningSmartObjectInteractionTask.generated.h"
 
-class UAITask_MoveTo;
+class AAIController;
 class APawn;
+class UAITask_MoveTo;
+class USmartObjectSubsystem;
 
 /** Mining's move/use lifecycle glue. Depends only on public Unreal APIs. */
 UCLASS()
@@ -18,29 +20,44 @@ public:
 	UMiningSmartObjectInteractionTask(const FObjectInitializer& ObjectInitializer);
 
 	/** Null leaves claim ownership with the caller. Otherwise ReadyForActivation must follow. */
-	UFUNCTION(BlueprintCallable, Category="Interaction", meta=(BlueprintInternalUseOnly="true", DefaultToSelf="Controller"))
+	UFUNCTION(BlueprintCallable, Category = "Interaction", meta = (BlueprintInternalUseOnly = "true", DefaultToSelf = "Controller"))
 	static UMiningSmartObjectInteractionTask* MoveToAndUseClaimedSlot(AAIController* Controller,
-		FSmartObjectClaimHandle ClaimHandle, bool bMoveToSlot = true, bool bLockAILogic = true, float MinimumInteractionDuration = 0.0f);
+		FSmartObjectClaimHandle ClaimHandle,
+		bool bMoveToSlot = true,
+		bool bLockAILogic = true,
+		float MinimumInteractionDuration = 0.0f);
 
-	UFUNCTION(BlueprintPure, Category="Interaction")
-	bool IsInteracting() const { return bContextActivated; }
+	/** True while the gameplay interaction context of the claimed slot is active. */
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	bool IsInteracting() const
+	{
+		return bContextActivated;
+	}
 
-	UFUNCTION(BlueprintCallable, Category="Interaction")
+	/** Ends the task as an external abort. Does nothing when the task is already finishing or finished. */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void RequestAbort();
 
 	virtual void ExternalCancel() override;
 
-	UPROPERTY(BlueprintAssignable, Category="Interaction")
+	/** Broadcast when the task ends after the interaction completed successfully. */
+	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FGenericGameplayTaskDelegate OnSucceeded;
 
-	UPROPERTY(BlueprintAssignable, Category="Interaction")
+	/** Broadcast when the task ends without a successful interaction. */
+	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FGenericGameplayTaskDelegate OnFailed;
 
-	UPROPERTY(BlueprintAssignable, Category="Interaction")
+	/** Broadcast whenever the task ends, after OnSucceeded or OnFailed. */
+	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FGenericGameplayTaskDelegate OnFinished;
 
-	UFUNCTION(BlueprintPure, Category="Interaction")
-	bool DidSucceed() const { return bSucceeded; }
+	/** True once the task has ended with a successful interaction. */
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	bool DidSucceed() const
+	{
+		return bSucceeded;
+	}
 
 protected:
 	virtual void Activate() override;

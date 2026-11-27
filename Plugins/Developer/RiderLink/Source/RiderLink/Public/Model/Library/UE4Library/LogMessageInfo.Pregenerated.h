@@ -80,7 +80,7 @@ protected:
     // fields
     ELogVerbosity::Type type_;
     FString category_;
-    rd::optional<rd::DateTime> time_;
+    rd::DateTime time_;
     
 
 private:
@@ -89,7 +89,7 @@ private:
 
 public:
     // primary ctor
-    LogMessageInfo(ELogVerbosity::Type type_, FString category_, rd::optional<rd::DateTime> time_);
+    LogMessageInfo(ELogVerbosity::Type type_, FString category_, rd::DateTime time_);
     
     // deconstruct trait
     #ifdef __cpp_structured_bindings
@@ -99,7 +99,7 @@ public:
         if constexpr (I < 0 || I >= 3) static_assert (I < 0 || I >= 3, "I < 0 || I >= 3");
         else if constexpr (I==0)  return static_cast<const ELogVerbosity::Type&>(get_type());
         else if constexpr (I==1)  return static_cast<const FString&>(get_category());
-        else if constexpr (I==2)  return static_cast<const rd::optional<rd::DateTime>&>(get_time());
+        else if constexpr (I==2)  return static_cast<const rd::DateTime&>(get_time());
     }
     #endif
     
@@ -130,7 +130,7 @@ public:
     // getters
     ELogVerbosity::Type const & get_type() const;
     FString const & get_category() const;
-    rd::optional<rd::DateTime> const & get_time() const;
+    rd::DateTime const & get_time() const;
     
     // intern
 

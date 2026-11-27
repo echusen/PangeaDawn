@@ -1,34 +1,44 @@
 #include "UI/MiningSettlementStockpileWidget.h"
 
-#include "Actors/MiningSettlementStockpileActor.h"
-#include "UI/MiningSettlementStockpileRowWidget.h"
-#include "Components/ACFInventoryComponent.h"
-#include "Components/ACFStorageComponent.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
-#include "Blueprint/WidgetTree.h"
-#include "UI/MiningUIPresentation.h"
 #include "GameFramework/PlayerController.h"
+
+#include "Actors/MiningSettlementStockpileActor.h"
+#include "Components/ACFInventoryComponent.h"
+#include "Components/ACFStorageComponent.h"
 #include "Items/ACFItem.h"
+#include "UI/MiningSettlementStockpileRowWidget.h"
+#include "UI/MiningUIPresentation.h"
 
 void UMiningSettlementStockpileWidget::InitializeFromStockpile(AMiningSettlementStockpileActor* InStockpileActor, APawn* InInteractingPawn)
 {
 	StockpileActor = InStockpileActor;
 	InteractingPawn = InInteractingPawn;
-    if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
-    {
-        Page->OnActivated().RemoveAll(this);
-        Page->OnActivated().AddWeakLambda(this, [this]() { if (!IsValid(StockpileActor)) { FMiningUIPresentation::Close(this); return; }  RefreshUI(); });
 
-        Page->OnDeactivated().RemoveAll(this);
-        Page->OnDeactivated().AddWeakLambda(this, [this]()
-        {
-        });
-    }
+	if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+	{
+		Page->OnActivated().RemoveAll(this);
+		Page->OnActivated().AddWeakLambda(this,
+			[this]()
+		{
+			if (!IsValid(StockpileActor))
+			{
+				FMiningUIPresentation::Close(this);
+				return;
+			}
+
+			RefreshUI();
+		});
+
+		Page->OnDeactivated().RemoveAll(this);
+		Page->OnDeactivated().AddWeakLambda(this, [this]() {});
+	}
 
 	RefreshUI();
 }
@@ -42,7 +52,7 @@ void UMiningSettlementStockpileWidget::NativeOnInitialized()
 
 void UMiningSettlementStockpileWidget::BuildWidgetTree()
 {
-	if (!WidgetTree || RootBox)
+	if (WidgetTree == nullptr || RootBox != nullptr)
 	{
 		return;
 	}
@@ -61,6 +71,7 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 		{
 			VerticalBoxSlot->SetPadding(FMargin(8.0f));
 		}
+
 		return TextBlock;
 	};
 
@@ -71,6 +82,7 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 		{
 			VerticalBoxSlot->SetPadding(FMargin(8.0f, 4.0f));
 		}
+
 		return Box;
 	};
 
@@ -101,11 +113,12 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 		ListScroll->AddChild(Items);
 		Column->AddChildToVerticalBox(ListBounds);
 	};
+
 	AddInventoryColumn(TEXT("PlayerInventoryColumn"), PlayerInventoryTitleText, PlayerItemsBox);
 	AddInventoryColumn(TEXT("StockpileColumn"), StockpileInventoryTitleText, StockpileItemsBox);
 
 	CloseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CloseButton"));
-    FMiningUIPresentation::Button(CloseButton);
+	FMiningUIPresentation::Button(CloseButton);
 	CloseButtonText = FMiningUIPresentation::Text(WidgetTree, TEXT("CloseButtonText"));
 	CloseButtonText->SetText(FText::FromString(TEXT("Close")));
 	CloseButtonText->SetJustification(ETextJustify::Center);
@@ -115,7 +128,7 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 		VerticalBoxSlot->SetPadding(FMargin(8.0f, 8.0f));
 	}
 
-	if (CloseButton)
+	if (CloseButton != nullptr)
 	{
 		CloseButton->OnClicked.AddDynamic(this, &ThisClass::OnCloseClicked);
 	}
@@ -123,7 +136,8 @@ void UMiningSettlementStockpileWidget::BuildWidgetTree()
 
 void UMiningSettlementStockpileWidget::RefreshUI()
 {
-	if (!TitleText || !StatusText || !PlayerInventoryTitleText || !PlayerItemsBox || !StockpileInventoryTitleText || !StockpileItemsBox)
+	if (TitleText == nullptr || StatusText == nullptr || PlayerInventoryTitleText == nullptr || PlayerItemsBox == nullptr
+		|| StockpileInventoryTitleText == nullptr || StockpileItemsBox == nullptr)
 	{
 		return;
 	}
@@ -136,12 +150,12 @@ void UMiningSettlementStockpileWidget::RefreshUI()
 	PlayerItemsBox->ClearChildren();
 	StockpileItemsBox->ClearChildren();
 
-	if (UACFInventoryComponent* InventoryComponent = InteractingPawn ? InteractingPawn->FindComponentByClass<UACFInventoryComponent>() : nullptr)
+	if (UACFInventoryComponent* InventoryComponent = InteractingPawn != nullptr ? InteractingPawn->FindComponentByClass<UACFInventoryComponent>() : nullptr)
 	{
 		RebuildSection(PlayerItemsBox, InventoryComponent->GetInventory(), true);
 	}
 
-	if (IsValid(StockpileActor) && StockpileActor->StorageComponent)
+	if (IsValid(StockpileActor) && StockpileActor->StorageComponent != nullptr)
 	{
 		RebuildSection(StockpileItemsBox, StockpileActor->StorageComponent->GetInventory(), false);
 	}
@@ -149,19 +163,20 @@ void UMiningSettlementStockpileWidget::RefreshUI()
 
 void UMiningSettlementStockpileWidget::RebuildSection(UVerticalBox* Container, const TArray<FInventoryItem>& Items, bool bFromPlayerInventory)
 {
-	if (!WidgetTree || !Container)
+	if (WidgetTree == nullptr || Container == nullptr)
 	{
 		return;
 	}
 
 	if (Items.IsEmpty())
 	{
-		UTextBlock* EmptyText = FMiningUIPresentation::Text(WidgetTree, bFromPlayerInventory ? TEXT("EmptyPlayerText") : TEXT("EmptyStockpileText"));
+		UTextBlock* const EmptyText = FMiningUIPresentation::Text(WidgetTree, bFromPlayerInventory ? TEXT("EmptyPlayerText") : TEXT("EmptyStockpileText"));
 		EmptyText->SetText(FText::FromString(TEXT("Empty")));
 		if (UVerticalBoxSlot* VerticalBoxSlot = Container->AddChildToVerticalBox(EmptyText))
 		{
 			VerticalBoxSlot->SetPadding(FMargin(4.0f));
 		}
+
 		return;
 	}
 
@@ -172,13 +187,14 @@ void UMiningSettlementStockpileWidget::RebuildSection(UVerticalBox* Container, c
 			continue;
 		}
 
-		const FString ItemName = Item.ItemClass->GetDefaultObject<UACFItem>()
+		const FString ItemName = Item.ItemClass->GetDefaultObject<UACFItem>() != nullptr
 			? Item.ItemClass->GetDefaultObject<UACFItem>()->GetItemName().ToString()
 			: Item.ItemClass->GetName();
 		const FString Label = FString::Printf(TEXT("%s %s x%d"), bFromPlayerInventory ? TEXT("Deposit") : TEXT("Withdraw"), *ItemName, Item.Count);
 
-		UMiningSettlementStockpileRowWidget* RowWidget = CreateWidget<UMiningSettlementStockpileRowWidget>(GetOwningPlayer(), UMiningSettlementStockpileRowWidget::StaticClass());
-		if (!RowWidget)
+		UMiningSettlementStockpileRowWidget* const RowWidget =
+			CreateWidget<UMiningSettlementStockpileRowWidget>(GetOwningPlayer(), UMiningSettlementStockpileRowWidget::StaticClass());
+		if (RowWidget == nullptr)
 		{
 			continue;
 		}
@@ -193,12 +209,13 @@ void UMiningSettlementStockpileWidget::RebuildSection(UVerticalBox* Container, c
 
 FText UMiningSettlementStockpileWidget::BuildStatusText() const
 {
-	if (!IsValid(StockpileActor) || !StockpileActor->StorageComponent)
+	if (!IsValid(StockpileActor) || StockpileActor->StorageComponent == nullptr)
 	{
 		return FText::FromString(TEXT("No stockpile storage."));
 	}
 
 	int32 StoredCount = 0;
+
 	for (const FInventoryItem& Item : StockpileActor->StorageComponent->GetInventory())
 	{
 		StoredCount += Item.Count;
@@ -219,7 +236,7 @@ void UMiningSettlementStockpileWidget::CloseMenu()
 
 void UMiningSettlementStockpileWidget::HandleTransferRequest(TSubclassOf<UACFItem> ItemClass, int32 Count, bool bFromPlayerInventory)
 {
-	if (!IsValid(StockpileActor) || !InteractingPawn || !ItemClass || Count <= 0)
+	if (!IsValid(StockpileActor) || InteractingPawn == nullptr || !ItemClass || Count <= 0)
 	{
 		return;
 	}

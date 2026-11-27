@@ -1,21 +1,29 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
 #include "Components/ActorComponent.h"
+#include "SmartObjectRuntime.h"
+
 #include "DataAssets/MiningSitePresentationConfig.h"
 #include "Interfaces/MiningPresentationAgentInterface.h"
 #include "Interfaces/MiningSitePresentationCoordinatorInterface.h"
-#include "SmartObjectRuntime.h"
+
 #include "MiningSitePresentationCoordinatorComponent.generated.h"
 
 class AActor;
 class AMiningSiteActor;
-class UMiningSmartObjectInteractionTask;
 class UMiningRoutineJobComponent;
 class UMiningSiteComponent;
+class UMiningSmartObjectInteractionTask;
 class USmartObjectComponent;
 
-UCLASS(ClassGroup=(Pangea), BlueprintType, Blueprintable, meta=(BlueprintSpawnableComponent))
+/**
+ * Spawns, places and animates the cosmetic worker, guard and courier actors of a mining
+ * site. Exists to keep presentation (actors, smart objects, routes) out of the economy
+ * component: nothing here grants resources or changes the simulation.
+ */
+UCLASS(ClassGroup = (Pangea), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
 class GF_PANGEAMININGSYSTEMRUNTIME_API UMiningSitePresentationCoordinatorComponent : public UActorComponent, public IMiningSitePresentationCoordinatorInterface
 {
 	GENERATED_BODY()
@@ -24,15 +32,18 @@ public:
 	UMiningSitePresentationCoordinatorComponent();
 
 	/** Presentation only: never grants resources or chooses the NPC's AI state. */
-	UFUNCTION(BlueprintCallable, Category="Presentation")
+	UFUNCTION(BlueprintCallable, Category = "Presentation")
 	void ApplyRoutinePresentation(AActor* Actor, EMiningPresentationRole Role, EMiningPresentationState State, const FVector& Focus) const;
-	UFUNCTION(BlueprintCallable, Category="Presentation")
+
+	/** Duration of one presentation clip for State as reported by the actor's presentation agent; Fallback when it reports none. */
+	UFUNCTION(BlueprintCallable, Category = "Presentation")
 	float GetRoutinePresentationDuration(AActor* Actor, EMiningPresentationState State, float Fallback) const;
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Presentation")
+
+	/** Forwards a positive, finite travel speed to the actor's presentation agent. Authority only. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Presentation")
 	void ApplyRoutineTravelSpeed(AActor* Actor, EMiningPresentationRole Role, float Speed) const;
 
-	void RefreshPresentationActors(
-		AMiningSiteActor& SiteActor,
+	void RefreshPresentationActors(AMiningSiteActor& SiteActor,
 		UMiningSiteComponent* MiningSiteComponent,
 		AActor* SpawnedSiteChest,
 		TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
@@ -40,18 +51,14 @@ public:
 		TObjectPtr<AActor>& SpawnedCourierActor);
 
 	void ClearPresentationActors(
-		TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
-		TArray<TObjectPtr<AActor>>& SpawnedGuardActors,
-		TObjectPtr<AActor>& SpawnedCourierActor);
+		TArray<TObjectPtr<AActor>>& SpawnedWorkerActors, TArray<TObjectPtr<AActor>>& SpawnedGuardActors, TObjectPtr<AActor>& SpawnedCourierActor);
 
-	void ConfigureSmartObjectComponents(
-		AMiningSiteActor& SiteActor,
+	void ConfigureSmartObjectComponents(AMiningSiteActor& SiteActor,
 		UMiningSiteComponent* MiningSiteComponent,
 		TArray<TObjectPtr<USmartObjectComponent>>& WorkerSmartObjectComponents,
 		TArray<TObjectPtr<USmartObjectComponent>>& GuardSmartObjectComponents) const;
 
-	void UpdatePresentationActorMovement(
-		AMiningSiteActor& SiteActor,
+	void UpdatePresentationActorMovement(AMiningSiteActor& SiteActor,
 		UMiningSiteComponent* MiningSiteComponent,
 		AActor* SpawnedSiteChest,
 		TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
@@ -60,40 +67,58 @@ public:
 		const TArray<TObjectPtr<USmartObjectComponent>>& WorkerSmartObjectComponents,
 		const TArray<TObjectPtr<USmartObjectComponent>>& GuardSmartObjectComponents);
 
-	virtual float GetPresentationRefreshInterval() const override { return PresentationRefreshInterval; }
-	virtual float GetPresentationMovementInterval() const override { return PresentationMovementInterval; }
+	virtual float GetPresentationRefreshInterval() const override
+	{
+		return PresentationRefreshInterval;
+	}
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	virtual float GetPresentationMovementInterval() const override
+	{
+		return PresentationMovementInterval;
+	}
+
+	/** Seconds between presentation actor refreshes, as reported to the site actor through GetPresentationRefreshInterval. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationRefreshInterval = 1.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Seconds between presentation movement updates; also sizes each scripted movement step. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationMovementInterval = 0.033f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Distance (cm) within which a player-controlled pawn makes the site's presentation relevant. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationActivationRadius = 2500.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Distance (cm) used instead of the activation radius while the presentation is already relevant, to avoid flickering at the edge. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationActivationExitRadius = 2800.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Intended full-fidelity distance (cm). Not read by the current code: full fidelity follows the activation radius. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationFullFidelityRadius = 1200.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Intended full-fidelity exit distance (cm). Not read by the current code: full fidelity follows the activation radius. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationFullFidelityExitRadius = 1450.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Scripted movement speed (cm/s) for presentation actors that have no character movement component. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationMoveSpeed = 275.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Seconds a worker interaction lasts when the role config does not set a positive duration. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float WorkerInteractionDuration = 2.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Seconds a guard interaction lasts when the role config does not set a positive duration. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float GuardInteractionDuration = 2.25f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Seconds a courier interaction lasts when the role config does not set a positive duration. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float CourierInteractionDuration = 1.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Mining|AI")
+	/** Interpolation speed used when turning a presentation actor to face its look-at location. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mining|AI")
 	float PresentationFacingInterpSpeed = 6.0f;
 
 private:
@@ -103,7 +128,12 @@ private:
 	bool bClearingSmartObjectTasks = false;
 	TArray<TWeakObjectPtr<UMiningRoutineJobComponent>> RoutineJobs;
 	AActor* SpawnConfiguredPresentationActor(AMiningSiteActor& SiteActor, UClass* ActorClass, const FVector& Location);
-	void ConfigureRoutineJob(AMiningSiteActor& SiteActor, AActor* Actor, EMiningPresentationRole Role, USmartObjectComponent* Station, const FVector& Primary, const FVector& Secondary);
+	void ConfigureRoutineJob(AMiningSiteActor& SiteActor,
+		AActor* Actor,
+		EMiningPresentationRole Role,
+		USmartObjectComponent* Station,
+		const FVector& Primary,
+		const FVector& Secondary);
 	void ReleaseRoutineAssignment(AActor* Actor);
 
 	TMap<TWeakObjectPtr<AActor>, bool> PresentationRoutePhaseMap;
@@ -119,8 +149,7 @@ private:
 	bool bFullFidelityRelevantCached = false;
 	mutable TSet<FString> ValidationWarningsIssued;
 
-	void SyncPresentationActorsForRole(
-		AMiningSiteActor& SiteActor,
+	void SyncPresentationActorsForRole(AMiningSiteActor& SiteActor,
 		TArray<TObjectPtr<AActor>>& ActorArray,
 		TSoftClassPtr<AActor> ActorClass,
 		int32 DesiredCount,
@@ -128,16 +157,14 @@ private:
 		float AngleOffsetDegrees,
 		EMiningPresentationRole Role);
 
-	void SyncCourierPresentationActor(
-		AMiningSiteActor& SiteActor,
+	void SyncCourierPresentationActor(AMiningSiteActor& SiteActor,
 		TObjectPtr<AActor>& SpawnedCourierActor,
 		TSoftClassPtr<AActor> ActorClass,
 		bool bShouldExist,
 		float Distance,
 		float AngleOffsetDegrees);
 
-	void UpdatePresentationActorRoute(
-		AMiningSiteActor& SiteActor,
+	void UpdatePresentationActorRoute(AMiningSiteActor& SiteActor,
 		TArray<TObjectPtr<AActor>>& ActorArray,
 		EMiningPresentationRole Role,
 		const TArray<TObjectPtr<USmartObjectComponent>>& SmartObjectComponents,
@@ -146,8 +173,7 @@ private:
 		float SecondaryRadius,
 		float SecondaryAngleOffsetDegrees);
 
-	void UpdateCourierPresentationRoute(
-		AMiningSiteActor& SiteActor,
+	void UpdateCourierPresentationRoute(AMiningSiteActor& SiteActor,
 		TObjectPtr<AActor>& SpawnedCourierActor,
 		float PrimaryRadius,
 		float PrimaryAngleOffsetDegrees,
@@ -158,9 +184,14 @@ private:
 	bool HasPresentationHoldActive(AActor* Actor) const;
 	void BeginPresentationHold(AActor* Actor, float Duration);
 	void UpdatePresentationFacing(AActor* Actor, const FVector& LookAtLocation) const;
-	bool TryStartSmartObjectBehavior(AMiningSiteActor& SiteActor, AActor* Actor, USmartObjectComponent* SmartObjectComponent, EMiningPresentationRole Role, int32 PreferredSlotIndex = INDEX_NONE);
+	bool TryStartSmartObjectBehavior(AMiningSiteActor& SiteActor,
+		AActor* Actor,
+		USmartObjectComponent* SmartObjectComponent,
+		EMiningPresentationRole Role,
+		int32 PreferredSlotIndex = INDEX_NONE);
 	void ReleaseSmartObjectForActor(AActor* Actor);
-	void TryMovePresentationActor(AMiningSiteActor& SiteActor, AActor* Actor, const FVector& Destination, EMiningPresentationRole Role, bool bAllowFullFidelityNav = true);
+	void TryMovePresentationActor(
+		AMiningSiteActor& SiteActor, AActor* Actor, const FVector& Destination, EMiningPresentationRole Role, bool bAllowFullFidelityNav = true);
 	FVector GetPresentationSlotLocation(const AMiningSiteActor& SiteActor, float Radius, float AngleDegrees) const;
 	bool TryGetRouteMarkerLocation(const AMiningSiteActor& SiteActor, const FString& MarkerName, FVector& OutLocation) const;
 	bool IsPresentationRelevant(const AMiningSiteActor& SiteActor) const;
@@ -172,8 +203,14 @@ private:
 	void EnsurePresentationAgentComponent(AActor* Actor) const;
 	const UMiningSitePresentationConfig* GetPresentationConfig(const UMiningSiteComponent* MiningSiteComponent) const;
 	const FMiningPresentationRoleConfig* GetRoleConfig(const UMiningSiteComponent* MiningSiteComponent, EMiningPresentationRole Role) const;
-	bool TryGetConfiguredStationTargets(const AMiningSiteActor& SiteActor, const UMiningSiteComponent* MiningSiteComponent, EMiningPresentationRole Role, int32 StationIndex, FVector& OutPrimaryTarget, FVector& OutSecondaryTarget) const;
-	void ValidatePresentationSetup(const AMiningSiteActor& SiteActor, const UMiningSiteComponent* MiningSiteComponent, int32 WorkerCount, int32 GuardCount, bool bNeedsCourier) const;
+	bool TryGetConfiguredStationTargets(const AMiningSiteActor& SiteActor,
+		const UMiningSiteComponent* MiningSiteComponent,
+		EMiningPresentationRole Role,
+		int32 StationIndex,
+		FVector& OutPrimaryTarget,
+		FVector& OutSecondaryTarget) const;
+	void ValidatePresentationSetup(
+		const AMiningSiteActor& SiteActor, const UMiningSiteComponent* MiningSiteComponent, int32 WorkerCount, int32 GuardCount, bool bNeedsCourier) const;
 	void EmitValidationWarning(const AMiningSiteActor& SiteActor, const FString& Message) const;
 	void StopActorMovement(AActor* Actor) const;
 };

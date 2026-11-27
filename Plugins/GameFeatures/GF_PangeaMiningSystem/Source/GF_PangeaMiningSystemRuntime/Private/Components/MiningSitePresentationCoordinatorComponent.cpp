@@ -4,9 +4,9 @@
 #include "Components/MiningSiteComponent.h"
 #include "Components/PangeaMiningTransportComponent.h"
 #include "DataAssets/MiningSitePresentationConfig.h"
+#include "Runtime/MiningPresentationActorRetirement.h"
 #include "SmartObjectComponent.h"
 #include "SmartObjectSubsystem.h"
-#include "Runtime/MiningPresentationActorRetirement.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPangeaMiningPresentationCoordinator, Log, All);
 
@@ -15,83 +15,82 @@ UMiningSitePresentationCoordinatorComponent::UMiningSitePresentationCoordinatorC
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UMiningSitePresentationCoordinatorComponent::RefreshPresentationActors(
-	AMiningSiteActor& SiteActor,
+void UMiningSitePresentationCoordinatorComponent::RefreshPresentationActors(AMiningSiteActor& SiteActor,
 	UMiningSiteComponent* MiningSiteComponent,
 	AActor* SpawnedSiteChest,
 	TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
 	TArray<TObjectPtr<AActor>>& SpawnedGuardActors,
 	TObjectPtr<AActor>& SpawnedCourierActor)
 {
-	if (!SiteActor.HasAuthority() || !MiningSiteComponent || !MiningSiteComponent->IsEstablished())
+	if (!SiteActor.HasAuthority() || MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished())
 	{
 		ClearPresentationActors(SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor);
 		return;
 	}
 
 	FMiningSiteLevelDefinition LevelDefinition;
+
 	if (!MiningSiteComponent->GetCurrentLevelDefinition(LevelDefinition))
 	{
 		ClearPresentationActors(SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor);
 		return;
 	}
 
-	const UMiningSitePresentationConfig* PresentationConfig = GetPresentationConfig(MiningSiteComponent);
-	if (!PresentationConfig)
+	const UMiningSitePresentationConfig* const PresentationConfig = GetPresentationConfig(MiningSiteComponent);
+	if (PresentationConfig == nullptr)
 	{
 		EmitValidationWarning(SiteActor, TEXT("Missing presentation config asset on site definition. Presentation actors will not spawn."));
 		ClearPresentationActors(SpawnedWorkerActors, SpawnedGuardActors, SpawnedCourierActor);
+
 		return;
 	}
 
 	const bool bPresentationRelevant = IsPresentationRelevant(SiteActor);
 	const int32 DesiredWorkerCount = bPresentationRelevant ? MiningSiteComponent->GetLivingWorkerCount() : 0;
 	const int32 DesiredGuardCount = bPresentationRelevant ? FMath::Max(0, LevelDefinition.GuardCount) : 0;
+
 	// The convoy broker owns the hybrid courier for the whole journey, including
 	// when players are near the settlement rather than the mining camp.
-	const bool bHybrid = SiteActor.TransportComponent && SiteActor.TransportComponent->IsHybridEnabled();
+	const bool bHybrid = SiteActor.TransportComponent != nullptr && SiteActor.TransportComponent->IsHybridEnabled();
 	const bool bShouldShowCourier = !bHybrid && bPresentationRelevant && LevelDefinition.bShipmentUnlocked && !LevelDefinition.CourierClass.IsNull();
 	ValidatePresentationSetup(SiteActor, MiningSiteComponent, DesiredWorkerCount, DesiredGuardCount, bShouldShowCourier);
 
-	const FMiningPresentationRoleConfig* WorkerConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Worker);
-	const FMiningPresentationRoleConfig* GuardConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Guard);
-	const FMiningPresentationRoleConfig* CourierConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Courier);
+	const FMiningPresentationRoleConfig* const WorkerConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Worker);
+	const FMiningPresentationRoleConfig* const GuardConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Guard);
+	const FMiningPresentationRoleConfig* const CourierConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Courier);
 
-	SyncPresentationActorsForRole(
-		SiteActor,
+	SyncPresentationActorsForRole(SiteActor,
 		SpawnedWorkerActors,
-		WorkerConfig && !WorkerConfig->ActorClassOverride.IsNull() ? WorkerConfig->ActorClassOverride : LevelDefinition.WorkerClass,
+		WorkerConfig != nullptr && !WorkerConfig->ActorClassOverride.IsNull() ? WorkerConfig->ActorClassOverride : LevelDefinition.WorkerClass,
 		DesiredWorkerCount,
 		260.0f,
 		-30.0f,
 		EMiningPresentationRole::Worker);
-	SyncPresentationActorsForRole(
-		SiteActor,
+	SyncPresentationActorsForRole(SiteActor,
 		SpawnedGuardActors,
-		GuardConfig && !GuardConfig->ActorClassOverride.IsNull() ? GuardConfig->ActorClassOverride : LevelDefinition.GuardClass,
+		GuardConfig != nullptr && !GuardConfig->ActorClassOverride.IsNull() ? GuardConfig->ActorClassOverride : LevelDefinition.GuardClass,
 		DesiredGuardCount,
 		340.0f,
 		160.0f,
 		EMiningPresentationRole::Guard);
-	SyncCourierPresentationActor(
-		SiteActor,
+	SyncCourierPresentationActor(SiteActor,
 		SpawnedCourierActor,
-		CourierConfig && !CourierConfig->ActorClassOverride.IsNull() ? CourierConfig->ActorClassOverride : LevelDefinition.CourierClass,
+		CourierConfig != nullptr && !CourierConfig->ActorClassOverride.IsNull() ? CourierConfig->ActorClassOverride : LevelDefinition.CourierClass,
 		bShouldShowCourier,
 		420.0f,
 		-140.0f);
 }
 
 void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
-	TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
-	TArray<TObjectPtr<AActor>>& SpawnedGuardActors,
-	TObjectPtr<AActor>& SpawnedCourierActor)
+	TArray<TObjectPtr<AActor>>& SpawnedWorkerActors, TArray<TObjectPtr<AActor>>& SpawnedGuardActors, TObjectPtr<AActor>& SpawnedCourierActor)
 {
 	CancelAllSmartObjectTasks();
+
 	for (AActor* Actor : SpawnedWorkerActors)
 	{
 		ReleaseSmartObjectForActor(Actor);
-		if (Actor)
+
+		if (Actor != nullptr)
 		{
 			ApplyAgentPresentation(Actor, EMiningPresentationRole::Worker, EMiningPresentationState::Idle);
 			PangeaMiningPrivate::RetirePresentationActor(Actor);
@@ -101,7 +100,8 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 	for (AActor* Actor : SpawnedGuardActors)
 	{
 		ReleaseSmartObjectForActor(Actor);
-		if (Actor)
+
+		if (Actor != nullptr)
 		{
 			ApplyAgentPresentation(Actor, EMiningPresentationRole::Guard, EMiningPresentationState::Idle);
 			PangeaMiningPrivate::RetirePresentationActor(Actor);
@@ -111,7 +111,7 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 	SpawnedWorkerActors.Reset();
 	SpawnedGuardActors.Reset();
 
-	if (SpawnedCourierActor)
+	if (SpawnedCourierActor != nullptr)
 	{
 		ReleaseSmartObjectForActor(SpawnedCourierActor);
 		ApplyAgentPresentation(SpawnedCourierActor, EMiningPresentationRole::Courier, EMiningPresentationState::Idle);
@@ -131,50 +131,51 @@ void UMiningSitePresentationCoordinatorComponent::ClearPresentationActors(
 	bFullFidelityRelevantCached = false;
 }
 
-void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents(
-	AMiningSiteActor& SiteActor,
+void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents(AMiningSiteActor& SiteActor,
 	UMiningSiteComponent* MiningSiteComponent,
 	TArray<TObjectPtr<USmartObjectComponent>>& WorkerSmartObjectComponents,
 	TArray<TObjectPtr<USmartObjectComponent>>& GuardSmartObjectComponents) const
 {
-	if (!SiteActor.HasAuthority() || !MiningSiteComponent || !MiningSiteComponent->SiteDefinition)
+	if (!SiteActor.HasAuthority() || MiningSiteComponent == nullptr || MiningSiteComponent->SiteDefinition == nullptr)
 	{
 		return;
 	}
 
-	const UMiningSitePresentationConfig* PresentationConfig = GetPresentationConfig(MiningSiteComponent);
-	if (!PresentationConfig)
+	const UMiningSitePresentationConfig* const PresentationConfig = GetPresentationConfig(MiningSiteComponent);
+	if (PresentationConfig == nullptr)
 	{
 		return;
 	}
 
-	auto ConfigureComponent = [&SiteActor, this](USmartObjectComponent* SmartObjectComponent, USmartObjectDefinition* Definition, const FString& MarkerName, bool bShouldEnable)
+	auto ConfigureComponent =
+		[&SiteActor, this](USmartObjectComponent* SmartObjectComponent, USmartObjectDefinition* Definition, const FString& MarkerName, bool bShouldEnable)
 	{
-		if (!SmartObjectComponent)
+		if (SmartObjectComponent == nullptr)
 		{
 			return;
 		}
 
-		USmartObjectSubsystem* SmartObjectSubsystem = USmartObjectSubsystem::GetCurrent(SiteActor.GetWorld());
+		USmartObjectSubsystem* const SmartObjectSubsystem = USmartObjectSubsystem::GetCurrent(SiteActor.GetWorld());
 		const bool bWasBoundToSimulation = SmartObjectComponent->IsBoundToSimulation();
-		if (bWasBoundToSimulation && SmartObjectSubsystem)
+		if (bWasBoundToSimulation && SmartObjectSubsystem != nullptr)
 		{
 			SmartObjectSubsystem->UnregisterSmartObject(SmartObjectComponent);
 		}
 
-		if (Definition && SmartObjectComponent->GetDefinition() != Definition)
+		if (Definition != nullptr && SmartObjectComponent->GetDefinition() != Definition)
 		{
 			SmartObjectComponent->SetDefinition(Definition);
 		}
 
 		FVector MarkerLocation;
+
 		if (TryGetRouteMarkerLocation(SiteActor, MarkerName, MarkerLocation))
 		{
 			SmartObjectComponent->SetWorldLocation(MarkerLocation);
 			SmartObjectComponent->SetWorldRotation(SiteActor.GetActorRotation());
 		}
 
-		if (SmartObjectSubsystem && SmartObjectComponent->GetDefinition())
+		if (SmartObjectSubsystem != nullptr && SmartObjectComponent->GetDefinition())
 		{
 			SmartObjectSubsystem->RegisterSmartObject(SmartObjectComponent);
 		}
@@ -182,15 +183,15 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 		SmartObjectComponent->K2_SetSmartObjectEnabled(bShouldEnable);
 	};
 
-	auto EnsureIndexedComponents =
-		[&SiteActor](TArray<TObjectPtr<USmartObjectComponent>>& SmartObjectComponents, const TCHAR* ComponentPrefix, int32 RequiredCount)
+	auto EnsureIndexedComponents = [&SiteActor](
+									   TArray<TObjectPtr<USmartObjectComponent>>& SmartObjectComponents, const TCHAR* ComponentPrefix, int32 RequiredCount)
 	{
 		while (SmartObjectComponents.Num() < RequiredCount)
 		{
 			const int32 ComponentIndex = SmartObjectComponents.Num();
-			USmartObjectComponent* NewComponent =
+			USmartObjectComponent* const NewComponent =
 				NewObject<USmartObjectComponent>(&SiteActor, *FString::Printf(TEXT("%s_%d"), ComponentPrefix, ComponentIndex + 1));
-			if (!NewComponent)
+			if (NewComponent == nullptr)
 			{
 				break;
 			}
@@ -203,61 +204,52 @@ void UMiningSitePresentationCoordinatorComponent::ConfigureSmartObjectComponents
 
 	FMiningSiteLevelDefinition LevelDefinition;
 	const bool bHasLevelDefinition = MiningSiteComponent->GetCurrentLevelDefinition(LevelDefinition);
-	const FMiningPresentationRoleConfig* WorkerConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Worker);
-	const FMiningPresentationRoleConfig* GuardConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Guard);
-	const int32 WorkerMarkerCount = WorkerConfig ? WorkerConfig->Stations.Num() : 0;
-	const int32 GuardMarkerCount = GuardConfig ? GuardConfig->Stations.Num() : 0;
+	const FMiningPresentationRoleConfig* const WorkerConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Worker);
+	const FMiningPresentationRoleConfig* const GuardConfig = GetRoleConfig(MiningSiteComponent, EMiningPresentationRole::Guard);
+	const int32 WorkerMarkerCount = WorkerConfig != nullptr ? WorkerConfig->Stations.Num() : 0;
+	const int32 GuardMarkerCount = GuardConfig != nullptr ? GuardConfig->Stations.Num() : 0;
 
-	USmartObjectDefinition* WorkerDefinition = WorkerConfig && !WorkerConfig->SmartObjectDefinition.IsNull()
-		? WorkerConfig->SmartObjectDefinition.LoadSynchronous()
-		: nullptr;
-	USmartObjectDefinition* GuardDefinition = GuardConfig && !GuardConfig->SmartObjectDefinition.IsNull()
-		? GuardConfig->SmartObjectDefinition.LoadSynchronous()
-		: nullptr;
+	USmartObjectDefinition* const WorkerDefinition =
+		WorkerConfig != nullptr && !WorkerConfig->SmartObjectDefinition.IsNull() ? WorkerConfig->SmartObjectDefinition.LoadSynchronous() : nullptr;
+	USmartObjectDefinition* const GuardDefinition =
+		GuardConfig != nullptr && !GuardConfig->SmartObjectDefinition.IsNull() ? GuardConfig->SmartObjectDefinition.LoadSynchronous() : nullptr;
 	EnsureIndexedComponents(WorkerSmartObjectComponents, TEXT("WorkerSmartObjectComponent"), WorkerMarkerCount);
 	EnsureIndexedComponents(GuardSmartObjectComponents, TEXT("GuardSmartObjectComponent"), GuardMarkerCount);
 
 	for (int32 Index = 0; Index < WorkerSmartObjectComponents.Num(); ++Index)
 	{
-		if (!WorkerConfig || !WorkerConfig->Stations.IsValidIndex(Index) || !WorkerDefinition)
+		if (WorkerConfig == nullptr || !WorkerConfig->Stations.IsValidIndex(Index) || WorkerDefinition == nullptr)
 		{
-			if (WorkerSmartObjectComponents[Index])
+			if (WorkerSmartObjectComponents[Index] != nullptr)
 			{
 				WorkerSmartObjectComponents[Index]->K2_SetSmartObjectEnabled(false);
 			}
+
 			continue;
 		}
 
 		const FString MarkerName = WorkerConfig->Stations[Index].PrimaryMarkerName.ToString();
-		ConfigureComponent(
-			WorkerSmartObjectComponents[Index],
-			WorkerDefinition,
-			MarkerName,
-			bHasLevelDefinition && Index < LevelDefinition.WorkerCount);
+		ConfigureComponent(WorkerSmartObjectComponents[Index], WorkerDefinition, MarkerName, bHasLevelDefinition && Index < LevelDefinition.WorkerCount);
 	}
 
 	for (int32 Index = 0; Index < GuardSmartObjectComponents.Num(); ++Index)
 	{
-		if (!GuardConfig || !GuardConfig->Stations.IsValidIndex(Index) || !GuardDefinition)
+		if (GuardConfig == nullptr || !GuardConfig->Stations.IsValidIndex(Index) || GuardDefinition == nullptr)
 		{
-			if (GuardSmartObjectComponents[Index])
+			if (GuardSmartObjectComponents[Index] != nullptr)
 			{
 				GuardSmartObjectComponents[Index]->K2_SetSmartObjectEnabled(false);
 			}
+
 			continue;
 		}
 
 		const FString MarkerName = GuardConfig->Stations[Index].PrimaryMarkerName.ToString();
-		ConfigureComponent(
-			GuardSmartObjectComponents[Index],
-			GuardDefinition,
-			MarkerName,
-			bHasLevelDefinition && Index < LevelDefinition.GuardCount);
+		ConfigureComponent(GuardSmartObjectComponents[Index], GuardDefinition, MarkerName, bHasLevelDefinition && Index < LevelDefinition.GuardCount);
 	}
 }
 
-void UMiningSitePresentationCoordinatorComponent::UpdatePresentationActorMovement(
-	AMiningSiteActor& SiteActor,
+void UMiningSitePresentationCoordinatorComponent::UpdatePresentationActorMovement(AMiningSiteActor& SiteActor,
 	UMiningSiteComponent* MiningSiteComponent,
 	AActor* SpawnedSiteChest,
 	TArray<TObjectPtr<AActor>>& SpawnedWorkerActors,
@@ -266,20 +258,27 @@ void UMiningSitePresentationCoordinatorComponent::UpdatePresentationActorMovemen
 	const TArray<TObjectPtr<USmartObjectComponent>>& WorkerSmartObjectComponents,
 	const TArray<TObjectPtr<USmartObjectComponent>>& GuardSmartObjectComponents)
 {
-	if (!SiteActor.HasAuthority() || !MiningSiteComponent || !MiningSiteComponent->IsEstablished())
+	if (!SiteActor.HasAuthority() || MiningSiteComponent == nullptr || !MiningSiteComponent->IsEstablished())
 	{
 		return;
 	}
 
-	if (!GetPresentationConfig(MiningSiteComponent))
+	if (GetPresentationConfig(MiningSiteComponent) == nullptr)
 	{
 		return;
 	}
 
-	const FVector ChestLocation = SpawnedSiteChest ? SpawnedSiteChest->GetActorLocation() : GetPresentationSlotLocation(SiteActor, 180.0f, -110.0f);
+	const FVector ChestLocation = SpawnedSiteChest != nullptr ? SpawnedSiteChest->GetActorLocation() : GetPresentationSlotLocation(SiteActor, 180.0f, -110.0f);
 	const FVector ChestOffset = SiteActor.GetTransform().InverseTransformPosition(ChestLocation);
 
-	UpdatePresentationActorRoute(SiteActor, SpawnedWorkerActors, EMiningPresentationRole::Worker, WorkerSmartObjectComponents, 260.0f, -30.0f, ChestOffset.Size(), FMath::RadiansToDegrees(FMath::Atan2(ChestOffset.Y, ChestOffset.X)));
+	UpdatePresentationActorRoute(SiteActor,
+		SpawnedWorkerActors,
+		EMiningPresentationRole::Worker,
+		WorkerSmartObjectComponents,
+		260.0f,
+		-30.0f,
+		ChestOffset.Size(),
+		FMath::RadiansToDegrees(FMath::Atan2(ChestOffset.Y, ChestOffset.X)));
 	UpdatePresentationActorRoute(SiteActor, SpawnedGuardActors, EMiningPresentationRole::Guard, GuardSmartObjectComponents, 340.0f, 160.0f, 430.0f, 205.0f);
 	UpdateCourierPresentationRoute(SiteActor, SpawnedCourierActor, 420.0f, -140.0f, 760.0f, -150.0f);
 }

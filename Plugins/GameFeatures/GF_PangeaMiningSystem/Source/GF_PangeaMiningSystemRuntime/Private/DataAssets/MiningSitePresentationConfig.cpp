@@ -1,20 +1,20 @@
 #include "DataAssets/MiningSitePresentationConfig.h"
 
-#include "Misc/DataValidation.h"
 #include "ACFAIController.h"
+#include "Misc/DataValidation.h"
 
 const FMiningPresentationRoleConfig* UMiningSitePresentationConfig::FindRoleConfig(const EMiningPresentationRole Role) const
 {
 	switch (Role)
 	{
-	case EMiningPresentationRole::Worker:
-		return &WorkerRole;
-	case EMiningPresentationRole::Guard:
-		return &GuardRole;
-	case EMiningPresentationRole::Courier:
-		return &CourierRole;
-	default:
-		return nullptr;
+		case EMiningPresentationRole::Worker:
+			return &WorkerRole;
+		case EMiningPresentationRole::Guard:
+			return &GuardRole;
+		case EMiningPresentationRole::Courier:
+			return &CourierRole;
+		default:
+			return nullptr;
 	}
 }
 
@@ -22,24 +22,28 @@ const FMiningPresentationRoleConfig* UMiningSitePresentationConfig::FindRoleConf
 EDataValidationResult UMiningSitePresentationConfig::IsDataValid(FDataValidationContext& Context) const
 {
 	EDataValidationResult Result = EDataValidationResult::Valid;
+
 	if (bUseACFRoutineJobs)
 	{
-		if (!FMath::IsFinite(NavigationTimeoutSeconds) || NavigationTimeoutSeconds < 1.0f || !FMath::IsFinite(BlockedRetryDelaySeconds) || BlockedRetryDelaySeconds < 0.1f)
+		if (!FMath::IsFinite(NavigationTimeoutSeconds) || NavigationTimeoutSeconds < 1.0f || !FMath::IsFinite(BlockedRetryDelaySeconds)
+			|| BlockedRetryDelaySeconds < 0.1f)
 		{
 			Context.AddError(FText::FromString(TEXT("Routine navigation timeout must be >= 1s and retry delay >= 0.1s (finite values).")));
 			Result = EDataValidationResult::Invalid;
 		}
-		const UClass* ControllerClass = RoutineControllerClass.LoadSynchronous();
-		const AACFAIController* Defaults = ControllerClass ? Cast<AACFAIController>(ControllerClass->GetDefaultObject()) : nullptr;
-		if (!Defaults || !Defaults->GetBehaviorTree() || !Defaults->GetDefaultAIState().MatchesTagExact(FGameplayTag::RequestGameplayTag(TEXT("AIState.Routine"))))
+
+		const UClass* const ControllerClass = RoutineControllerClass.LoadSynchronous();
+		const AACFAIController* const Defaults = ControllerClass != nullptr ? Cast<AACFAIController>(ControllerClass->GetDefaultObject()) : nullptr;
+		if (Defaults == nullptr || !Defaults->GetBehaviorTree()
+			|| !Defaults->GetDefaultAIState().MatchesTagExact(FGameplayTag::RequestGameplayTag(TEXT("AIState.Routine"))))
 		{
 			Context.AddError(FText::FromString(TEXT("Routine jobs need an ACF controller with BehaviorTree and AIState.Routine default.")));
 			Result = EDataValidationResult::Invalid;
 		}
 	}
 
-	const auto ValidateRole =
-		[&Context, &Result](const FMiningPresentationRoleConfig& RoleConfig, const EMiningPresentationRole ExpectedRole, const TCHAR* RoleName)
+	const auto ValidateRole = [&Context, &Result](
+								  const FMiningPresentationRoleConfig& RoleConfig, const EMiningPresentationRole ExpectedRole, const TCHAR* RoleName)
 	{
 		if (RoleConfig.Role != ExpectedRole)
 		{
@@ -85,6 +89,7 @@ EDataValidationResult UMiningSitePresentationConfig::IsDataValid(FDataValidation
 	ValidateRole(WorkerRole, EMiningPresentationRole::Worker, TEXT("Worker"));
 	ValidateRole(GuardRole, EMiningPresentationRole::Guard, TEXT("Guard"));
 	ValidateRole(CourierRole, EMiningPresentationRole::Courier, TEXT("Courier"));
+
 	return Result;
 }
 #endif

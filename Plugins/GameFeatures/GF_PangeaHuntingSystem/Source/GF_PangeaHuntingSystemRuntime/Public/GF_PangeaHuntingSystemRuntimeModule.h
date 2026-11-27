@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 #pragma once
+#include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 
 /** Component lifetime belongs exclusively to GameFeatureAction_AddComponents.

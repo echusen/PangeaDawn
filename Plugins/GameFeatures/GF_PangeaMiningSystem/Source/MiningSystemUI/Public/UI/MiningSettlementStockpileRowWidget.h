@@ -4,18 +4,24 @@
 #include "Blueprint/UserWidget.h"
 #include "MiningSettlementStockpileRowWidget.generated.h"
 
-class UButton;
-class UTextBlock;
 class UACFItem;
+class UButton;
 class UMiningSettlementStockpileWidget;
+class UTextBlock;
 
+/**
+ * One row of the settlement stockpile menu: a button that asks the owning stockpile widget
+ * to deposit or withdraw a single inventory stack.
+ */
 UCLASS()
 class MININGSYSTEMUI_API UMiningSettlementStockpileRowWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	void InitializeRow(UMiningSettlementStockpileWidget* InOwnerWidget, TSubclassOf<UACFItem> InItemClass, int32 InCount, bool bInFromPlayerInventory, const FString& InLabel);
+	/** Stores the stack this row transfers and the direction of the transfer, and sets the button label. */
+	void InitializeRow(
+		UMiningSettlementStockpileWidget* InOwnerWidget, TSubclassOf<UACFItem> InItemClass, int32 InCount, bool bInFromPlayerInventory, const FString& InLabel);
 
 protected:
 	virtual void NativeOnInitialized() override;

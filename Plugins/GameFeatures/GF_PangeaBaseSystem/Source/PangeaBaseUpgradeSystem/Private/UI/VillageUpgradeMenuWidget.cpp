@@ -1,30 +1,28 @@
 #include "UI/VillageUpgradeMenuWidget.h"
-#include "ANSNavPageWidget.h"
+
+#include "Components/Button.h"
+#include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 
 #include "Actors/VillageBase.h"
+#include "ANSNavPageWidget.h"
 #include "Components/UpgradeSystemComponent.h"
 #include "Objects/UpgradeRequirement.h"
-
-#include "UI/RequirementEntryWidget.h"
 #include "UI/FacilityUnlockEntryWidget.h"
-
-#include "Components/TextBlock.h"
-#include "Components/ScrollBox.h"
-#include "Components/Button.h"
-#include "GameFramework/Pawn.h"
-#include "Engine/World.h"
+#include "UI/RequirementEntryWidget.h"
 
 void UVillageUpgradeMenuWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
-	
+
 	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: NativeOnInitialized FIRED"));
 
 	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: Button ptr = %s"), *GetNameSafe(UpgradeButton));
 	UE_LOG(LogTemp, Verbose, TEXT("UpgradeMenu: ReqScroll ptr = %s"), *GetNameSafe(RequirementsScroll));
 
-
-	if (UpgradeButton)
+	if (UpgradeButton != nullptr)
 	{
 		UpgradeButton->OnClicked.AddDynamic(this, &UVillageUpgradeMenuWidget::OnUpgradeButtonClicked);
 	}
@@ -35,19 +33,26 @@ void UVillageUpgradeMenuWidget::InitializeFromVillage(AVillageBase* InVillage, A
 	UE_LOG(LogTemp, Warning, TEXT("InitializeFromVillage called"));
 	UE_LOG(LogTemp, Warning, TEXT("Village = %s"), *GetNameSafe(InVillage));
 	UE_LOG(LogTemp, Warning, TEXT("Pawn = %s"), *GetNameSafe(InInteractingPawn));
-	
+
 	VillageActor = InVillage;
 	InteractingPawn = InInteractingPawn;
+
 	if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
 	{
 		Page->OnActivated().RemoveAll(this);
-		Page->OnActivated().AddWeakLambda(this, [this]()
+		Page->OnActivated().AddWeakLambda(this,
+			[this]()
 		{
 			if (!IsValid(VillageActor))
 			{
-				if (UANSNavPageWidget* Host = GetTypedOuter<UANSNavPageWidget>()) Host->RemoveSelf();
+				if (UANSNavPageWidget* Host = GetTypedOuter<UANSNavPageWidget>())
+				{
+					Host->RemoveSelf();
+				}
+
 				return;
 			}
+
 			RefreshUI();
 		});
 	}
@@ -57,8 +62,10 @@ void UVillageUpgradeMenuWidget::InitializeFromVillage(AVillageBase* InVillage, A
 
 UPangeaUpgradeSystemComponent* UVillageUpgradeMenuWidget::GetUpgradeSystem() const
 {
-	if (!VillageActor)
+	if (VillageActor == nullptr)
+	{
 		return nullptr;
+	}
 
 	// Either you have a cached pointer, or use FindComponentByClass
 	return VillageActor->FindComponentByClass<UPangeaUpgradeSystemComponent>();
@@ -76,202 +83,212 @@ FText UVillageUpgradeMenuWidget::GetFacilityDisplayName(const FGameplayTag& Faci
 
 void UVillageUpgradeMenuWidget::RefreshUI()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() START ==="));
+	UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() START ==="));
 
-    UE_LOG(LogTemp, Warning, TEXT("VillageActor = %s"), *GetNameSafe(VillageActor));
-    UE_LOG(LogTemp, Warning, TEXT("InteractingPawn = %s"), *GetNameSafe(InteractingPawn));
+	UE_LOG(LogTemp, Warning, TEXT("VillageActor = %s"), *GetNameSafe(VillageActor));
+	UE_LOG(LogTemp, Warning, TEXT("InteractingPawn = %s"), *GetNameSafe(InteractingPawn));
 
-    UPangeaUpgradeSystemComponent* UpgradeSystem = GetUpgradeSystem();
-    UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem = %s"), *GetNameSafe(UpgradeSystem));
+	UPangeaUpgradeSystemComponent* const UpgradeSystem = GetUpgradeSystem();
+	UE_LOG(LogTemp, Warning, TEXT("UpgradeSystem = %s"), *GetNameSafe(UpgradeSystem));
 
-    if (!UpgradeSystem)
-    {
-        UE_LOG(LogTemp, Error, TEXT("RefreshUI ABORT — UpgradeSystem is NULL"));
-        UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() END ==="));
-        return;
-    }
+	if (UpgradeSystem == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RefreshUI ABORT — UpgradeSystem is NULL"));
+		UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() END ==="));
 
-    // ---------------- Current / Next Level ----------------
-    if (CurrentLevelText)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("CurrentLevelText VALID"));
-    }
-    else
-        UE_LOG(LogTemp, Error, TEXT("CurrentLevelText NULL"));
+		return;
+	}
 
-    if (NextLevelText)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("NextLevelText VALID"));
-    }
-    else
-        UE_LOG(LogTemp, Error, TEXT("NextLevelText NULL"));
+	// ---------------- Current / Next Level ----------------
+	if (CurrentLevelText != nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CurrentLevelText VALID"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("CurrentLevelText NULL"));
+	}
 
-    // Show current level
-    if (CurrentLevelText)
-        CurrentLevelText->SetText(FText::AsNumber(UpgradeSystem->CurrentLevel));
+	if (NextLevelText != nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NextLevelText VALID"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("NextLevelText NULL"));
+	}
 
-    // Get next level
-    FUpgradeLevelDefinition NextLevelDef;
-    const bool bHasNextLevel = UpgradeSystem->GetNextLevelDefinition(NextLevelDef);
+	// Show current level
+	if (CurrentLevelText != nullptr)
+	{
+		CurrentLevelText->SetText(FText::AsNumber(UpgradeSystem->CurrentLevel));
+	}
 
-    UE_LOG(LogTemp, Warning, TEXT("bHasNextLevel = %s"), bHasNextLevel ? TEXT("TRUE") : TEXT("FALSE"));
-    UE_LOG(LogTemp, Warning, TEXT("NextLevelDef.Level = %d"), NextLevelDef.Level);
-    UE_LOG(LogTemp, Warning, TEXT("NextLevelDef.Milestones = %d"), NextLevelDef.Milestones.Num());
+	// Get next level
+	FUpgradeLevelDefinition NextLevelDef;
+	const bool bHasNextLevel = UpgradeSystem->GetNextLevelDefinition(NextLevelDef);
 
-    if (NextLevelText)
-    {
-        if (bHasNextLevel)
-            NextLevelText->SetText(FText::AsNumber(NextLevelDef.Level));
-        else
-            NextLevelText->SetText(FText::FromString(TEXT("MAX")));
-    }
+	UE_LOG(LogTemp, Warning, TEXT("bHasNextLevel = %s"), bHasNextLevel ? TEXT("TRUE") : TEXT("FALSE"));
+	UE_LOG(LogTemp, Warning, TEXT("NextLevelDef.Level = %d"), NextLevelDef.Level);
+	UE_LOG(LogTemp, Warning, TEXT("NextLevelDef.Milestones = %d"), NextLevelDef.Milestones.Num());
 
-    // ---------------- Requirements List ----------------
-    UE_LOG(LogTemp, Warning, TEXT("=== Building Requirements List ==="));
+	if (NextLevelText != nullptr)
+	{
+		if (bHasNextLevel)
+		{
+			NextLevelText->SetText(FText::AsNumber(NextLevelDef.Level));
+		}
+		else
+		{
+			NextLevelText->SetText(FText::FromString(TEXT("MAX")));
+		}
+	}
 
-    if (!RequirementsScroll)
-    {
-        UE_LOG(LogTemp, Error, TEXT("RequirementsScroll is NULL"));
-    }
-    else
-    {
-        RequirementsScroll->ClearChildren();
-        UE_LOG(LogTemp, Warning, TEXT("RequirementsScroll cleared"));
-    }
+	// ---------------- Requirements List ----------------
+	UE_LOG(LogTemp, Warning, TEXT("=== Building Requirements List ==="));
 
-    if (!RequirementEntryClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("RequirementEntryClass is NULL (NOT SET IN BP!)"));
-    }
+	if (RequirementsScroll == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RequirementsScroll is NULL"));
+	}
+	else
+	{
+		RequirementsScroll->ClearChildren();
+		UE_LOG(LogTemp, Warning, TEXT("RequirementsScroll cleared"));
+	}
 
-    int32 AddedRequirementCount = 0;
+	if (!RequirementEntryClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RequirementEntryClass is NULL (NOT SET IN BP!)"));
+	}
 
-    if (RequirementsScroll && bHasNextLevel && RequirementEntryClass)
-    {
-        // Unmet list
-        TArray<UUpgradeRequirement*> Unmet;
-        UpgradeSystem->GetUnmetRequirementsForNextLevel(InteractingPawn, Unmet);
-        UE_LOG(LogTemp, Warning, TEXT("Unmet requirement count: %d"), Unmet.Num());
+	int32 AddedRequirementCount = 0;
 
-        // Loop through milestones
-        for (const FUpgradeMilestoneDefinition& Milestone : NextLevelDef.Milestones)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Milestone Tag: %s — Requirements: %d"),
-                   *Milestone.MilestoneTag.ToString(), Milestone.Requirements.Num());
+	if (RequirementsScroll != nullptr && bHasNextLevel && RequirementEntryClass)
+	{
+		// Unmet list
+		TArray<UUpgradeRequirement*> Unmet;
+		UpgradeSystem->GetUnmetRequirementsForNextLevel(InteractingPawn, Unmet);
+		UE_LOG(LogTemp, Warning, TEXT("Unmet requirement count: %d"), Unmet.Num());
 
-            for (UUpgradeRequirement* Req : Milestone.Requirements)
-            {
-                if (!Req)
-                {
-                    UE_LOG(LogTemp, Error, TEXT("Null requirement detected — skipping"));
-                    continue;
-                }
+		// Loop through milestones
+		for (const FUpgradeMilestoneDefinition& Milestone : NextLevelDef.Milestones)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Milestone Tag: %s — Requirements: %d"), *Milestone.MilestoneTag.ToString(), Milestone.Requirements.Num());
 
-                bool bMet = !Unmet.Contains(Req);
-                UE_LOG(LogTemp, Warning, TEXT("Requirement '%s' Met = %s"),
-                       *GetNameSafe(Req),
-                       bMet ? TEXT("TRUE") : TEXT("FALSE"));
+			for (UUpgradeRequirement* Req : Milestone.Requirements)
+			{
+				if (Req == nullptr)
+				{
+					UE_LOG(LogTemp, Error, TEXT("Null requirement detected — skipping"));
+					continue;
+				}
 
-                URequirementEntryWidget* Entry = CreateWidget<URequirementEntryWidget>(this, RequirementEntryClass);
+				const bool bMet = !Unmet.Contains(Req);
+				UE_LOG(LogTemp, Warning, TEXT("Requirement '%s' Met = %s"), *GetNameSafe(Req), bMet ? TEXT("TRUE") : TEXT("FALSE"));
 
-                if (!Entry)
-                {
-                    UE_LOG(LogTemp, Error, TEXT("FAILED to create RequirementEntryWidget!"));
-                    continue;
-                }
+				URequirementEntryWidget* const Entry = CreateWidget<URequirementEntryWidget>(this, RequirementEntryClass);
 
-                Entry->InitFromRequirement(Req, bMet);
-                RequirementsScroll->AddChild(Entry);
+				if (Entry == nullptr)
+				{
+					UE_LOG(LogTemp, Error, TEXT("FAILED to create RequirementEntryWidget!"));
+					continue;
+				}
 
-                AddedRequirementCount++;
-            }
-        }
-    }
+				Entry->InitFromRequirement(Req, bMet);
+				RequirementsScroll->AddChild(Entry);
 
-    UE_LOG(LogTemp, Warning, TEXT("Total Requirements Added: %d"), AddedRequirementCount);
+				AddedRequirementCount++;
+			}
+		}
+	}
 
-    // ---------------- Facilities Unlock List ----------------
-    UE_LOG(LogTemp, Warning, TEXT("=== Building Facility Unlock List ==="));
+	UE_LOG(LogTemp, Warning, TEXT("Total Requirements Added: %d"), AddedRequirementCount);
 
-    if (!UnlocksScroll)
-    {
-        UE_LOG(LogTemp, Error, TEXT("UnlocksScroll is NULL"));
-    }
-    else
-    {
-        UnlocksScroll->ClearChildren();
-        UE_LOG(LogTemp, Warning, TEXT("UnlocksScroll cleared"));
-    }
+	// ---------------- Facilities Unlock List ----------------
+	UE_LOG(LogTemp, Warning, TEXT("=== Building Facility Unlock List ==="));
 
-    if (!FacilityUnlockEntryClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("FacilityUnlockEntryClass is NULL (NOT SET IN BP!)"));
-    }
+	if (UnlocksScroll == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UnlocksScroll is NULL"));
+	}
+	else
+	{
+		UnlocksScroll->ClearChildren();
+		UE_LOG(LogTemp, Warning, TEXT("UnlocksScroll cleared"));
+	}
 
-    int32 AddedFacilities = 0;
+	if (!FacilityUnlockEntryClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("FacilityUnlockEntryClass is NULL (NOT SET IN BP!)"));
+	}
 
-    if (UnlocksScroll && FacilityUnlockEntryClass && bHasNextLevel)
-    {
-        TArray<FGameplayTag> Facilities;
-        UpgradeSystem->GetFacilitiesUnlockedAtLevel(NextLevelDef.Level, Facilities);
+	int32 AddedFacilities = 0;
 
-        UE_LOG(LogTemp, Warning, TEXT("Facilities unlocked at next level: %d"), Facilities.Num());
+	if (UnlocksScroll != nullptr && FacilityUnlockEntryClass && bHasNextLevel)
+	{
+		TArray<FGameplayTag> Facilities;
+		UpgradeSystem->GetFacilitiesUnlockedAtLevel(NextLevelDef.Level, Facilities);
 
-        for (const FGameplayTag& Tag : Facilities)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("FacilityTag = %s"), *Tag.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("Facilities unlocked at next level: %d"), Facilities.Num());
 
-            if (!Tag.IsValid())
-            {
-                UE_LOG(LogTemp, Error, TEXT("Invalid facility tag — skipping"));
-                continue;
-            }
+		for (const FGameplayTag& Tag : Facilities)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("FacilityTag = %s"), *Tag.ToString());
 
-            UFacilityUnlockEntryWidget* Entry =
-                CreateWidget<UFacilityUnlockEntryWidget>(this, FacilityUnlockEntryClass);
+			if (!Tag.IsValid())
+			{
+				UE_LOG(LogTemp, Error, TEXT("Invalid facility tag — skipping"));
+				continue;
+			}
 
-            if (!Entry)
-            {
-                UE_LOG(LogTemp, Error, TEXT("FAILED to create FacilityUnlockEntryWidget!"));
-                continue;
-            }
+			UFacilityUnlockEntryWidget* const Entry = CreateWidget<UFacilityUnlockEntryWidget>(this, FacilityUnlockEntryClass);
 
-            const FText DisplayName = GetFacilityDisplayName(Tag);
-            Entry->InitFromFacilityDisplayName(Tag, DisplayName);
-            UnlocksScroll->AddChild(Entry);
-            AddedFacilities++;
-        }
-    }
+			if (Entry == nullptr)
+			{
+				UE_LOG(LogTemp, Error, TEXT("FAILED to create FacilityUnlockEntryWidget!"));
+				continue;
+			}
 
-    UE_LOG(LogTemp, Warning, TEXT("Total Facilities Added: %d"), AddedFacilities);
+			const FText DisplayName = GetFacilityDisplayName(Tag);
+			Entry->InitFromFacilityDisplayName(Tag, DisplayName);
+			UnlocksScroll->AddChild(Entry);
+			AddedFacilities++;
+		}
+	}
 
-    // ---------------- Upgrade Button ----------------
-    if (UpgradeButton)
-    {
-        bool bCanUpgrade = UpgradeSystem->CanUpgradeToNextLevel(InteractingPawn);
-        UpgradeButton->SetIsEnabled(bCanUpgrade);
+	UE_LOG(LogTemp, Warning, TEXT("Total Facilities Added: %d"), AddedFacilities);
 
-        UE_LOG(LogTemp, Warning, TEXT("UpgradeButton Enabled = %s"), 
-               bCanUpgrade ? TEXT("TRUE") : TEXT("FALSE"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("UpgradeButton is NULL"));
-    }
+	// ---------------- Upgrade Button ----------------
+	if (UpgradeButton != nullptr)
+	{
+		const bool bCanUpgrade = UpgradeSystem->CanUpgradeToNextLevel(InteractingPawn);
+		UpgradeButton->SetIsEnabled(bCanUpgrade);
 
-    UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() END ==="));
+		UE_LOG(LogTemp, Warning, TEXT("UpgradeButton Enabled = %s"), bCanUpgrade ? TEXT("TRUE") : TEXT("FALSE"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("UpgradeButton is NULL"));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("=== RefreshUI() END ==="));
 }
 
 void UVillageUpgradeMenuWidget::OnUpgradeButtonClicked()
 {
-	
-    if (!IsValid(VillageActor) || !IsValid(InteractingPawn))
-        return;
+	if (!IsValid(VillageActor) || !IsValid(InteractingPawn))
+	{
+		return;
+	}
 
-    const bool bSuccess = VillageActor->UpgradeBase(InteractingPawn);
+	const bool bSuccess = VillageActor->UpgradeBase(InteractingPawn);
 
-    if (bSuccess)
-    {
-        if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>()) Page->RemoveSelf();
-    }
+	if (bSuccess)
+	{
+		if (UANSNavPageWidget* Page = GetTypedOuter<UANSNavPageWidget>())
+		{
+			Page->RemoveSelf();
+		}
+	}
 }

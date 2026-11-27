@@ -1,9 +1,6 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
-#include "Characters/PDDinosaurBase.h"
-#include "Components/PangeaHunterSenseComponent.h"
-#include "Components/PangeaTrackEmitterComponent.h"
 #include "Components/GameFrameworkComponentManager.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -14,89 +11,163 @@
 #include "GameFramework/PlayerController.h"
 #include "Tests/AutomationEditorCommon.h"
 
-namespace
+#include "Characters/PDDinosaurBase.h"
+#include "Components/PangeaHunterSenseComponent.h"
+#include "Components/PangeaTrackEmitterComponent.h"
+
+namespace PangeaHuntingLifecycleTestsHelpers
 {
-template <typename T> int32 CountFeatureComponents(AActor* Actor)
+template <typename T>
+int32 CountFeatureComponents(AActor* Actor)
 {
 	TArray<T*> Components;
-	if (Actor) Actor->GetComponents<T>(Components);
+
+	if (Actor != nullptr)
+	{
+		Actor->GetComponents<T>(Components);
+	}
+
 	return Components.FilterByPredicate([](const T* Component) { return IsValid(Component) && Component->IsRegistered(); }).Num();
 }
+
 UWorld* FindHuntingPIEWorld()
 {
 	if (GEngine)
+	{
 		for (const FWorldContext& Context : GEngine->GetWorldContexts())
-			if (Context.WorldType == EWorldType::PIE && Context.World() && Context.World()->GetFirstPlayerController()) return Context.World();
+		{
+			if (Context.WorldType == EWorldType::PIE && Context.World() != nullptr && Context.World()->GetFirstPlayerController() != nullptr)
+			{
+				return Context.World();
+			}
+		}
+	}
+
 	return nullptr;
 }
+
+/** Progress of the latent lifecycle test, shared between the latent command and the feature state callbacks. */
 struct FHuntingLifecycleState
 {
-	FString URL, Error;
-	TWeakObjectPtr<APDDinosaurBase> Probe, InactiveProbe;
+	FString URL;
+	FString Error;
+	TWeakObjectPtr<APDDinosaurBase> Probe;
+	TWeakObjectPtr<APDDinosaurBase> InactiveProbe;
 	int32 Stage = 0;
 	bool bComplete = false;
-	double ReadyAt = 0.0, Deadline = FPlatformTime::Seconds() + 30.0;
+	double ReadyAt = 0.0;
+	double Deadline = FPlatformTime::Seconds() + 30.0;
 };
-}
+} // namespace PangeaHuntingLifecycleTestsHelpers
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaHuntingInjectionDataTest, "Pangea.ACF.Hunting.SingleInjectionDataContract",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPangeaHuntingInjectionDataTest, "Pangea.ACF.Hunting.SingleInjectionDataContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPangeaHuntingInjectionDataTest::RunTest(const FString& Parameters)
 {
 	const UGameFeatureData* Data = LoadObject<UGameFeatureData>(nullptr, TEXT("/GF_PangeaHuntingSystem/GF_PangeaHuntingSystem.GF_PangeaHuntingSystem"));
-	if (!TestNotNull(TEXT("Hunting feature data"), Data)) return false;
-	int32 Emitters = 0, Hunters = 0;
+	if (!TestNotNull(TEXT("Hunting feature data"), Data))
+	{
+		return false;
+	}
+
+	int32 Emitters = 0;
+	int32 Hunters = 0;
+
 	for (const UGameFeatureAction* Action : Data->GetActions())
+	{
 		if (const UGameFeatureAction_AddComponents* Add = Cast<UGameFeatureAction_AddComponents>(Action))
+		{
 			for (const FGameFeatureComponentEntry& Entry : Add->ComponentList)
 			{
 				if (Entry.ComponentClass.ToSoftObjectPath() == FSoftObjectPath(UPangeaTrackEmitterComponent::StaticClass()))
 				{
 					++Emitters;
-					TestTrue(TEXT("Emitter targets the native extensible dinosaur family"), Entry.ActorClass.ToSoftObjectPath() == FSoftObjectPath(APDDinosaurBase::StaticClass()));
+					TestTrue(TEXT("Emitter targets the native extensible dinosaur family"),
+						Entry.ActorClass.ToSoftObjectPath() == FSoftObjectPath(APDDinosaurBase::StaticClass()));
 				}
 				else if (Entry.ComponentClass.ToSoftObjectPath() == FSoftObjectPath(UPangeaHunterSenseComponent::StaticClass()))
 				{
 					++Hunters;
-					TestEqual(TEXT("Hunter sense targets only the player family"), Entry.ActorClass.ToSoftObjectPath().ToString(), FString(TEXT("/Game/_Game/Characters/Player/Blueprints/BP_Pangea_Player.BP_Pangea_Player_C")));
+					TestEqual(TEXT("Hunter sense targets only the player family"),
+						Entry.ActorClass.ToSoftObjectPath().ToString(),
+						FString(TEXT("/Game/_Game/Characters/Player/Blueprints/BP_Pangea_Player.BP_Pangea_Player_C")));
 				}
-				else continue;
+				else
+				{
+					continue;
+				}
+
 				TestTrue(TEXT("Server and client coverage retained"), Entry.bClientComponent && Entry.bServerComponent);
 				TestTrue(TEXT("Requests are AddUnique"), (Entry.AdditionFlags & static_cast<uint8>(EGameFrameworkAddComponentFlags::AddUnique)) != 0);
 			}
+		}
+	}
+
 	TestEqual(TEXT("One emitter registration"), Emitters, 1);
 	TestEqual(TEXT("One hunter registration"), Hunters, 1);
+
 	return !HasAnyErrors();
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaHuntingLifecycleTest, "Pangea.ACF.Hunting.ActivateDeactivateReactivateInPIE",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPangeaHuntingLifecycleTest,
+	"Pangea.ACF.Hunting.ActivateDeactivateReactivateInPIE",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPangeaHuntingLifecycleTest::RunTest(const FString& Parameters)
 {
 	ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
-	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, State = MakeShared<FHuntingLifecycleState>()]() mutable
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, State = MakeShared<PangeaHuntingLifecycleTestsHelpers::FHuntingLifecycleState>()]() mutable
 	{
 		UGameFeaturesSubsystem& Features = UGameFeaturesSubsystem::Get();
+
 		if (FPlatformTime::Seconds() > State->Deadline)
 		{
 			AddError(TEXT("Timed out exercising hunting lifecycle; requesting original active state restoration"));
-			if (!State->URL.IsEmpty()) Features.LoadAndActivateGameFeaturePlugin(State->URL, FGameFeaturePluginLoadComplete());
-			if (State->Probe.IsValid()) State->Probe->Destroy();
-			if (State->InactiveProbe.IsValid()) State->InactiveProbe->Destroy();
+
+			if (!State->URL.IsEmpty())
+			{
+				Features.LoadAndActivateGameFeaturePlugin(State->URL, FGameFeaturePluginLoadComplete());
+			}
+
+			if (State->Probe.IsValid())
+			{
+				State->Probe->Destroy();
+			}
+
+			if (State->InactiveProbe.IsValid())
+			{
+				State->InactiveProbe->Destroy();
+			}
+
 			return true;
 		}
-		UWorld* World = FindHuntingPIEWorld();
-		if (!World) return false;
-		if (State->ReadyAt == 0.0) { State->ReadyAt = FPlatformTime::Seconds() + 1.0; return false; }
-		if (FPlatformTime::Seconds() < State->ReadyAt) return false;
-		APawn* Player = World->GetFirstPlayerController()->GetPawn();
-		const auto Completion = FGameFeaturePluginChangeStateComplete::CreateLambda([State](const UE::GameFeatures::FResult& Result)
+
+		UWorld* const World = PangeaHuntingLifecycleTestsHelpers::FindHuntingPIEWorld();
+		if (World == nullptr)
+		{
+			return false;
+		}
+
+		if (State->ReadyAt == 0.0)
+		{
+			State->ReadyAt = FPlatformTime::Seconds() + 1.0;
+			return false;
+		}
+
+		if (FPlatformTime::Seconds() < State->ReadyAt)
+		{
+			return false;
+		}
+
+		APawn* const Player = World->GetFirstPlayerController()->GetPawn();
+		const FGameFeaturePluginChangeStateComplete Completion =
+			FGameFeaturePluginChangeStateComplete::CreateLambda([State](const UE::GameFeatures::FResult& Result)
 		{
 			State->bComplete = true;
 			State->Error = Result.HasError() ? Result.GetError() : FString();
 		});
 		FActorSpawnParameters Spawn;
 		Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
 		if (State->Stage == 0)
 		{
 			if (!Features.GetPluginURLByName(TEXT("GF_PangeaHuntingSystem"), State->URL) || !Features.IsGameFeaturePluginActive(State->URL))
@@ -104,37 +175,82 @@ bool FPangeaHuntingLifecycleTest::RunTest(const FString& Parameters)
 				AddError(TEXT("Hunting feature must start active; no feature state was changed"));
 				return true;
 			}
-			TestEqual(TEXT("Exactly one player hunter sense"), CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 1);
+
+			TestEqual(
+				TEXT("Exactly one player hunter sense"), PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 1);
 			for (TActorIterator<APDDinosaurBase> It(World); It; ++It)
-				TestEqual(TEXT("Exactly one emitter on each existing dinosaur"), CountFeatureComponents<UPangeaTrackEmitterComponent>(*It), 1);
+			{
+				TestEqual(TEXT("Exactly one emitter on each existing dinosaur"),
+					PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaTrackEmitterComponent>(*It),
+					1);
+			}
+
 			State->Probe = World->SpawnActor<APDDinosaurBase>(APDDinosaurBase::StaticClass(), FVector(0, 0, 5000), FRotator::ZeroRotator, Spawn);
-			TestEqual(TEXT("Exactly one emitter on newly spawned native dinosaur"), CountFeatureComponents<UPangeaTrackEmitterComponent>(State->Probe.Get()), 1);
-			State->Stage = 1; State->bComplete = false;
+			TestEqual(TEXT("Exactly one emitter on newly spawned native dinosaur"),
+				PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaTrackEmitterComponent>(State->Probe.Get()),
+				1);
+			State->Stage = 1;
+			State->bComplete = false;
 			Features.DeactivateGameFeaturePlugin(State->URL, Completion);
+
 			return false;
 		}
-		if (!State->bComplete) return false;
-		if (!State->Error.IsEmpty()) AddError(State->Error);
+
+		if (!State->bComplete)
+		{
+			return false;
+		}
+
+		if (!State->Error.IsEmpty())
+		{
+			AddError(State->Error);
+		}
+
 		if (State->Stage == 1)
 		{
-			TestEqual(TEXT("Deactivate removes hunter sense"), CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 0);
+			TestEqual(
+				TEXT("Deactivate removes hunter sense"), PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 0);
 			for (TActorIterator<APDDinosaurBase> It(World); It; ++It)
-				TestEqual(TEXT("Deactivate removes emitters"), CountFeatureComponents<UPangeaTrackEmitterComponent>(*It), 0);
+			{
+				TestEqual(
+					TEXT("Deactivate removes emitters"), PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaTrackEmitterComponent>(*It), 0);
+			}
+
 			State->InactiveProbe = World->SpawnActor<APDDinosaurBase>(APDDinosaurBase::StaticClass(), FVector(0, 1000, 5000), FRotator::ZeroRotator, Spawn);
-			TestEqual(TEXT("Module load alone does not inject while feature inactive"), CountFeatureComponents<UPangeaTrackEmitterComponent>(State->InactiveProbe.Get()), 0);
-			State->Stage = 2; State->bComplete = false;
+			TestEqual(TEXT("Module load alone does not inject while feature inactive"),
+				PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaTrackEmitterComponent>(State->InactiveProbe.Get()),
+				0);
+			State->Stage = 2;
+			State->bComplete = false;
 			Features.LoadAndActivateGameFeaturePlugin(State->URL, Completion);
+
 			return false;
 		}
+
 		TestTrue(TEXT("Original active state restored"), Features.IsGameFeaturePluginActive(State->URL));
-		TestEqual(TEXT("Reactivate creates one hunter sense"), CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 1);
+		TestEqual(
+			TEXT("Reactivate creates one hunter sense"), PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaHunterSenseComponent>(Player), 1);
 		for (TActorIterator<APDDinosaurBase> It(World); It; ++It)
-			TestEqual(TEXT("Reactivate creates exactly one emitter per dinosaur"), CountFeatureComponents<UPangeaTrackEmitterComponent>(*It), 1);
-		if (State->Probe.IsValid()) State->Probe->Destroy();
-		if (State->InactiveProbe.IsValid()) State->InactiveProbe->Destroy();
+		{
+			TestEqual(TEXT("Reactivate creates exactly one emitter per dinosaur"),
+				PangeaHuntingLifecycleTestsHelpers::CountFeatureComponents<UPangeaTrackEmitterComponent>(*It),
+				1);
+		}
+
+		if (State->Probe.IsValid())
+		{
+			State->Probe->Destroy();
+		}
+
+		if (State->InactiveProbe.IsValid())
+		{
+			State->InactiveProbe->Destroy();
+		}
+
 		return true;
 	}));
 	ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+
 	return true;
 }
 #endif

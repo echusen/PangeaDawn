@@ -3,5 +3,4 @@
 #include "PangeaBreedingSystem.h"
 #include "Modules/ModuleManager.h"
 
-IMPLEMENT_MODULE( FDefaultModuleImpl, PangeaBreedingSystem );
- 
+IMPLEMENT_MODULE(FDefaultModuleImpl, PangeaBreedingSystem);

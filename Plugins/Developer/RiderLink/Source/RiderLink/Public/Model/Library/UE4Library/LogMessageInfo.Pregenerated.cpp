@@ -28,7 +28,7 @@ void LogMessageInfo::initialize()
 {
 }
 // primary ctor
-LogMessageInfo::LogMessageInfo(ELogVerbosity::Type type_, FString category_, rd::optional<rd::DateTime> time_) :
+LogMessageInfo::LogMessageInfo(ELogVerbosity::Type type_, FString category_, rd::DateTime time_) :
 rd::IPolymorphicSerializable()
 ,type_(std::move(type_)), category_(std::move(category_)), time_(std::move(time_))
 {
@@ -41,10 +41,7 @@ LogMessageInfo LogMessageInfo::read(rd::SerializationCtx& ctx, rd::Buffer & buff
 {
     auto type_ = rd::Polymorphic<ELogVerbosity::Type>::read(ctx, buffer);
     auto category_ = rd::Polymorphic<FString>::read(ctx, buffer);
-    auto time_ = buffer.read_nullable<rd::DateTime>(
-    [&ctx, &buffer]() mutable  
-    { return buffer.read_date_time(); }
-    );
+    auto time_ = buffer.read_date_time();
     LogMessageInfo res{std::move(type_), std::move(category_), std::move(time_)};
     return res;
 }
@@ -53,10 +50,7 @@ void LogMessageInfo::write(rd::SerializationCtx& ctx, rd::Buffer& buffer) const
 {
     rd::Polymorphic<ELogVerbosity::Type>::write(ctx, buffer, type_);
     rd::Polymorphic<std::decay_t<decltype(category_)>>::write(ctx, buffer, category_);
-    buffer.write_nullable<rd::DateTime>(time_, 
-    [&ctx, &buffer](rd::DateTime const & it) mutable  -> void 
-    { buffer.write_date_time(it); }
-    );
+    buffer.write_date_time(time_);
 }
 // virtual init
 // identify
@@ -69,7 +63,7 @@ FString const & LogMessageInfo::get_category() const
 {
     return category_;
 }
-rd::optional<rd::DateTime> const & LogMessageInfo::get_time() const
+rd::DateTime const & LogMessageInfo::get_time() const
 {
     return time_;
 }
@@ -99,7 +93,7 @@ size_t LogMessageInfo::hashCode() const noexcept
     size_t __r = 0;
     __r = __r * 31 + (rd::hash<ELogVerbosity::Type>()(get_type()));
     __r = __r * 31 + (rd::hash<FString>()(get_category()));
-    __r = __r * 31 + ((static_cast<bool>(get_time())) ? rd::hash<rd::DateTime>()(*get_time()) : 0);
+    __r = __r * 31 + (rd::hash<rd::DateTime>()(get_time()));
     return __r;
 }
 // type name trait

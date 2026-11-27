@@ -7,19 +7,19 @@
 #include "Req_PlayerLevel.generated.h"
 
 /**
- * 
+ * Requirement that passes when the interacting ACF character has reached a minimum level.
+ * Reads the level from the character's ACF statistics component.
  */
 UCLASS()
 class PANGEABASEUPGRADESYSTEM_API UReq_PlayerLevel : public UUpgradeRequirement
 {
 	GENERATED_BODY()
-	
+
 public:
-	
 	// Minimum player level required
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Requirement")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Requirement")
 	int32 RequiredLevel = 1;
-	
+
 	virtual bool IsRequirementMetForContext(const FBaseUpgradeContext& Context) const override;
 	virtual bool IsRequirementMet_Implementation(UObject* ContextObject) const override;
 	virtual FText GetRequirementDescription_Implementation() const override;
